@@ -238,6 +238,76 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
 }
 
 /**
+ * Performs a manual check for OTA updates.
+ * Provides user feedback via return status, showing toasts, and downloading the update if found.
+ */
+export async function forceCheckForUpdate(): Promise<'latest' | 'downloaded' | 'not_supported' | 'error'> {
+  if (!Capacitor.isNativePlatform()) {
+    log.info('Manual OTA check: Not a native platform');
+    return 'not_supported';
+  }
+
+  try {
+    log.info('Manual OTA check: Initiating check...');
+    
+    // 1. Read latest version doc from Firestore
+    const db = getFirebaseDb();
+    const versionRef = doc(db, VERSION_DOC_PATH, VERSION_DOC_ID);
+    const snapshot = await getDoc(versionRef);
+
+    if (!snapshot.exists()) {
+      log.warn('Manual OTA check: No version document in Firestore');
+      return 'latest';
+    }
+
+    const remote = snapshot.data() as VersionMetadata;
+    const activeVersion = localStorage.getItem(ACTIVE_VERSION_KEY) || '0.0.0';
+
+    // 2. Compare versions
+    if (compareVersions(remote.version, activeVersion) <= 0) {
+      log.info(`Manual OTA check: Already on latest (${activeVersion} >= ${remote.version})`);
+      return 'latest';
+    }
+
+    // Ensure native compatibility
+    const minAppVersionRequired = remote.min_apk_version || remote.minAppVersion;
+    if (minAppVersionRequired) {
+      let nativeVersion: string;
+      try {
+        const currentInfo = await CapacitorUpdater.current();
+        nativeVersion = currentInfo.native || (await App.getInfo()).version;
+      } catch (e) {
+        nativeVersion = (await App.getInfo()).version;
+      }
+      if (compareVersions(nativeVersion, minAppVersionRequired) < 0) {
+        log.warn(`Manual OTA check: requires native app version ${minAppVersionRequired}, current: ${nativeVersion}`);
+        return 'latest';
+      }
+    }
+
+    // Ensure not blacklisted
+    if (hasFailedVersion(remote.version)) {
+      log.warn(`Manual OTA check: Skip blacklisted version ${remote.version}`);
+      return 'latest';
+    }
+
+    if (!remote.url || !remote.url.trim()) {
+      log.warn(`Manual OTA check: APK-only release. No OTA zip.`);
+      return 'latest';
+    }
+
+    // 3. New version found — trigger download
+    log.info(`Manual OTA check: Downloading ${remote.version}...`);
+    await downloadAndApply(remote);
+    return 'downloaded';
+
+  } catch (err) {
+    log.error('Manual OTA check: Failed', err);
+    return 'error';
+  }
+}
+
+/**
  * Fetch version metadata from Firestore, compare, and apply if newer.
  */
 async function checkForUpdate(options: UpdaterOptions): Promise<void> {

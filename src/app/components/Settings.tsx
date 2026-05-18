@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare, Tag, Plus, ArrowUp, ArrowDown, Palette } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare, Tag, Plus, ArrowUp, ArrowDown, Palette, RefreshCw } from 'lucide-react';
 import packageJson from '../../../package.json';
 import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability, isAutofillEnabled, subscribeToCustomCategories, addCustomCategory, updateCustomCategory, deleteCustomCategory, reorderCustomCategories, type CustomCategory } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
 import { subscribeToDevices, revokeDevice, revokeAllOtherDevices, type DeviceSession, getLocalDeviceId } from '../services/deviceSession';
 import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
+import { forceCheckForUpdate } from '../services/updater';
 import { toast } from 'sonner';
 import type { User } from 'firebase/auth';
 
@@ -123,6 +124,37 @@ export function Settings() {
     useEffect(() => {
         getSettings().then(setSettings);
     }, []);
+
+    // ── OTA Updates state ─────────────────────────────────────────────
+    const [activeOtaVersion, setActiveOtaVersion] = useState<string | null>(null);
+    const [checkingUpdates, setCheckingUpdates] = useState(false);
+
+    useEffect(() => {
+        const active = localStorage.getItem('sv_ota_active_version');
+        setActiveOtaVersion(active);
+    }, []);
+
+    const handleCheckForUpdates = async () => {
+        setCheckingUpdates(true);
+        try {
+            const result = await forceCheckForUpdate();
+            if (result === 'latest') {
+                toast.success('Your app is already up to date!', { position: 'bottom-center' });
+            } else if (result === 'downloaded') {
+                // Refresh active ota version info so the UI updates
+                const active = localStorage.getItem('sv_ota_active_version');
+                setActiveOtaVersion(active);
+            } else if (result === 'not_supported') {
+                toast.info('App updates are managed by Google Play Store on this platform.', { position: 'bottom-center' });
+            } else {
+                toast.error('Could not connect to update server. Please check your network connection.', { position: 'bottom-center' });
+            }
+        } catch (error) {
+            toast.error('An error occurred while checking for updates.', { position: 'bottom-center' });
+        } finally {
+            setCheckingUpdates(false);
+        }
+    };
 
     // ── Biometric Unlock State ───────────────────────────────────────
     const [biometricAvailable, setBiometricAvailable] = useState(false);
@@ -1667,24 +1699,52 @@ export function Settings() {
                         )}
                     </button>
                     {expandedCategories.about && (
-                        <div className="bg-[#16213e] rounded-xl p-4 space-y-2">
-                        <div className="flex justify-between">
-                            <span className="text-gray-500 text-xs">Version</span>
-                            <span className="text-gray-300 text-xs">{packageJson.version}</span>
+                        <div className="bg-[#16213e] rounded-xl p-4 space-y-2.5">
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500 text-xs">Version</span>
+                                <span className="text-gray-300 text-xs font-medium">
+                                    {packageJson.version}
+                                    {activeOtaVersion && activeOtaVersion !== '0.0.0' && (
+                                        <span className="text-cyan-400 font-semibold ml-1.5 bg-cyan-500/10 px-1.5 py-0.5 rounded text-[10px]">
+                                            OTA: {activeOtaVersion}
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500 text-xs">Encryption</span>
+                                <span className="text-gray-300 text-xs">AES-256-GCM</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500 text-xs">Key Derivation</span>
+                                <span className="text-gray-300 text-xs">Argon2id</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500 text-xs">Cloud Sync</span>
+                                <span className="text-green-400 text-xs">● Active</span>
+                            </div>
+                            
+                            {/* Check for Updates Button */}
+                            <div className="pt-2 border-t border-white/5 mt-2 flex justify-between items-center">
+                                <button
+                                    onClick={handleCheckForUpdates}
+                                    disabled={checkingUpdates}
+                                    className="w-full bg-gradient-to-r from-cyan-500/20 to-blue-600/20 hover:from-cyan-500/30 hover:to-blue-600/30 border border-cyan-500/30 hover:border-cyan-500/50 text-cyan-300 text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-md disabled:opacity-50 font-medium"
+                                >
+                                    {checkingUpdates ? (
+                                        <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                                            <span>Checking for updates...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                                            <span>Check for Updates</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                         </div>
-                        <div className="flex justify-between">
-                            <span className="text-gray-500 text-xs">Encryption</span>
-                            <span className="text-gray-300 text-xs">AES-256-GCM</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-gray-500 text-xs">Key Derivation</span>
-                            <span className="text-gray-300 text-xs">Argon2id</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-gray-500 text-xs">Cloud Sync</span>
-                            <span className="text-green-400 text-xs">● Active</span>
-                        </div>
-                    </div>
                     )}
                 </div>
 
