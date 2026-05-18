@@ -138,14 +138,12 @@ export function Settings() {
         setCheckingUpdates(true);
         try {
             const result = await forceCheckForUpdate();
-            if (result === 'latest') {
-                toast.success('Your app is already up to date!', { position: 'bottom-center' });
+            if (result === 'latest' || result === 'not_supported') {
+                toast.success('Your app is up to date!', { position: 'bottom-center' });
             } else if (result === 'downloaded') {
                 // Refresh active ota version info so the UI updates
                 const active = localStorage.getItem('sv_ota_active_version');
                 setActiveOtaVersion(active);
-            } else if (result === 'not_supported') {
-                toast.info('App updates are managed by Google Play Store on this platform.', { position: 'bottom-center' });
             } else {
                 toast.error('Could not connect to update server. Please check your network connection.', { position: 'bottom-center' });
             }
