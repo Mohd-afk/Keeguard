@@ -24,6 +24,9 @@ export function AppShell() {
   // Firebase emits null first on cold boot while it restores from IndexedDB.
   // We must NOT clearSession on that first null — it's not a sign-out.
   const isInitialAuthEvent = useRef(true);
+  // Mirror of 'user' state accessible inside the stable auth listener closure
+  // without causing the listener to re-subscribe on every user change.
+  const userRef = useRef<User | null>(null);
 
   // Check on mount if we're entering via a magic link
   useEffect(() => {
@@ -34,8 +37,29 @@ export function AppShell() {
   }, []);
 
   // ── Auth state listener ────────────────────────────────────────────
+  // IMPORTANT: dependency array is [] — this must only subscribe ONCE.
+  //
+  // Previously this used [user] as a dependency, which caused the listener
+  // to unsubscribe and re-subscribe on every auth state change. Firebase only
+  // emits its initial IndexedDB-restored auth event once. When the listener was
+  // torn down and recreated after that event, the new listener waited forever
+  // for an event that had already fired — leaving authLoading=true permanently
+  // and freezing the "Loading Keeguard..." spinner after an OTA bundle swap.
+  //
+  // Fix: subscribe once. Use userRef (a ref mirror of the user state) to safely
+  // read the current user inside the stable closure without stale captures.
   useEffect(() => {
+    // ── Safety valve: guarantee authLoading clears within 5s ──────────
+    // If Firebase never calls back (e.g. network down, IndexedDB corruption,
+    // or auth not yet initialized), this timer ensures the app becomes usable.
+    const safetyTimer = setTimeout(() => {
+      log.warn('AppShell: Auth safety timeout fired — forcing authLoading=false to unblock UI');
+      setAuthLoading(false);
+    }, 5000);
+
     const unsubscribe = onAuthChange((firebaseUser) => {
+      clearTimeout(safetyTimer); // Auth responded — cancel the safety timer
+
       const wasInitial = isInitialAuthEvent.current;
       isInitialAuthEvent.current = false;
 
@@ -44,13 +68,16 @@ export function AppShell() {
         isInitialEvent: wasInitial,
       });
 
-      // If switching to a DIFFERENT user, clear stale local data
-      if (firebaseUser && user && firebaseUser.uid !== user.uid) {
-        log.info('AppShell: User switched, clearing stale data', { oldUid: user.uid, newUid: firebaseUser.uid });
+      // Use userRef to compare previous user without stale closure capture.
+      // If switching to a DIFFERENT user, clear stale local data.
+      const prevUser = userRef.current;
+      if (firebaseUser && prevUser && firebaseUser.uid !== prevUser.uid) {
+        log.info('AppShell: User switched, clearing stale data', { oldUid: prevUser.uid, newUid: firebaseUser.uid });
         clearLocalVaultData().catch(console.error);
         clearSession();
       }
 
+      userRef.current = firebaseUser;
       setUser(firebaseUser);
       setAuthLoading(false);
 
@@ -63,8 +90,12 @@ export function AppShell() {
         clearSession();
       }
     });
-    return () => unsubscribe();
-  }, [user]);
+
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
+  }, []); // ← MUST stay empty. See comment above.
 
   const handleLock = useCallback(() => {
     log.info('AppShell: Vault locked');
