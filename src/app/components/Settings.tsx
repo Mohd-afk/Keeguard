@@ -101,16 +101,16 @@ export function Settings() {
     });
 
     const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
-        account: true,
-        security: true,
-        devices: true,
+        account: false,
+        security: false,
+        devices: false,
         categories: false,
-        autolock: true,
-        autofill: true,
-        data: true,
-        support: true,
-        about: true,
-        legal: true
+        autolock: false,
+        autofill: false,
+        data: false,
+        support: false,
+        about: false,
+        legal: false
     });
 
     const toggleCategory = (category: string) => {

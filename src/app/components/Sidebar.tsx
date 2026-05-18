@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type { CustomCategory } from '../store';
 import {
   Shield,
   Clock,
@@ -15,7 +16,7 @@ import {
   Settings,
   X,
 } from 'lucide-react';
-import { subscribeToCustomCategories, type CustomCategory, type VaultItem } from '../store';
+import type { VaultItem } from '../store';
 
 export type SidebarFilter =
   | 'all'
@@ -36,6 +37,7 @@ interface SidebarProps {
   activeFilter: SidebarFilter;
   onFilterChange: (filter: SidebarFilter) => void;
   items: VaultItem[];
+  customCategories: CustomCategory[];
   onNavigateSettings: () => void;
 }
 
@@ -80,6 +82,7 @@ export function Sidebar({
   activeFilter,
   onFilterChange,
   items,
+  customCategories,
   onNavigateSettings,
 }: SidebarProps) {
   // Lock scroll when sidebar is open
@@ -96,15 +99,6 @@ export function Sidebar({
 
   const activeItems = items.filter((i) => !i.deletedAt);
   const trashedItems = items.filter((i) => !!i.deletedAt);
-
-  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
-
-  useEffect(() => {
-    const unsub = subscribeToCustomCategories((categories) => {
-      setCustomCategories(categories);
-    });
-    return unsub;
-  }, []);
 
   const select = (f: SidebarFilter) => {
     onFilterChange(f);
@@ -211,13 +205,16 @@ export function Sidebar({
 
           {/* Custom Categories */}
           <div className="px-4 py-2">
-            <p className="text-gray-500 text-xs uppercase tracking-widest mb-1">Custom Categories</p>
+            <p className="text-gray-500 text-xs uppercase tracking-widest mb-1">Categories</p>
           </div>
           <div className="px-2 space-y-0.5">
+            {customCategories.length === 0 && (
+              <p className="px-4 py-2 text-gray-600 text-xs">No categories yet</p>
+            )}
             {customCategories.map(cat => (
               <SidebarRow
                 key={`category-${cat.id}`}
-                icon={<Tag className="w-5 h-5" style={{ color: cat.color }} />}
+                icon={<Tag className="w-5 h-5" style={{ color: cat.color || '#3b82f6' }} />}
                 label={cat.name}
                 count={activeItems.filter(i => i.categoryId === cat.id).length}
                 active={activeFilter === `category-${cat.id}`}
@@ -226,7 +223,7 @@ export function Sidebar({
             ))}
             <SidebarRow
               icon={<Pencil className="w-5 h-5" />}
-              label="Manage Categories"
+              label="Manage categories"
               active={false}
               onClick={onNavigateSettings}
             />
@@ -240,7 +237,13 @@ export function Sidebar({
             <p className="text-gray-500 text-xs uppercase tracking-widest mb-1">System</p>
           </div>
           <div className="px-2 space-y-0.5">
-
+            <SidebarRow
+              icon={<AlarmClock className="w-5 h-5" />}
+              label="Expiring"
+              count={0}
+              active={activeFilter === 'expiring'}
+              onClick={() => select('expiring')}
+            />
             <SidebarRow
               icon={<Archive className="w-5 h-5" />}
               label="Archived"

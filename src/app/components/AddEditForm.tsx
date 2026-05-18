@@ -31,10 +31,7 @@ export function AddEditForm() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
-  // Smart Categorization State
-  const [suggestedTag, setSuggestedTag] = useState<string | null>(null);
-  const [hasAutoCategorized, setHasAutoCategorized] = useState(false);
-  const [labels, setLabels] = useState<string[]>([]);
+
 
   useEffect(() => {
     const unsub = subscribeToCustomCategories((categories) => {
@@ -87,39 +84,10 @@ export function AddEditForm() {
           // Migration path: show deprecated plaintext field
           setTotpSecret(item.totpSecret);
         }
-        if (item.labels) {
-          setLabels(item.labels);
-        }
       }
     }
   }, [id]);
 
-  // Smart Suggestion Engine
-  useEffect(() => {
-    if (isEdit || hasAutoCategorized || !url.trim()) return;
-
-    const lowerUrl = url.toLowerCase();
-    let match = null;
-
-    if (lowerUrl.includes('gmail.com') || lowerUrl.includes('outlook.com') || lowerUrl.includes('yahoo.com')) {
-      match = 'Email';
-    } else if (lowerUrl.includes('bank') || lowerUrl.includes('hdfc') || lowerUrl.includes('chase') || lowerUrl.includes('capitalone')) {
-      match = 'Banking';
-    } else if (lowerUrl.includes('steam') || lowerUrl.includes('epicgames') || lowerUrl.includes('xbox') || lowerUrl.includes('playstation')) {
-      match = 'Gaming';
-    } else if (lowerUrl.includes('github.com') || lowerUrl.includes('aws.amazon.com') || lowerUrl.includes('vercel.com')) {
-      match = 'Developer';
-    } else if (lowerUrl.includes('.edu')) {
-      match = 'Education';
-    } else if (lowerUrl.includes('amazon') || lowerUrl.includes('flipkart') || lowerUrl.includes('ebay')) {
-      match = 'Shopping';
-    }
-
-    if (match && !labels.includes(match)) {
-      setSuggestedTag(match);
-      setHasAutoCategorized(true);
-    }
-  }, [url, isEdit, hasAutoCategorized, labels]);
 
   const canSave = title.trim() && password.trim();
 
@@ -133,11 +101,6 @@ export function AddEditForm() {
         ? await encryptTotpSecret(totpSecret.trim())
         : undefined;
 
-      const finalLabels = [...labels];
-      if (suggestedTag && !finalLabels.includes(suggestedTag)) {
-        finalLabels.push(suggestedTag);
-      }
-
       const itemPayload = {
         title: title.trim(),
         username: username.trim(),
@@ -146,7 +109,7 @@ export function AddEditForm() {
         url: url.trim(),
         note: note.trim(),
         isFavorite,
-        labels: finalLabels.length > 0 ? finalLabels : undefined,
+        labels: undefined,
         totpSecretEncrypted,
         totpSecret: undefined, // Never store raw TOTP in vault blob
         categoryId: selectedCategoryId || undefined,
@@ -322,18 +285,6 @@ export function AddEditForm() {
           </div>
         )}
 
-        {/* Smart Suggestion Chip */}
-        {suggestedTag && (
-          <div className="flex items-center gap-2 bg-cyan-900/20 border border-cyan-500/30 rounded-lg px-3 py-2 animate-in fade-in slide-in-from-top-1">
-            <span className="text-cyan-400 text-sm">✨ Categorized as <strong>{suggestedTag}</strong></span>
-            <button
-              onClick={() => setSuggestedTag(null)}
-              className="ml-auto text-xs text-gray-400 hover:text-white transition-colors px-2 py-1 rounded bg-white/5"
-            >
-              Undo
-            </button>
-          </div>
-        )}
 
         {/* Advanced Options Toggle */}
         <div className="pt-2 border-t border-gray-700/30">

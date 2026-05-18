@@ -14,12 +14,10 @@ import {
   Search,
   X,
   AlignJustify,
-  ShieldCheck,
   Wrench,
   ChevronUp,
   ChevronDown,
   Trash2,
-  Tag,
   CheckCircle2,
   Circle,
   MoreVertical,
@@ -44,14 +42,11 @@ import { SortModal } from './SortModal';
 import type { User } from 'firebase/auth';
 
 // ── Category chip definition ───────────────────────────────────────────
-type CategoryChip = 'all' | 'favorites' | 'banking' | 'email' | 'gaming' | 'cards' | 'ids';
+type CategoryChip = 'all' | 'favorites' | 'cards' | 'ids';
 
 const CHIPS: { id: CategoryChip; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'favorites', label: '★ Favorites' },
-  { id: 'banking', label: 'Banking' },
-  { id: 'email', label: 'Email' },
-  { id: 'gaming', label: 'Gaming' },
   { id: 'cards', label: 'Cards' },
   { id: 'ids', label: 'IDs' },
 ];
@@ -178,8 +173,6 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   // Multi-select state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showLabelDialog, setShowLabelDialog] = useState(false);
-  const [newLabelName, setNewLabelName] = useState('');
 
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
 
@@ -261,9 +254,9 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   // 1. Sidebar filter
   const sidebarFiltered = useMemo(() => {
     if (sidebarFilter === 'trash') return items.filter((i) => !!i.deletedAt);
-    if (sidebarFilter.startsWith('label-')) {
-      const label = sidebarFilter.replace('label-', '');
-      return activeVaultItems.filter((i) => i.labels?.includes(label));
+    if (sidebarFilter.startsWith('category-')) {
+      const catId = sidebarFilter.replace('category-', '');
+      return activeVaultItems.filter((i) => i.categoryId === catId);
     }
     return activeVaultItems;
   }, [activeVaultItems, sidebarFilter, items]);
@@ -308,12 +301,6 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
     switch (activeChip) {
       case 'favorites':
         return coreCategoryFiltered.filter((i) => i.isFavorite);
-      case 'banking':
-        return coreCategoryFiltered.filter((i) => i.labels?.includes('Banking'));
-      case 'email':
-        return coreCategoryFiltered.filter((i) => i.labels?.includes('Email'));
-      case 'gaming':
-        return coreCategoryFiltered.filter((i) => i.labels?.includes('Gaming'));
       case 'cards':
         return coreCategoryFiltered.filter((i) => i.type === 'Card');
       case 'ids':
@@ -369,24 +356,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
     }
   };
 
-  const handleBulkLabel = async () => {
-    if (!newLabelName.trim() || selectedIds.size === 0) return;
-    const label = newLabelName.trim();
-    for (const id of Array.from(selectedIds)) {
-      const item = items.find(i => i.id === id);
-      if (item) {
-        const currentLabels = item.labels || [];
-        if (!currentLabels.includes(label)) {
-          await updateVaultItem(id, { labels: [...currentLabels, label] });
-        }
-      }
-    }
-    setItems(getVaultItems());
-    setShowLabelDialog(false);
-    setNewLabelName('');
-    setIsSelectionMode(false);
-    setSelectedIds(new Set());
-  };
+
 
   const handleBulkDelete = async () => {
     if (!window.confirm(`Move ${selectedIds.size} items to recycle bin?`)) return;
@@ -410,6 +380,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
           if (f === 'trash') navigate('/trash');
         }}
         items={items}
+        customCategories={customCategories}
         onNavigateSettings={() => navigate('/settings')}
       />
 
@@ -714,24 +685,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
                 );
               })}
 
-              {/* Security Audit Banner Card */}
-              <button
-                onClick={() => navigate('/security')}
-                className="col-span-2 p-3.5 rounded-2xl border border-white/5 hover:border-cyan-500/30 bg-gradient-to-r from-[#16213e] to-[#0f172a] text-left transition-all duration-300 relative overflow-hidden group active:scale-98 flex items-center justify-between mt-1"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-cyan-500/10 rounded-xl text-cyan-400 group-hover:scale-105 transition-transform">
-                    <ShieldCheck className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <p className="text-white font-semibold text-sm">Security Dashboard</p>
-                    <p className="text-gray-500 text-xs mt-0.5">Analyze vault health & compromise risks</p>
-                  </div>
-                </div>
-                <span className="text-cyan-400 text-xs font-medium bg-cyan-500/10 px-3 py-1 rounded-full group-hover:bg-cyan-500/20 transition-all flex items-center gap-1 shrink-0">
-                  Audit
-                </span>
-              </button>
+
             </div>
           </div>
         )}
@@ -861,14 +815,6 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
         <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#16213e] border-t border-white/5 pb-[max(env(safe-area-inset-bottom),_4px)]">
           <div className="flex items-center justify-around py-3 px-4" style={{ maxWidth: '448px', margin: '0 auto' }}>
             <button
-              onClick={() => setShowLabelDialog(true)}
-              disabled={selectedIds.size === 0}
-              className="flex flex-col items-center gap-1 text-cyan-400 disabled:opacity-50 transition-opacity"
-            >
-              <Tag className="w-6 h-6" />
-              <span className="text-[10px] font-medium text-gray-300">Label</span>
-            </button>
-            <button
               onClick={handleBulkDelete}
               disabled={selectedIds.size === 0}
               className="flex flex-col items-center gap-1 text-red-400 disabled:opacity-50 transition-opacity"
@@ -876,38 +822,6 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               <Trash2 className="w-6 h-6" />
               <span className="text-[10px] font-medium text-gray-300">Delete</span>
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Label Dialog ───────────────────────────────────────────── */}
-      {showLabelDialog && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#16213e] w-full max-w-sm rounded-2xl p-5 shadow-2xl border border-white/10">
-            <h3 className="text-white text-lg font-semibold mb-4">Add Label to {selectedIds.size} Items</h3>
-            <input
-              type="text"
-              value={newLabelName}
-              onChange={(e) => setNewLabelName(e.target.value)}
-              placeholder="e.g. Work, Streaming, Email..."
-              className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors mb-6"
-              autoFocus
-            />
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setShowLabelDialog(false); setNewLabelName(''); }}
-                className="flex-1 py-2.5 rounded-xl text-gray-400 hover:bg-white/5 font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBulkLabel}
-                disabled={!newLabelName.trim()}
-                className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-semibold disabled:opacity-50 transition-colors"
-              >
-                Apply Label
-              </button>
-            </div>
           </div>
         </div>
       )}
