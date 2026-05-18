@@ -12,6 +12,7 @@ import {
   CreditCard,
   KeyRound,
   WifiOff,
+  AlignJustify,
 } from 'lucide-react';
 import { getVaultItems, type VaultItem } from '../store';
 import { checkBatch, type HibpBatchResult } from '../services/hibpCache';
@@ -300,10 +301,11 @@ export function SecurityDashboard() {
       <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
         <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
           <div className="flex items-center gap-3 px-4 py-3">
-            <button onClick={() => navigate('/')} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <h2 className="text-white text-lg font-semibold">Security Check</h2>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
+              <Shield className="w-4 h-4 text-white" />
+            </div>
+            <h2 className="text-white text-lg font-semibold flex-1 text-center">Security Check</h2>
+            <div className="w-8" />{/* spacer for centering */}
           </div>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center px-8 gap-6">
@@ -361,10 +363,11 @@ export function SecurityDashboard() {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center gap-3 px-4 py-3">
-          <button onClick={() => navigate('/')} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h2 className="text-white text-lg font-semibold">Security</h2>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
+            <Shield className="w-4 h-4 text-white" />
+          </div>
+          <h2 className="text-white text-lg font-semibold flex-1 text-center">Security</h2>
+          <div className="w-8" />{/* spacer for centering */}
         </div>
       </div>
 

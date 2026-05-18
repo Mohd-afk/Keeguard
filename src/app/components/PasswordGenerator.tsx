@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, Copy, Check, RefreshCw, ShieldCheck, Timer } from 'lucide-react';
+import { Copy, Check, RefreshCw, ShieldCheck, Timer, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
+import { BottomNav } from './BottomNav';
+import type { BottomTab } from './BottomNav';
 
 // ── Character sets ────────────────────────────────────────────────────
 const LOWER      = 'abcdefghijklmnopqrstuvwxyz';
@@ -148,6 +150,12 @@ function Toggle({
 // ── Main Component ────────────────────────────────────────────────────
 export function PasswordGenerator() {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<BottomTab>('tools');
+
+  useEffect(() => {
+    if (activeTab === 'safe') navigate('/');
+    else if (activeTab === 'security') navigate('/security');
+  }, [activeTab, navigate]);
 
   const [opts, setOpts] = useState<GeneratorOptions>({
     length: 21,
@@ -229,18 +237,16 @@ export function PasswordGenerator() {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center gap-3 px-4 py-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h2 className="text-white text-lg font-semibold">Password Generator</h2>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
+            <Wrench className="w-4 h-4 text-white" />
+          </div>
+          <h2 className="text-white text-lg font-semibold flex-1 text-center">Tools</h2>
+          <div className="w-8" />{/* spacer for centering */}
         </div>
 
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-24">
+      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-[calc(24px+128px)]">
         {/* Password display card */}
         <div className="bg-[#16213e] rounded-2xl p-5 mb-5 min-h-[100px] flex items-center justify-center relative overflow-hidden">
           {/* Ghost rows for depth effect */}
@@ -323,7 +329,7 @@ export function PasswordGenerator() {
       </div>
 
       {/* Bottom buttons */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-[#1a1a2e]/95 backdrop-blur-md border-t border-white/5 px-4 py-4 flex gap-3 pb-[max(env(safe-area-inset-bottom),_16px)]">
+      <div className="fixed bottom-[64px] left-0 right-0 max-w-md mx-auto bg-[#1a1a2e]/95 backdrop-blur-md border-t border-white/5 px-4 py-4 flex gap-3 z-20">
         <button
           onClick={generate}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-gray-600 text-white hover:bg-white/5 active:scale-[0.98] transition-all font-medium"
@@ -354,13 +360,14 @@ export function PasswordGenerator() {
         </button>
       </div>
 
-      {/* Clipboard countdown strip */}
       {clipboardCountdown !== null && (
-        <div className="fixed bottom-[72px] left-0 right-0 max-w-md mx-auto flex items-center justify-center gap-1.5 py-2 bg-[#16213e]/95 border-t border-white/5 text-gray-500 text-xs">
+        <div className="fixed bottom-[144px] left-0 right-0 max-w-md mx-auto flex items-center justify-center gap-1.5 py-2 bg-[#16213e]/95 border-t border-white/5 text-gray-500 text-xs">
           <Timer className="w-3 h-3" />
           <span>Clipboard clears in <span className="text-white font-semibold">{clipboardCountdown}s</span></span>
         </div>
       )}
+
+      <BottomNav active={activeTab} onChange={setActiveTab} />
 
       {/* Slider thumb style */}
       <style>{`

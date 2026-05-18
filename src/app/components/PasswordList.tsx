@@ -24,6 +24,9 @@ import {
   StickyNote,
   FileText,
   FolderOpen,
+  LayoutGrid,
+  List,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   addVaultChangeListener,
@@ -169,6 +172,9 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   const [favLoading, setFavLoading] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  // In grid mode, clicking a category card opens a detail sub-view
+  const [activeCategoryDetail, setActiveCategoryDetail] = useState<string | null>(null);
 
   // Multi-select state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -258,6 +264,21 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       const catId = sidebarFilter.replace('category-', '');
       return activeVaultItems.filter((i) => i.categoryId === catId);
     }
+    // Built-in type filters from sidebar
+    if (sidebarFilter === 'codes')
+      return activeVaultItems.filter((i) => !!i.totpSecretEncrypted || !!i.totpSecret);
+    if (sidebarFilter === 'cards')
+      return activeVaultItems.filter((i) => i.type === 'Card');
+    if (sidebarFilter === 'notes')
+      return activeVaultItems.filter((i) => !!i.note && !i.password);
+    if (sidebarFilter === 'ids')
+      return activeVaultItems.filter((i) => {
+        const t = i.title.toLowerCase();
+        return t.includes('id') || t.includes('passport') || t.includes('license') || t.includes('ssn');
+      });
+    // Archived / expiring / templates: show empty (feature stubs)
+    if (sidebarFilter === 'archived' || sidebarFilter === 'expiring' || sidebarFilter === 'templates' || sidebarFilter === 'passkeys')
+      return [];
     return activeVaultItems;
   }, [activeVaultItems, sidebarFilter, items]);
 
@@ -377,6 +398,8 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
         activeFilter={sidebarFilter}
         onFilterChange={(f) => {
           setSidebarFilter(f);
+          setActiveCategoryDetail(null);
+          setActiveCategory(null);
           if (f === 'trash') navigate('/trash');
         }}
         items={items}
@@ -433,6 +456,14 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               <h1 className="text-white text-xl font-semibold">Safe</h1>
             </div>
             <div className="flex items-center gap-2">
+              {/* View mode toggle */}
+              <button
+                onClick={() => { setViewMode(v => v === 'grid' ? 'list' : 'grid'); setActiveCategoryDetail(null); }}
+                className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
+                title={viewMode === 'grid' ? 'Switch to List View' : 'Switch to Grid View'}
+              >
+                {viewMode === 'grid' ? <List className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5" />}
+              </button>
               <button
                 onClick={() => setIsSelectionMode(true)}
                 className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
@@ -491,304 +522,312 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
           )}
         </div>
 
-        {/* Category Chips */}
-        <div
-          className="flex gap-2 px-4 pb-3 overflow-x-auto"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
-          {CHIPS.map((chip) => (
-            <button
-              key={chip.id}
-              onClick={() => setActiveChip(chip.id)}
-              className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                activeChip === chip.id
-                  ? 'bg-cyan-500/20 text-cyan-400'
-                  : 'bg-[#16213e] text-gray-400 hover:bg-white/5 hover:text-gray-200'
-              }`}
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
+        {/* Category Chips — only in list mode */}
+        {viewMode === 'list' && (
+          <div
+            className="flex gap-2 px-4 pb-3 overflow-x-auto"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {CHIPS.map((chip) => (
+              <button
+                key={chip.id}
+                onClick={() => setActiveChip(chip.id)}
+                className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  activeChip === chip.id
+                    ? 'bg-cyan-500/20 text-cyan-400'
+                    : 'bg-[#16213e] text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Content ─────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_96px)]">
-        {/* Core Categories Dashboard Grid */}
-        {!isSelectionMode && !searchQuery && sidebarFilter === 'all' && (
+
+        {/* ── GRID MODE: Category Detail Page ─────────────────────── */}
+        {viewMode === 'grid' && activeCategoryDetail && (() => {
+          // Compute the filtered items for the selected category
+          const detailLabel = activeCategoryDetail;
+          const detailItems = activeVaultItems.filter(item => {
+            const t = item.title.toLowerCase();
+            if (detailLabel === 'passwords') return item.type === 'Website' || item.type === 'App';
+            if (detailLabel === 'cards') return item.type === 'Card';
+            if (detailLabel === 'devices') return item.type === 'Phone' || item.type === 'Door Lock';
+            if (detailLabel === 'ids') return item.type === 'Other' && (t.includes('id') || t.includes('passport') || t.includes('license'));
+            if (detailLabel === 'docs') return item.type === 'Other' && (t.includes('doc') || t.includes('pdf') || t.includes('file') || t.includes('cert'));
+            if (detailLabel === 'notes') {
+              const isId = t.includes('id') || t.includes('passport') || t.includes('license');
+              const isDoc = t.includes('doc') || t.includes('pdf') || t.includes('file') || t.includes('cert');
+              return item.type === 'Other' && !isId && !isDoc;
+            }
+            // Custom category
+            return item.categoryId === detailLabel;
+          });
+          const catName = (() => {
+            if (detailLabel === 'passwords') return 'Passwords';
+            if (detailLabel === 'cards') return 'Cards';
+            if (detailLabel === 'devices') return 'Devices';
+            if (detailLabel === 'ids') return 'IDs';
+            if (detailLabel === 'docs') return 'Documents';
+            if (detailLabel === 'notes') return 'Notes';
+            return customCategories.find(c => c.id === detailLabel)?.name || detailLabel;
+          })();
+          return (
+            <>
+              {/* Category detail header bar */}
+              <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 px-4 py-3 flex items-center gap-3">
+                <button
+                  onClick={() => setActiveCategoryDetail(null)}
+                  className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <span className="text-white font-semibold text-base flex-1">{catName}</span>
+                <span className="text-gray-500 text-sm">{detailItems.length} items</span>
+              </div>
+              {detailItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 px-6">
+                  <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                    <KeyRound className="w-8 h-8 text-gray-500" />
+                  </div>
+                  <p className="text-gray-400 text-base font-medium text-center">No items in this category</p>
+                  <p className="text-gray-600 text-sm text-center mt-1">Add items and assign them to this category</p>
+                </div>
+              ) : (
+                <div className="bg-[#16213e] mx-3 mt-3 rounded-2xl overflow-hidden divide-y divide-white/5 shadow-lg">
+                  {detailItems.map((item) => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      onNavigate={(id) => navigate(`/item/${id}`)}
+                      onFavorite={handleFavorite}
+                      favLoading={favLoading}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()}
+
+        {/* ── GRID MODE: Category Cards Grid ──────────────────────── */}
+        {viewMode === 'grid' && !activeCategoryDetail && !isSelectionMode && !searchQuery && sidebarFilter === 'all' && (
           <div className="px-4 py-3">
             <div className="flex justify-between items-center mb-3 px-1">
-              <h2 className="text-gray-400 text-xs uppercase tracking-wider font-semibold">Core Vault Categories</h2>
-              {activeCategory && (
-                <button
-                  onClick={() => setActiveCategory(null)}
-                  className="text-xs text-cyan-400 hover:text-cyan-300 font-medium transition-colors"
-                >
-                  Reset Category
-                </button>
-              )}
+              <h2 className="text-gray-400 text-xs uppercase tracking-wider font-semibold">Vault Categories</h2>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {/* Passwords */}
               <button
-                onClick={() => setActiveCategory(activeCategory === 'passwords' ? null : 'passwords')}
-                className={`p-3.5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group ${
-                  activeCategory === 'passwords'
-                    ? 'bg-gradient-to-br from-blue-600/30 to-cyan-500/20 border-cyan-500 shadow-lg shadow-cyan-500/10'
-                    : 'bg-[#16213e] border-white/5 hover:border-white/10 active:scale-98'
-                }`}
+                onClick={() => setActiveCategoryDetail('passwords')}
+                className="p-3.5 rounded-2xl border border-white/5 hover:border-cyan-500/30 bg-[#16213e] text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98]"
               >
                 <div className="flex justify-between items-start">
-                  <div className="p-2 rounded-xl bg-blue-500/10 text-cyan-400">
-                    <KeyRound className="w-5 h-5" />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">
-                    {categoryCounts.passwords}
-                  </span>
+                  <div className="p-2 rounded-xl bg-blue-500/10 text-cyan-400"><KeyRound className="w-5 h-5" /></div>
+                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">{categoryCounts.passwords}</span>
                 </div>
                 <p className="text-white font-medium text-sm mt-3">Passwords</p>
-                <p className="text-gray-500 text-xs mt-0.5">Logins & portals</p>
+                <p className="text-gray-500 text-xs mt-0.5">Logins &amp; portals</p>
               </button>
 
               {/* Cards */}
               <button
-                onClick={() => setActiveCategory(activeCategory === 'cards' ? null : 'cards')}
-                className={`p-3.5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group ${
-                  activeCategory === 'cards'
-                    ? 'bg-gradient-to-br from-pink-600/30 to-purple-500/20 border-pink-500 shadow-lg shadow-pink-500/10'
-                    : 'bg-[#16213e] border-white/5 hover:border-white/10 active:scale-98'
-                }`}
+                onClick={() => setActiveCategoryDetail('cards')}
+                className="p-3.5 rounded-2xl border border-white/5 hover:border-pink-500/30 bg-[#16213e] text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98]"
               >
                 <div className="flex justify-between items-start">
-                  <div className="p-2 rounded-xl bg-pink-500/10 text-pink-400">
-                    <CreditCard className="w-5 h-5" />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">
-                    {categoryCounts.cards}
-                  </span>
+                  <div className="p-2 rounded-xl bg-pink-500/10 text-pink-400"><CreditCard className="w-5 h-5" /></div>
+                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">{categoryCounts.cards}</span>
                 </div>
                 <p className="text-white font-medium text-sm mt-3">Cards</p>
-                <p className="text-gray-500 text-xs mt-0.5">Debit & credit cards</p>
+                <p className="text-gray-500 text-xs mt-0.5">Debit &amp; credit cards</p>
               </button>
 
               {/* Notes */}
               <button
-                onClick={() => setActiveCategory(activeCategory === 'notes' ? null : 'notes')}
-                className={`p-3.5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group ${
-                  activeCategory === 'notes'
-                    ? 'bg-gradient-to-br from-amber-600/30 to-yellow-500/20 border-amber-500 shadow-lg shadow-amber-500/10'
-                    : 'bg-[#16213e] border-white/5 hover:border-white/10 active:scale-98'
-                }`}
+                onClick={() => setActiveCategoryDetail('notes')}
+                className="p-3.5 rounded-2xl border border-white/5 hover:border-amber-500/30 bg-[#16213e] text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98]"
               >
                 <div className="flex justify-between items-start">
-                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-                    <StickyNote className="w-5 h-5" />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">
-                    {categoryCounts.notes}
-                  </span>
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400"><StickyNote className="w-5 h-5" /></div>
+                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">{categoryCounts.notes}</span>
                 </div>
                 <p className="text-white font-medium text-sm mt-3">Notes</p>
-                <p className="text-gray-500 text-xs mt-0.5">Secure entries & keys</p>
+                <p className="text-gray-500 text-xs mt-0.5">Secure entries &amp; keys</p>
               </button>
 
               {/* IDs */}
               <button
-                onClick={() => setActiveCategory(activeCategory === 'ids' ? null : 'ids')}
-                className={`p-3.5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group ${
-                  activeCategory === 'ids'
-                    ? 'bg-gradient-to-br from-emerald-600/30 to-green-500/20 border-emerald-500 shadow-lg shadow-emerald-500/10'
-                    : 'bg-[#16213e] border-white/5 hover:border-white/10 active:scale-98'
-                }`}
+                onClick={() => setActiveCategoryDetail('ids')}
+                className="p-3.5 rounded-2xl border border-white/5 hover:border-emerald-500/30 bg-[#16213e] text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98]"
               >
                 <div className="flex justify-between items-start">
-                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">
-                    {categoryCounts.ids}
-                  </span>
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400"><FileText className="w-5 h-5" /></div>
+                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">{categoryCounts.ids}</span>
                 </div>
                 <p className="text-white font-medium text-sm mt-3">IDs</p>
-                <p className="text-gray-500 text-xs mt-0.5">Passports & licenses</p>
+                <p className="text-gray-500 text-xs mt-0.5">Passports &amp; licenses</p>
               </button>
 
               {/* Documents */}
               <button
-                onClick={() => setActiveCategory(activeCategory === 'docs' ? null : 'docs')}
-                className={`p-3.5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group ${
-                  activeCategory === 'docs'
-                    ? 'bg-gradient-to-br from-violet-600/30 to-purple-500/20 border-purple-500 shadow-lg shadow-purple-500/10'
-                    : 'bg-[#16213e] border-white/5 hover:border-white/10 active:scale-98'
-                }`}
+                onClick={() => setActiveCategoryDetail('docs')}
+                className="p-3.5 rounded-2xl border border-white/5 hover:border-purple-500/30 bg-[#16213e] text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98]"
               >
                 <div className="flex justify-between items-start">
-                  <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
-                    <FolderOpen className="w-5 h-5" />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">
-                    {categoryCounts.docs}
-                  </span>
+                  <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400"><FolderOpen className="w-5 h-5" /></div>
+                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">{categoryCounts.docs}</span>
                 </div>
                 <p className="text-white font-medium text-sm mt-3">Documents</p>
-                <p className="text-gray-500 text-xs mt-0.5">Secure files & certs</p>
+                <p className="text-gray-500 text-xs mt-0.5">Secure files &amp; certs</p>
               </button>
 
               {/* Devices */}
               <button
-                onClick={() => setActiveCategory(activeCategory === 'devices' ? null : 'devices')}
-                className={`p-3.5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group ${
-                  activeCategory === 'devices'
-                    ? 'bg-gradient-to-br from-rose-600/30 to-red-500/20 border-rose-500 shadow-lg shadow-rose-500/10'
-                    : 'bg-[#16213e] border-white/5 hover:border-white/10 active:scale-98'
-                }`}
+                onClick={() => setActiveCategoryDetail('devices')}
+                className="p-3.5 rounded-2xl border border-white/5 hover:border-rose-500/30 bg-[#16213e] text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98]"
               >
                 <div className="flex justify-between items-start">
-                  <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400">
-                    <Smartphone className="w-5 h-5" />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">
-                    {categoryCounts.devices}
-                  </span>
+                  <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400"><Smartphone className="w-5 h-5" /></div>
+                  <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">{categoryCounts.devices}</span>
                 </div>
                 <p className="text-white font-medium text-sm mt-3">Devices</p>
-                <p className="text-gray-500 text-xs mt-0.5">Phones & smartlocks</p>
+                <p className="text-gray-500 text-xs mt-0.5">Phones &amp; smartlocks</p>
               </button>
 
               {/* Custom Categories */}
               {customCategories.map((cat) => {
                 const count = categoryCounts.custom[cat.id] || 0;
-                const isSelected = activeCategory === cat.id;
                 return (
                   <button
                     key={cat.id}
-                    onClick={() => setActiveCategory(isSelected ? null : cat.id)}
-                    className="p-3.5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group active:scale-98"
-                    style={{
-                      borderColor: isSelected ? cat.color : 'rgba(255,255,255,0.05)',
-                      background: isSelected 
-                        ? `linear-gradient(135deg, ${cat.color}25, rgba(22,33,62,0.5))`
-                        : '#16213e'
-                    }}
+                    onClick={() => setActiveCategoryDetail(cat.id)}
+                    className="p-3.5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98]"
+                    style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#16213e' }}
                   >
                     <div className="flex justify-between items-start">
                       <div className="p-2 rounded-xl" style={{ backgroundColor: `${cat.color}15`, color: cat.color }}>
-                        <Tag className="w-5 h-5" />
+                        <Shield className="w-5 h-5" />
                       </div>
-                      <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">
-                        {count}
-                      </span>
+                      <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">{count}</span>
                     </div>
                     <p className="text-white font-medium text-sm mt-3 truncate">{cat.name}</p>
                     <p className="text-gray-500 text-xs mt-0.5 truncate">Custom category</p>
                   </button>
                 );
               })}
-
-
             </div>
           </div>
         )}
 
-        {/* Category Active Filtering Banner */}
-        {activeCategory && sidebarFilter === 'all' && (
-          <div className="mx-4 mt-2 mb-3 px-4 py-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Viewing Category:</span>
-              <span className="text-sm font-bold text-white capitalize">{activeCategory}</span>
-            </div>
-            <button
-              onClick={() => setActiveCategory(null)}
-              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
-            >
-              Clear Filter
-            </button>
-          </div>
-        )}
-
-        {/* Empty state — no search results */}
-        {sortedItems.length === 0 && searchQuery ? (
-          <div className="flex flex-col items-center justify-center py-20 px-6">
-            <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
-              <Search className="w-8 h-8 text-gray-600" />
-            </div>
-            <p className="text-gray-400 text-base font-medium text-center">No results found</p>
-            <p className="text-gray-600 text-sm text-center mt-2 max-w-xs">
-              Try a different search.{' '}
-              <span className="text-gray-500 font-mono text-xs">
-                "goo acc 123"
-              </span>{' '}
-              finds Google account safe123@gmail.com
-            </p>
-          </div>
-        ) : sortedItems.length === 0 && activeChip === 'favorites' ? (
-          /* Empty favorites */
-          <div className="flex flex-col items-center justify-center py-20 px-6">
-            <div className="w-16 h-16 rounded-full bg-cyan-500/10 flex items-center justify-center mb-4">
-              <Star className="w-8 h-8 text-cyan-400" fill="currentColor" />
-            </div>
-            <p className="text-white text-base font-medium text-center">No favorites here</p>
-            <p className="text-gray-500 text-sm text-center mt-2 max-w-xs">
-              Mark cards as favorites by tapping the ★ star icon on any item.
-            </p>
-          </div>
-        ) : sortedItems.length === 0 ? (
-          /* Empty vault */
-          <div className="flex flex-col items-center justify-center py-20 px-6">
-            <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
-              <KeyRound className="w-8 h-8 text-gray-500" />
-            </div>
-            <p className="text-gray-400 text-base font-medium text-center">
-              {totalActive === 0 ? 'No passwords saved yet' : 'No items in this category'}
-            </p>
-            <p className="text-gray-600 text-sm text-center mt-1">
-              {totalActive === 0 ? 'Tap + to add your first password' : 'Try a different filter'}
-            </p>
-          </div>
-        ) : (
-          /* Item list */
-          <div className="px-3 space-y-4 mt-3">
-            {Array.from(grouped.entries()).map(([type, typeItems]) => {
-              const isExpanded = expandedCategories[type] !== false; // Default true
-              return (
-                <div key={type}>
-                  <button
-                    onClick={() => setExpandedCategories(prev => ({ ...prev, [type]: !isExpanded }))}
-                    className="w-full flex items-center justify-between mb-2 px-2 hover:bg-white/5 rounded-lg py-1.5 transition-colors group"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-500 text-xs uppercase tracking-wider font-semibold">{type}</span>
-                      <span className="text-gray-600 text-xs">({typeItems.length})</span>
-                    </div>
-                    <div className="text-gray-500 group-hover:text-gray-300 transition-colors">
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </div>
-                  </button>
-                  {isExpanded && (
-                    <div className="bg-[#16213e] rounded-2xl overflow-hidden divide-y divide-white/5 shadow-lg">
-                      {typeItems.map((item) => (
-                        <ItemCard
-                          key={item.id}
-                          item={item}
-                          onNavigate={(id) => navigate(`/item/${id}`)}
-                          onFavorite={handleFavorite}
-                          favLoading={favLoading}
-                          isSelectionMode={isSelectionMode}
-                          isSelected={selectedIds.has(item.id)}
-                          onToggleSelect={handleToggleSelect}
-                          onLongPress={handleLongPress}
-                        />
-                      ))}
-                    </div>
-                  )}
+        {/* ── LIST MODE or sidebar-filtered content ───────────────── */}
+        {(viewMode === 'list' || isSelectionMode || searchQuery || sidebarFilter !== 'all') && !activeCategoryDetail && (
+          <>
+            {/* Category Active Filtering Banner */}
+            {activeCategory && sidebarFilter === 'all' && (
+              <div className="mx-4 mt-2 mb-3 px-4 py-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Viewing Category:</span>
+                  <span className="text-sm font-bold text-white capitalize">{activeCategory}</span>
                 </div>
-              );
-            })}
-          </div>
+                <button
+                  onClick={() => setActiveCategory(null)}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
+                >
+                  Clear Filter
+                </button>
+              </div>
+            )}
+
+            {/* Empty state — no search results */}
+            {sortedItems.length === 0 && searchQuery ? (
+              <div className="flex flex-col items-center justify-center py-20 px-6">
+                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                  <Search className="w-8 h-8 text-gray-600" />
+                </div>
+                <p className="text-gray-400 text-base font-medium text-center">No results found</p>
+                <p className="text-gray-600 text-sm text-center mt-2 max-w-xs">
+                  Try a different search.{' '}
+                  <span className="text-gray-500 font-mono text-xs">
+                    "goo acc 123"
+                  </span>{' '}
+                  finds Google account safe123@gmail.com
+                </p>
+              </div>
+            ) : sortedItems.length === 0 && activeChip === 'favorites' ? (
+              /* Empty favorites */
+              <div className="flex flex-col items-center justify-center py-20 px-6">
+                <div className="w-16 h-16 rounded-full bg-cyan-500/10 flex items-center justify-center mb-4">
+                  <Star className="w-8 h-8 text-cyan-400" fill="currentColor" />
+                </div>
+                <p className="text-white text-base font-medium text-center">No favorites here</p>
+                <p className="text-gray-500 text-sm text-center mt-2 max-w-xs">
+                  Mark cards as favorites by tapping the ★ star icon on any item.
+                </p>
+              </div>
+            ) : sortedItems.length === 0 ? (
+              /* Empty vault */
+              <div className="flex flex-col items-center justify-center py-20 px-6">
+                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                  <KeyRound className="w-8 h-8 text-gray-500" />
+                </div>
+                <p className="text-gray-400 text-base font-medium text-center">
+                  {totalActive === 0 ? 'No passwords saved yet' : 'No items in this category'}
+                </p>
+                <p className="text-gray-600 text-sm text-center mt-1">
+                  {totalActive === 0 ? 'Tap + to add your first password' : 'Try a different filter'}
+                </p>
+              </div>
+            ) : (
+              /* Item list */
+              <div className="px-3 space-y-4 mt-3">
+                {Array.from(grouped.entries()).map(([type, typeItems]) => {
+                  const isExpanded = expandedCategories[type] !== false; // Default true
+                  return (
+                    <div key={type}>
+                      <button
+                        onClick={() => setExpandedCategories(prev => ({ ...prev, [type]: !isExpanded }))}
+                        className="w-full flex items-center justify-between mb-2 px-2 hover:bg-white/5 rounded-lg py-1.5 transition-colors group"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500 text-xs uppercase tracking-wider font-semibold">{type}</span>
+                          <span className="text-gray-600 text-xs">({typeItems.length})</span>
+                        </div>
+                        <div className="text-gray-500 group-hover:text-gray-300 transition-colors">
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="bg-[#16213e] rounded-2xl overflow-hidden divide-y divide-white/5 shadow-lg">
+                          {typeItems.map((item) => (
+                            <ItemCard
+                              key={item.id}
+                              item={item}
+                              onNavigate={(id) => navigate(`/item/${id}`)}
+                              onFavorite={handleFavorite}
+                              favLoading={favLoading}
+                              isSelectionMode={isSelectionMode}
+                              isSelected={selectedIds.has(item.id)}
+                              onToggleSelect={handleToggleSelect}
+                              onLongPress={handleLongPress}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
 
         {/* Item count footer */}
-        {sortedItems.length > 0 && (
+        {sortedItems.length > 0 && (viewMode === 'list' || isSelectionMode || searchQuery || sidebarFilter !== 'all') && !activeCategoryDetail && (
           <p className="text-center text-gray-600 text-xs mt-4 mb-2">
             {sortedItems.length} {sortedItems.length === 1 ? 'item' : 'items'}
             {totalActive !== sortedItems.length
@@ -797,6 +836,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
           </p>
         )}
       </div>
+
 
       {/* ── FAB ─────────────────────────────────────────────────────── */}
       {!isSelectionMode && (

@@ -1,6 +1,5 @@
 # Keeguard — Android Autofill Architecture
 
-> **Branding alias:** This app was previously called **SecureVault** and is now called **Keeguard**. `Keeguard` = `SecureVault` — same app, new name. The class `SecureVaultAutofillService` and package `com.mohdj.securevault` retain the old name intentionally (changing them would break existing installs).
 
 > **Version**: 3.2.2  
 > **Last Updated**: 2026-04-19  

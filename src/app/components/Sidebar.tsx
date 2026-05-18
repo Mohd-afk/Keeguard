@@ -158,7 +158,7 @@ export function Sidebar({
             />
           </div>
 
-          {/* Categories */}
+          {/* Categories — built-in + custom in one section */}
           <div className="px-4 py-2">
             <p className="text-gray-500 text-xs uppercase tracking-widest mb-1">Categories</p>
           </div>
@@ -198,19 +198,8 @@ export function Sidebar({
               active={activeFilter === 'ids'}
               onClick={() => select('ids')}
             />
-          </div>
 
-          {/* Divider */}
-          <div className="mx-4 my-3 border-t border-white/5" />
-
-          {/* Custom Categories */}
-          <div className="px-4 py-2">
-            <p className="text-gray-500 text-xs uppercase tracking-widest mb-1">Categories</p>
-          </div>
-          <div className="px-2 space-y-0.5">
-            {customCategories.length === 0 && (
-              <p className="px-4 py-2 text-gray-600 text-xs">No categories yet</p>
-            )}
+            {/* Custom Categories — merged into same section */}
             {customCategories.map(cat => (
               <SidebarRow
                 key={`category-${cat.id}`}
@@ -221,11 +210,12 @@ export function Sidebar({
                 onClick={() => select(`category-${cat.id}`)}
               />
             ))}
+
             <SidebarRow
               icon={<Pencil className="w-5 h-5" />}
               label="Manage categories"
               active={false}
-              onClick={onNavigateSettings}
+              onClick={() => { onClose(); onNavigateSettings(); }}
             />
           </div>
 
