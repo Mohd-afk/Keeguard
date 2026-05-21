@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare, Tag, Plus, ArrowUp, ArrowDown, Palette, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare, Tag, Plus, ArrowUp, ArrowDown, Palette, RefreshCw, AlignJustify } from 'lucide-react';
 import packageJson from '../../../package.json';
 import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability, isAutofillEnabled, subscribeToCustomCategories, addCustomCategory, updateCustomCategory, deleteCustomCategory, reorderCustomCategories, type CustomCategory } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
@@ -27,6 +27,7 @@ interface OutletContext {
     onLock: () => void;
     onSignOut: () => void;
     user: User;
+    setSidebarOpen: (o: boolean) => void;
 }
 
 function FeedbackModal({ onClose, user }: { onClose: () => void, user: User }) {
@@ -93,7 +94,8 @@ function FeedbackModal({ onClose, user }: { onClose: () => void, user: User }) {
 
 export function Settings() {
     const navigate = useNavigate();
-    const { onSignOut, user } = useOutletContext<OutletContext>();
+    const { onSignOut, user, setSidebarOpen } = useOutletContext<OutletContext>();
+    const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'U';
     const [settings, setSettings] = useState<AppSettings>({
         autoLockTimeout: 5,
         lockOnHide: true,
@@ -698,11 +700,25 @@ export function Settings() {
         <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
             {/* Header */}
             <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_0px)]">
-                <div className="flex items-center gap-3 px-4 py-3">
-                    <button onClick={() => navigate('/')} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
-                        <ArrowLeft className="w-5 h-5" />
-                    </button>
-                    <h2 className="text-white">Settings</h2>
+                <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setSidebarOpen(true)}
+                            className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
+                            aria-label="Open menu"
+                        >
+                            <AlignJustify className="w-5 h-5" />
+                        </button>
+                        <h1 className="text-white text-xl font-semibold">Settings</h1>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div
+                            className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
+                            title={user?.email ?? 'Signed in'}
+                        >
+                            <span className="text-white text-sm font-bold">{userInitial}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 

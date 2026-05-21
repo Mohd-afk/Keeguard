@@ -84,8 +84,15 @@ export interface CustomCategory {
   name: string;
   icon?: string;
   color?: string;
-  order?: number;
-  isArchived?: boolean;
+  order?: number; // legacy order field
+  isArchived?: boolean; // legacy archive field
+  isDefault?: boolean;
+  isHidden?: boolean;
+  isPinned?: boolean;
+  parentCategoryId?: string | null;
+  sortOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AppSettings {
@@ -1240,6 +1247,54 @@ export function subscribeToCustomCategories(callback: (categories: CustomCategor
   };
 }
 
+export const DEFAULT_CATEGORIES: CustomCategory[] = [
+  // Passwords Group
+  { id: 'cat_passwords', name: 'Passwords', icon: 'KeyRound', color: '#3b82f6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: null, sortOrder: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_email', name: 'Email', icon: 'Mail', color: '#10b981', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_banking', name: 'Banking', icon: 'Globe', color: '#f59e0b', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 2, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_social', name: 'Social Media', icon: 'Heart', color: '#ec4899', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 3, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_gaming', name: 'Gaming', icon: 'Gamepad2', color: '#8b5cf6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 4, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+
+  // Identity Group
+  { id: 'cat_identity', name: 'Identity', icon: 'Fingerprint', color: '#3b82f6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: null, sortOrder: 5, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_passport', name: 'Passport', icon: 'Globe', color: '#06b6d4', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 6, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_driver', name: 'Driver License', icon: 'IdCard', color: '#10b981', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 7, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_aadhaar', name: 'Aadhaar', icon: 'Fingerprint', color: '#f59e0b', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 8, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_employee', name: 'Employee ID', icon: 'Briefcase', color: '#3b82f6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 9, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+
+  // Finance Group
+  { id: 'cat_finance', name: 'Finance', icon: 'CreditCard', color: '#f59e0b', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: null, sortOrder: 10, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_credit', name: 'Credit Cards', icon: 'CreditCard', color: '#ec4899', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_finance', sortOrder: 11, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_debit', name: 'Debit Cards', icon: 'CreditCard', color: '#06b6d4', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_finance', sortOrder: 12, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_crypto', name: 'Crypto Wallets', icon: 'Wallet', color: '#8b5cf6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_finance', sortOrder: 13, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+
+  // Work Group
+  { id: 'cat_work', name: 'Work', icon: 'Briefcase', color: '#8b5cf6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: null, sortOrder: 14, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_vpn', name: 'VPN', icon: 'Shield', color: '#6366f1', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_work', sortOrder: 15, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_server', name: 'Server Credentials', icon: 'Server', color: '#10b981', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_work', sortOrder: 16, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_api', name: 'API Keys', icon: 'Code', color: '#ec4899', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_work', sortOrder: 17, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+
+  // Personal Group
+  { id: 'cat_personal', name: 'Personal', icon: 'User', color: '#ec4899', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: null, sortOrder: 18, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_wifi', name: 'Wi-Fi Passwords', icon: 'Wifi', color: '#06b6d4', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_personal', sortOrder: 19, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_notes', name: 'Notes', icon: 'FileText', color: '#10b981', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_personal', sortOrder: 20, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_subs', name: 'Subscriptions', icon: 'Tv', color: '#f59e0b', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_personal', sortOrder: 21, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+];
+
+function sortCustomCategoriesList(list: CustomCategory[]): CustomCategory[] {
+  return [...list].sort((a, b) => {
+    // 1. Pinned first
+    const aPinned = a.isPinned ? 1 : 0;
+    const bPinned = b.isPinned ? 1 : 0;
+    if (aPinned !== bPinned) return bPinned - aPinned;
+
+    // 2. sortOrder
+    const aOrder = a.sortOrder ?? a.order ?? 0;
+    const bOrder = b.sortOrder ?? b.order ?? 0;
+    return aOrder - bOrder;
+  });
+}
+
 export async function loadCustomCategories(): Promise<CustomCategory[]> {
   const uid = getUid();
   let categories: CustomCategory[] = [];
@@ -1247,7 +1302,7 @@ export async function loadCustomCategories(): Promise<CustomCategory[]> {
   // 1. Try to load from IndexedDB
   try {
     const local = await idbGet<CustomCategory[]>(CUSTOM_CATEGORIES_KEY);
-    if (local && Array.isArray(local)) {
+    if (local && Array.isArray(local) && local.length > 0) {
       categories = local;
     }
   } catch (e) {
@@ -1268,21 +1323,57 @@ export async function loadCustomCategories(): Promise<CustomCategory[]> {
     }
   }
 
-  // Sort by order
-  categories.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  _cachedCustomCategories = categories;
+  // 3. Fallback to pre-populated default categories if none exist
+  if (categories.length === 0) {
+    categories = [...DEFAULT_CATEGORIES];
+    await idbSet(CUSTOM_CATEGORIES_KEY, categories);
+    if (uid) {
+      try {
+        await saveCategoriesToCloud(uid, categories);
+      } catch (e) {
+        log.error('Failed to save pre-populated categories to cloud:', e);
+      }
+    }
+  }
+
+  // Normalize categories for backward compatibility
+  categories = categories.map(cat => ({
+    ...cat,
+    icon: cat.icon || 'Folder',
+    color: cat.color || '#3b82f6',
+    isDefault: cat.isDefault ?? false,
+    isHidden: cat.isHidden ?? cat.isArchived ?? false,
+    isPinned: cat.isPinned ?? false,
+    parentCategoryId: cat.parentCategoryId ?? null,
+    sortOrder: cat.sortOrder ?? cat.order ?? 0,
+    createdAt: cat.createdAt ?? new Date().toISOString(),
+    updatedAt: cat.updatedAt ?? new Date().toISOString(),
+  }));
+
+  const sorted = sortCustomCategoriesList(categories);
+  _cachedCustomCategories = sorted;
   notifyCustomCategoryListeners();
-  return categories;
+  return sorted;
 }
 
 export async function saveCustomCategories(categories: CustomCategory[]): Promise<void> {
-  // Sort and cache
-  categories.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  _cachedCustomCategories = categories;
+  // Normalize, sort and cache
+  const normalized = categories.map((cat, idx) => ({
+    ...cat,
+    isDefault: cat.isDefault ?? false,
+    isHidden: cat.isHidden ?? false,
+    isPinned: cat.isPinned ?? false,
+    parentCategoryId: cat.parentCategoryId ?? null,
+    sortOrder: cat.sortOrder ?? idx,
+    updatedAt: new Date().toISOString(),
+  }));
+
+  const sorted = sortCustomCategoriesList(normalized);
+  _cachedCustomCategories = sorted;
 
   // 1. Save locally to IndexedDB
   try {
-    await idbSet(CUSTOM_CATEGORIES_KEY, categories);
+    await idbSet(CUSTOM_CATEGORIES_KEY, sorted);
   } catch (e) {
     log.error('Failed to save custom categories to IndexedDB:', e);
   }
@@ -1291,7 +1382,7 @@ export async function saveCustomCategories(categories: CustomCategory[]): Promis
   const uid = getUid();
   if (uid) {
     try {
-      await saveCategoriesToCloud(uid, categories);
+      await saveCategoriesToCloud(uid, sorted);
     } catch (e) {
       log.error('Failed to sync custom categories to cloud:', e);
     }
@@ -1300,44 +1391,59 @@ export async function saveCustomCategories(categories: CustomCategory[]): Promis
   notifyCustomCategoryListeners();
 }
 
-export async function addCustomCategory(category: Omit<CustomCategory, 'id'>): Promise<CustomCategory> {
+export async function addCustomCategory(category: Omit<CustomCategory, 'id' | 'createdAt' | 'updatedAt'>): Promise<CustomCategory> {
   const categories = _cachedCustomCategories ? [..._cachedCustomCategories] : await loadCustomCategories();
+  const now = new Date().toISOString();
   const newCat: CustomCategory = {
     ...category,
     id: 'cat_' + Math.random().toString(36).substring(2, 11),
-    order: category.order ?? categories.length,
+    isDefault: category.isDefault ?? false,
+    isHidden: category.isHidden ?? false,
+    isPinned: category.isPinned ?? false,
+    parentCategoryId: category.parentCategoryId ?? null,
+    sortOrder: category.sortOrder ?? categories.length,
+    createdAt: now,
+    updatedAt: now,
   };
   categories.push(newCat);
   await saveCustomCategories(categories);
   return newCat;
 }
 
-export async function updateCustomCategory(id: string, updates: Partial<Omit<CustomCategory, 'id'>>): Promise<void> {
+export async function updateCustomCategory(id: string, updates: Partial<Omit<CustomCategory, 'id' | 'createdAt'>>): Promise<void> {
   const categories = _cachedCustomCategories ? [..._cachedCustomCategories] : await loadCustomCategories();
   const idx = categories.findIndex((c) => c.id === id);
   if (idx !== -1) {
-    categories[idx] = { ...categories[idx], ...updates };
+    categories[idx] = {
+      ...categories[idx],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
     await saveCustomCategories(categories);
   }
 }
 
-export async function deleteCustomCategory(id: string): Promise<void> {
+export async function deleteCustomCategory(id: string, reassignCategoryId?: string): Promise<void> {
   let categories = _cachedCustomCategories ? [..._cachedCustomCategories] : await loadCustomCategories();
   categories = categories.filter((c) => c.id !== id);
   
-  // Re-adjust order indices
+  // Re-adjust sortOrder indices
   categories.forEach((c, idx) => {
-    c.order = idx;
+    c.sortOrder = idx;
   });
 
   await saveCustomCategories(categories);
 
-  // Also clean up references in items!
+  // Clean up or reassign references in items!
   const items = [...(_cachedItems || [])];
   let modified = false;
   items.forEach((item) => {
     if (item.categoryId === id) {
-      delete item.categoryId;
+      if (reassignCategoryId) {
+        item.categoryId = reassignCategoryId;
+      } else {
+        delete item.categoryId;
+      }
       modified = true;
     }
   });
@@ -1355,14 +1461,14 @@ export async function reorderCustomCategories(orderedIds: string[]): Promise<voi
   orderedIds.forEach((id, idx) => {
     const cat = categories.find((c) => c.id === id);
     if (cat) {
-      reordered.push({ ...cat, order: idx });
+      reordered.push({ ...cat, sortOrder: idx });
     }
   });
 
   // Keep any category not in the ordered list at the end
   categories.forEach((cat) => {
     if (!orderedIds.includes(cat.id)) {
-      reordered.push({ ...cat, order: reordered.length });
+      reordered.push({ ...cat, sortOrder: reordered.length });
     }
   });
 

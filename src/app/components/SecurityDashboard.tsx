@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useOutletContext } from 'react-router';
 import {
   ArrowLeft,
   Shield,
@@ -237,6 +237,12 @@ type DetailView = null | 'compromised' | 'weak' | 'reused' | '2fa';
 
 export function SecurityDashboard() {
   const navigate = useNavigate();
+  const { setSidebarOpen, user } = useOutletContext<{
+    setSidebarOpen: (o: boolean) => void;
+    user: any;
+  }>();
+  const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'U';
+
   const [dashState, setDashState] = useState<DashboardState>('idle');
   const [progress, setProgress] = useState({ checked: 0, total: 0 });
   const [lastChecked, setLastChecked] = useState<string | null>(
@@ -299,13 +305,26 @@ export function SecurityDashboard() {
   if (dashState === 'checking') {
     return (
       <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
-        <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
-          <div className="flex items-center gap-3 px-4 py-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
-              <Shield className="w-4 h-4 text-white" />
+        <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_0px)]">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
+                aria-label="Open menu"
+              >
+                <AlignJustify className="w-5 h-5" />
+              </button>
+              <h1 className="text-white text-xl font-semibold">Security Check</h1>
             </div>
-            <h2 className="text-white text-lg font-semibold flex-1 text-center">Security Check</h2>
-            <div className="w-8" />{/* spacer for centering */}
+            <div className="flex items-center gap-2">
+              <div
+                className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
+                title={user?.email ?? 'Signed in'}
+              >
+                <span className="text-white text-sm font-bold">{userInitial}</span>
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center px-8 gap-6">
@@ -361,13 +380,26 @@ export function SecurityDashboard() {
   return (
     <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
-            <Shield className="w-4 h-4 text-white" />
+      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_0px)]">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
+              aria-label="Open menu"
+            >
+              <AlignJustify className="w-5 h-5" />
+            </button>
+            <h1 className="text-white text-xl font-semibold">Security</h1>
           </div>
-          <h2 className="text-white text-lg font-semibold flex-1 text-center">Security</h2>
-          <div className="w-8" />{/* spacer for centering */}
+          <div className="flex items-center gap-2">
+            <div
+              className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
+              title={user?.email ?? 'Signed in'}
+            >
+              <span className="text-white text-sm font-bold">{userInitial}</span>
+            </div>
+          </div>
         </div>
       </div>
 

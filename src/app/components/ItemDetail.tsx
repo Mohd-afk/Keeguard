@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, Copy, ExternalLink, Pencil, Trash2, Share2, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Check, RotateCcw, AlertTriangle, Star } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Copy, ExternalLink, Pencil, Trash2, Share2, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Check, RotateCcw, AlertTriangle, Star, Sparkles } from 'lucide-react';
 import { getVaultItem, deleteVaultItem, permanentlyDeleteVaultItem, restoreVaultItem, toggleFavorite, type ItemType } from '../store';
 import { format, differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
+import { TEMPLATES } from './AddEditForm';
 
 const typeIcons: Record<ItemType, React.ReactNode> = {
   Website: <Globe className="w-5 h-5 text-cyan-400" />,
@@ -25,6 +26,27 @@ const typeColors: Record<ItemType, string> = {
   Other: 'bg-gray-500/10',
 };
 
+const parseTemplateNote = (noteText: string) => {
+  if (!noteText) return null;
+  const match = noteText.match(/^__template__:([^\n]+)/);
+  if (!match) return null;
+  const templateId = match[1].trim();
+  
+  // parse the lines
+  const lines = noteText.split('\n').slice(1);
+  const fields: Record<string, string> = {};
+  lines.forEach(line => {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex !== -1) {
+      const key = line.slice(0, colonIndex).trim();
+      const val = line.slice(colonIndex + 1).trim();
+      fields[key] = val;
+    }
+  });
+  
+  return { templateId, fields };
+};
+
 export function ItemDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -36,13 +58,17 @@ export function ItemDetail() {
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [isFav, setIsFav] = useState(item?.isFavorite ?? false);
+  const [showFieldSecrets, setShowFieldSecrets] = useState<Record<string, boolean>>({});
+
+  const parsedTemplate = item ? parseTemplateNote(item.note || '') : null;
+  const activeTemplate = parsedTemplate ? TEMPLATES.find(t => t.id === parsedTemplate.templateId) : null;
 
   const handleToggleFavorite = useCallback(async () => {
     if (!item) return;
     setIsFav((p) => !p); // optimistic
     const result = await toggleFavorite(item.id);
     if (result === null) setIsFav(item.isFavorite ?? false); // revert on error
-  }, [item]);
+    }, [item]);
 
 
   if (!item) {
@@ -146,75 +172,147 @@ export function ItemDetail() {
         )}
 
         {/* Main info card */}
-        <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
-          {/* Username */}
-          <div>
-            <label className="text-gray-500 text-xs block mb-1">Username</label>
-            {item.username ? (
-              <div className="flex items-center justify-between">
-                <p className="text-white text-sm break-all mr-2">{item.username}</p>
-                <button
-                  onClick={() => copyToClipboard(item.username, 'username')}
-                  className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 shrink-0"
-                >
-                  {copied === 'username' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                </button>
+        {activeTemplate && parsedTemplate ? (
+          <div className="bg-[#16213e] rounded-xl p-5 space-y-5 border border-cyan-500/10">
+            {/* Template Header */}
+            <div className="flex items-center gap-3 pb-3.5 border-b border-white/5">
+              <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+                <Sparkles className="w-4 h-4" />
               </div>
-            ) : (
-              <p className="text-gray-500 text-sm bg-white/5 rounded-lg py-2 px-3">No username added</p>
-            )}
-          </div>
-
-          {/* Password */}
-          <div>
-            <label className="text-gray-500 text-xs block mb-1">Password</label>
-            <div className="flex items-center justify-between bg-white/5 rounded-lg py-2 px-3">
-              <p className="text-white text-sm font-mono tracking-wider break-all mr-2">
-                {showPassword ? item.password : maskedPassword}
-              </p>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-                <button
-                  onClick={() => copyToClipboard(item.password, 'password')}
-                  className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400"
-                >
-                  {copied === 'password' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                </button>
+              <div>
+                <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider block leading-none">Template Record</span>
+                <span className="text-white text-sm font-bold">{activeTemplate.name}</span>
               </div>
             </div>
-          </div>
 
-          {/* URL / Sites */}
-          {item.url && (
+            {/* Template Fields */}
+            <div className="space-y-4 pt-1">
+              {activeTemplate.fields.map((field) => {
+                const val = parsedTemplate.fields[field] || '';
+                const isPasswordLike = ["Password", "Net Banking Password", "Admin Password", "Private Key", "Seed Phrase", "PIN", "ATM PIN", "UPI PIN", "CVV"].includes(field);
+                const isSecretVisible = !!showFieldSecrets[field];
+                
+                if (!val) return null;
+
+                return (
+                  <div key={field} className="group relative">
+                    <label className="text-gray-500 text-[11px] block mb-1 font-medium">{field}</label>
+                    <div className="flex items-center justify-between bg-white/5 rounded-xl py-2.5 px-3.5 border border-transparent hover:border-white/5 transition-all">
+                      <p className={`text-white text-sm break-all mr-2 ${isPasswordLike && !isSecretVisible ? 'font-mono tracking-widest text-xs' : 'font-sans'}`}>
+                        {isPasswordLike && !isSecretVisible ? '\u2022'.repeat(Math.min(val.length, 12)) : val}
+                      </p>
+                      
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isPasswordLike && (
+                          <button
+                            type="button"
+                            onClick={() => setShowFieldSecrets(prev => ({ ...prev, [field]: !prev[field] }))}
+                            className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-gray-200 transition-colors"
+                          >
+                            {isSecretVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(val, field)}
+                          className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-gray-200 transition-colors"
+                        >
+                          {copied === field ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* URL / Sites */}
+            {item.url && (
+              <div className="pt-2 border-t border-white/5">
+                <label className="text-gray-500 text-[11px] block mb-1 font-medium">Link</label>
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-cyan-400 text-sm flex items-start gap-1.5 hover:underline break-all"
+                >
+                  <span className="flex-1">{item.url}</span>
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                </a>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-[#16213e] rounded-xl p-4 space-y-4">
+            {/* Username */}
             <div>
-              <label className="text-gray-500 text-xs block mb-1">Sites</label>
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-cyan-400 text-sm flex items-start gap-1.5 hover:underline break-all"
-              >
-                <span className="flex-1">{item.url}</span>
-                <ExternalLink className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              </a>
+              <label className="text-gray-500 text-xs block mb-1">Username</label>
+              {item.username ? (
+                <div className="flex items-center justify-between">
+                  <p className="text-white text-sm break-all mr-2">{item.username}</p>
+                  <button
+                    onClick={() => copyToClipboard(item.username, 'username')}
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 shrink-0"
+                  >
+                    {copied === 'username' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm bg-white/5 rounded-lg py-2 px-3">No username added</p>
+              )}
             </div>
-          )}
 
-          {/* Note */}
-          <div>
-            <label className="text-gray-500 text-xs block mb-1">Note</label>
-            {item.note ? (
-              <p className="text-gray-300 text-sm">{item.note}</p>
-            ) : (
-              <p className="text-gray-500 text-sm bg-white/5 rounded-lg py-2 px-3">No note added</p>
+            {/* Password */}
+            <div>
+              <label className="text-gray-500 text-xs block mb-1">Password</label>
+              <div className="flex items-center justify-between bg-white/5 rounded-lg py-2 px-3">
+                <p className="text-white text-sm font-mono tracking-wider break-all mr-2">
+                  {showPassword ? item.password : maskedPassword}
+                </p>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => copyToClipboard(item.password, 'password')}
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400"
+                  >
+                    {copied === 'password' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* URL / Sites */}
+            {item.url && (
+              <div>
+                <label className="text-gray-500 text-xs block mb-1">Sites</label>
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-cyan-400 text-sm flex items-start gap-1.5 hover:underline break-all"
+                >
+                  <span className="flex-1">{item.url}</span>
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                </a>
+              </div>
             )}
+
+            {/* Note */}
+            <div>
+              <label className="text-gray-500 text-xs block mb-1">Note</label>
+              {item.note ? (
+                <p className="text-gray-300 text-sm">{item.note}</p>
+              ) : (
+                <p className="text-gray-500 text-sm bg-white/5 rounded-lg py-2 px-3">No note added</p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Metadata */}
         <div className="bg-[#16213e] rounded-xl p-4 space-y-2">

@@ -1,14 +1,15 @@
 import { useMemo } from 'react';
-import type { VaultItem } from '../store';
+import type { VaultItem, CustomCategory } from '../store';
 
 /**
- * Tokenized fuzzy search across title, URL, and username simultaneously.
- *
- * Example: "goo acc 123" will find a Google item whose username contains
- * "acc" and where the URL contains "123" or vice-versa — any token can
- * match any field.
+ * Multi-dimensional, tokenized real-time search across all vault item fields.
+ * Matches: Title, Username, URL, Notes, Category, Tags (labels), Metadata (type, dates).
  */
-export function useSmartSearch(items: VaultItem[], query: string): VaultItem[] {
+export function useSmartSearch(
+  items: VaultItem[],
+  query: string,
+  categories: CustomCategory[] = []
+): VaultItem[] {
   return useMemo(() => {
     if (!query.trim()) return items;
 
@@ -19,18 +20,27 @@ export function useSmartSearch(items: VaultItem[], query: string): VaultItem[] {
       .filter(Boolean);
 
     return items.filter((item) => {
-      const fields = [
-        item.title.toLowerCase(),
-        item.username.toLowerCase(),
-        item.url.toLowerCase(),
-        item.note.toLowerCase(),
-        item.type.toLowerCase(),
-      ];
+      // Resolve custom category name
+      const categoryName = item.categoryId
+        ? categories.find((c) => c.id === item.categoryId)?.name || ''
+        : '';
 
-      // Every token must match at least one field
+      const fields = [
+        item.title,
+        item.username,
+        item.url,
+        item.note,
+        item.type,
+        categoryName,
+        ...(item.labels || []),
+        item.createdAt,
+        item.updatedAt,
+      ].map((f) => (f || '').toLowerCase());
+
+      // Every search token must match at least one field
       return tokens.every((token) =>
-        fields.some((field) => field.includes(token)),
+        fields.some((field) => field.includes(token))
       );
     });
-  }, [items, query]);
+  }, [items, query, categories]);
 }

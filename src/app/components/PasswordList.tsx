@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useOutletContext } from 'react-router';
 import {
   Plus,
   Globe,
@@ -24,9 +24,12 @@ import {
   StickyNote,
   FileText,
   FolderOpen,
+  Folder,
+  Tag,
   LayoutGrid,
   List,
   ArrowLeft,
+  BookTemplate,
 } from 'lucide-react';
 import {
   addVaultChangeListener,
@@ -41,17 +44,21 @@ import {
 import { useSmartSearch } from '../hooks/useSmartSearch';
 import { useSort } from '../hooks/useSort';
 import { Sidebar, type SidebarFilter } from './Sidebar';
+import { TEMPLATES } from './AddEditForm';
 import { SortModal } from './SortModal';
 import type { User } from 'firebase/auth';
+import { CategoryIconMap } from './ManageCategories';
+import { toast } from 'sonner';
 
 // ── Category chip definition ───────────────────────────────────────────
-type CategoryChip = 'all' | 'favorites' | 'cards' | 'ids';
+type CategoryChip = 'all' | 'favorites' | 'work' | 'personal' | 'expiring';
 
 const CHIPS: { id: CategoryChip; label: string }[] = [
   { id: 'all', label: 'All' },
-  { id: 'favorites', label: '★ Favorites' },
-  { id: 'cards', label: 'Cards' },
-  { id: 'ids', label: 'IDs' },
+  { id: 'favorites', label: '★ Favourites' },
+  { id: 'work', label: 'Work' },
+  { id: 'personal', label: 'Personal' },
+  { id: 'expiring', label: 'Expiring Soon' },
 ];
 
 // ── Type icon/color maps ──────────────────────────────────────────────
@@ -84,9 +91,39 @@ interface ItemCardProps {
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
   onLongPress?: (id: string) => void;
+  searchQuery?: string;
 }
 
-function ItemCard({ item, onNavigate, onFavorite, favLoading, isSelectionMode, isSelected, onToggleSelect, onLongPress }: ItemCardProps) {
+// Helper component for keyword highlighting
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  if (!query || !query.trim()) return <span>{text}</span>;
+  
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return <span>{text}</span>;
+  
+  // Escaping special characters for regex safety
+  const escapedTokens = tokens.map(t => t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+  const regex = new RegExp(`(${escapedTokens.join('|')})`, 'gi');
+  
+  const parts = text.split(regex);
+  
+  return (
+    <span>
+      {parts.map((part, i) => {
+        const isMatch = tokens.some(t => part.toLowerCase() === t);
+        return isMatch ? (
+          <mark key={i} className="bg-cyan-500/35 text-cyan-200 px-0.5 rounded font-semibold select-none">
+            {part}
+          </mark>
+        ) : (
+          part
+        );
+      })}
+    </span>
+  );
+}
+
+function ItemCard({ item, onNavigate, onFavorite, favLoading, isSelectionMode, isSelected, onToggleSelect, onLongPress, searchQuery = '' }: ItemCardProps) {
   let timer: any;
   const handleTouchStart = () => {
     timer = setTimeout(() => { if (onLongPress) onLongPress(item.id); }, 500);
@@ -121,10 +158,24 @@ function ItemCard({ item, onNavigate, onFavorite, favLoading, isSelectionMode, i
           {typeIcons[item.type] ?? <KeyRound className="w-5 h-5 text-gray-400" />}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-white text-sm truncate font-medium">{item.title}</p>
-          <p className="text-gray-500 text-xs truncate mt-0.5">
-            {item.username || item.url || item.type}
+          <p className="text-white text-sm truncate font-medium">
+            <HighlightedText text={item.title} query={searchQuery} />
           </p>
+          <p className="text-gray-500 text-xs truncate mt-0.5">
+            <HighlightedText text={item.username || item.url || item.type} query={searchQuery} />
+          </p>
+          {item.labels && item.labels.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {item.labels.map((lbl, idx) => (
+                <span
+                  key={idx}
+                  className="text-[9px] font-semibold bg-cyan-500/10 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-500/20"
+                >
+                  <HighlightedText text={lbl} query={searchQuery} />
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </button>
 
@@ -162,11 +213,15 @@ interface PasswordListProps {
 
 export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   const navigate = useNavigate();
+  const { sidebarOpen, setSidebarOpen, sidebarFilter, setSidebarFilter } = useOutletContext<{
+    sidebarOpen: boolean;
+    setSidebarOpen: (o: boolean) => void;
+    sidebarFilter: SidebarFilter;
+    setSidebarFilter: (f: SidebarFilter) => void;
+  }>();
   const [items, setItems] = useState<VaultItem[]>(getVaultItems());
   const [searchQuery, setSearchQuery] = useState('');
   const [activeChip, setActiveChip] = useState<CategoryChip>('all');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all');
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<BottomTab>('safe');
   const [favLoading, setFavLoading] = useState<string | null>(null);
@@ -179,8 +234,46 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   // Multi-select state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
 
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+
+  // ── Full Power Search Upgrades (D1) ──────────────────────────────────
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('securevault_recent_searches');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 200);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  const saveSearchQuery = useCallback((q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setRecentSearches(prev => {
+      const filtered = prev.filter(x => x.toLowerCase() !== trimmed.toLowerCase());
+      const next = [trimmed, ...filtered].slice(0, 5);
+      localStorage.setItem('securevault_recent_searches', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const mostAccessedItems = useMemo(() => {
+    const activeItems = items.filter(i => !i.deletedAt);
+    const favs = activeItems.filter(i => i.isFavorite);
+    if (favs.length > 0) return favs.slice(0, 3);
+    return activeItems.slice(0, 3);
+  }, [items]);
 
   // Live vault sync
   useEffect(() => {
@@ -276,8 +369,17 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
         const t = i.title.toLowerCase();
         return t.includes('id') || t.includes('passport') || t.includes('license') || t.includes('ssn');
       });
-    // Archived / expiring / templates: show empty (feature stubs)
-    if (sidebarFilter === 'archived' || sidebarFilter === 'expiring' || sidebarFilter === 'templates' || sidebarFilter === 'passkeys')
+    if (sidebarFilter === 'expiring') {
+      return activeVaultItems.filter((i) => {
+        const noteLower = (i.note || '').toLowerCase();
+        const titleLower = i.title.toLowerCase();
+        return i.labels?.some(l => l.toLowerCase().includes('expiring')) || noteLower.includes('expiring') || titleLower.includes('expiring');
+      });
+    }
+    if (sidebarFilter === 'templates') {
+      return activeVaultItems.filter((i) => !!i.note && i.note.startsWith('__template__:'));
+    }
+    if (sidebarFilter === 'passkeys')
       return [];
     return activeVaultItems;
   }, [activeVaultItems, sidebarFilter, items]);
@@ -322,17 +424,23 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
     switch (activeChip) {
       case 'favorites':
         return coreCategoryFiltered.filter((i) => i.isFavorite);
-      case 'cards':
-        return coreCategoryFiltered.filter((i) => i.type === 'Card');
-      case 'ids':
-        return coreCategoryFiltered.filter((i) => i.type === 'Other' && i.title.toLowerCase().includes('id'));
+      case 'work':
+        return coreCategoryFiltered.filter((i) => i.categoryId === 'cat_work' || i.labels?.some(l => l.toLowerCase() === 'work'));
+      case 'personal':
+        return coreCategoryFiltered.filter((i) => i.categoryId === 'cat_personal' || i.labels?.some(l => l.toLowerCase() === 'personal'));
+      case 'expiring':
+        return coreCategoryFiltered.filter((i) => {
+          const noteLower = i.note.toLowerCase();
+          const titleLower = i.title.toLowerCase();
+          return i.labels?.some(l => l.toLowerCase().includes('expiring')) || noteLower.includes('expiring') || titleLower.includes('expiring');
+        });
       default:
         return coreCategoryFiltered;
     }
   }, [coreCategoryFiltered, activeChip]);
 
   // 3. Smart search
-  const searchFiltered = useSmartSearch(chipFiltered, searchQuery);
+  const searchFiltered = useSmartSearch(chipFiltered, debouncedQuery, customCategories);
 
   // 4. Sort
   const { sortedItems, sortOption, setSortOption } = useSort(searchFiltered);
@@ -348,6 +456,25 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
     });
     return map;
   }, [sortedItems]);
+
+  // ── Category detail items ───────────────────────────────────────────
+  const detailItems = useMemo(() => {
+    if (!activeCategoryDetail) return [];
+    return activeVaultItems.filter(item => {
+      const t = item.title.toLowerCase();
+      if (activeCategoryDetail === 'passwords') return item.type === 'Website' || item.type === 'App';
+      if (activeCategoryDetail === 'cards') return item.type === 'Card';
+      if (activeCategoryDetail === 'devices') return item.type === 'Phone' || item.type === 'Door Lock';
+      if (activeCategoryDetail === 'ids') return item.type === 'Other' && (t.includes('id') || t.includes('passport') || t.includes('license'));
+      if (activeCategoryDetail === 'docs') return item.type === 'Other' && (t.includes('doc') || t.includes('pdf') || t.includes('file') || t.includes('cert'));
+      if (activeCategoryDetail === 'notes') {
+        const isId = t.includes('id') || t.includes('passport') || t.includes('license');
+        const isDoc = t.includes('doc') || t.includes('pdf') || t.includes('file') || t.includes('cert');
+        return item.type === 'Other' && !isId && !isDoc;
+      }
+      return item.categoryId === activeCategoryDetail;
+    });
+  }, [activeVaultItems, activeCategoryDetail]);
 
   // ── Favorite toggle ──────────────────────────────────────────────────
   const handleFavorite = useCallback(async (id: string) => {
@@ -389,24 +516,27 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
     setSelectedIds(new Set());
   };
 
+  const handleBulkMove = async (categoryId: string | null) => {
+    try {
+      const itemsCount = selectedIds.size;
+      const targetCat = categoryId ? customCategories.find(c => c.id === categoryId) : null;
+      const targetName = targetCat ? targetCat.name : 'No Category';
+
+      for (const id of Array.from(selectedIds)) {
+        await updateVaultItem(id, { categoryId: categoryId || undefined });
+      }
+      setItems(getVaultItems());
+      setIsSelectionMode(false);
+      setSelectedIds(new Set());
+      setIsMoveModalOpen(false);
+      toast.success(`Moved ${itemsCount} ${itemsCount === 1 ? 'item' : 'items'} to "${targetName}"`);
+    } catch (err) {
+      toast.error('Failed to move items');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
-      {/* ── Sidebar ─────────────────────────────────────────────────── */}
-      <Sidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        activeFilter={sidebarFilter}
-        onFilterChange={(f) => {
-          setSidebarFilter(f);
-          setActiveCategoryDetail(null);
-          setActiveCategory(null);
-          if (f === 'trash') navigate('/trash');
-        }}
-        items={items}
-        customCategories={customCategories}
-        onNavigateSettings={() => navigate('/settings')}
-      />
-
       {/* ── Sort Modal ──────────────────────────────────────────────── */}
       <SortModal
         open={sortModalOpen}
@@ -432,15 +562,16 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
             </div>
             <button
               onClick={() => {
-                if (selectedIds.size === sortedItems.length) {
+                const targetItems = activeCategoryDetail ? detailItems : sortedItems;
+                if (selectedIds.size === targetItems.length) {
                   setSelectedIds(new Set());
                 } else {
-                  setSelectedIds(new Set(sortedItems.map(i => i.id)));
+                  setSelectedIds(new Set(targetItems.map(i => i.id)));
                 }
               }}
               className="text-cyan-400 font-medium text-sm px-2"
             >
-              {selectedIds.size === sortedItems.length ? 'Deselect All' : 'Select All'}
+              {selectedIds.size === (activeCategoryDetail ? detailItems.length : sortedItems.length) ? 'Deselect All' : 'Select All'}
             </button>
           </div>
         ) : (
@@ -456,21 +587,6 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               <h1 className="text-white text-xl font-semibold">Safe</h1>
             </div>
             <div className="flex items-center gap-2">
-              {/* View mode toggle */}
-              <button
-                onClick={() => { setViewMode(v => v === 'grid' ? 'list' : 'grid'); setActiveCategoryDetail(null); }}
-                className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
-                title={viewMode === 'grid' ? 'Switch to List View' : 'Switch to Grid View'}
-              >
-                {viewMode === 'grid' ? <List className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5" />}
-              </button>
-              <button
-                onClick={() => setIsSelectionMode(true)}
-                className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
-                title="Select Items"
-              >
-                <CheckCircle2 className="w-5 h-5" />
-              </button>
               {/* Avatar */}
               <div
                 className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
@@ -483,7 +599,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
         )}
 
         {/* Smart Search */}
-        <div className="px-4 pb-3">
+        <div className="px-4 pb-3 relative">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
@@ -491,7 +607,14 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setTimeout(() => setIsSearchFocused(false), 250)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  saveSearchQuery(searchQuery);
+                }
+              }}
+              placeholder="Search Title, Username, URL, Notes, Tags..."
               className="w-full bg-[#16213e] border border-white/5 rounded-2xl py-2.5 pl-10 pr-9 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:bg-white/5 transition-all"
             />
             {searchQuery ? (
@@ -512,12 +635,62 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
             )}
           </div>
 
-          {/* Smart search hint */}
-          {searchQuery && sortedItems.length === 0 && (
-            <div className="mt-2 px-1 py-2 text-xs text-gray-500">
-              Try:{' '}
-              <span className="text-gray-400 font-mono">"goo acc 123"</span> finds Google account{' '}
-              <span className="text-gray-400">safe123@gmail.com</span>
+          {/* Smart Suggestions Dropdown */}
+          {isSearchFocused && !searchQuery && (
+            <div className="absolute top-full left-4 right-4 mt-2 bg-[#16213e] border border-gray-700/60 rounded-2xl p-4 z-50 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+              {/* Recent Searches */}
+              {recentSearches.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mb-2">Recent Searches</h3>
+                  <div className="flex flex-wrap gap-2 animate-in fade-in duration-200">
+                    {recentSearches.map((s, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onMouseDown={() => {
+                          setSearchQuery(s);
+                          saveSearchQuery(s);
+                        }}
+                        className="text-xs bg-white/5 hover:bg-cyan-500/15 hover:text-cyan-400 text-gray-300 px-3 py-1.5 rounded-full border border-gray-700/30 transition-all active:scale-95"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Most Accessed Items */}
+              <div>
+                <h3 className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mb-2">Suggested / Most Accessed</h3>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {mostAccessedItems.length === 0 ? (
+                    <p className="text-gray-500 text-xs py-1">No items found</p>
+                  ) : (
+                    mostAccessedItems.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onMouseDown={() => {
+                          navigate(`/item/${item.id}`);
+                        }}
+                        className="w-full flex items-center justify-between p-2 rounded-xl bg-white/5 hover:bg-cyan-500/10 text-left transition-all group active:scale-[0.99]"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400`}>
+                            <KeyRound className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-gray-200 group-hover:text-white truncate">{item.title}</p>
+                            <p className="text-[10px] text-gray-500 truncate">{item.username || item.url || item.type}</p>
+                          </div>
+                        </div>
+                        <Star className="w-3.5 h-3.5 text-cyan-400 shrink-0" fill={item.isFavorite ? 'currentColor' : 'none'} />
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -548,25 +721,77 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       {/* ── Content ─────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_96px)]">
 
+        {/* ── TEMPLATES MODE: Templates Catalog ─────────────────────── */}
+        {sidebarFilter === 'templates' && (
+          <div className="px-4 py-4 space-y-4">
+            {/* Banner/Header */}
+            <div className="bg-gradient-to-br from-cyan-500/10 to-blue-600/10 border border-cyan-500/20 rounded-2xl p-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <h2 className="text-white text-base font-bold flex items-center gap-2">
+                <BookTemplate className="w-5 h-5 text-cyan-400" /> Premium Vault Templates
+              </h2>
+              <p className="text-gray-400 text-xs mt-1 leading-relaxed">
+                Choose a structured template below to quickly create a highly optimized vault entry. Predefined fields ensure advanced organization and enhanced security.
+              </p>
+            </div>
+
+            {/* Template Catalog Grid */}
+            <div className="grid grid-cols-2 gap-3.5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              {TEMPLATES.map((tmpl) => {
+                const IconComp = tmpl.icon;
+                // Curate card style colors/borders based on template
+                let accentColor = '#06b6d4'; // default cyan
+                if (tmpl.id === 'email') accentColor = '#10b981'; // green
+                else if (tmpl.id === 'banking') accentColor = '#f59e0b'; // amber
+                else if (tmpl.id === 'social') accentColor = '#ec4899'; // pink
+                else if (tmpl.id === 'gaming') accentColor = '#8b5cf6'; // purple
+                else if (tmpl.id === 'cards') accentColor = '#ef4444'; // red
+                else if (tmpl.id === 'crypto') accentColor = '#eab308'; // yellow
+                else if (tmpl.id === 'vpn') accentColor = '#3b82f6'; // blue
+                
+                return (
+                  <button
+                    key={tmpl.id}
+                    onClick={() => navigate(`/add?template=${tmpl.id}`)}
+                    className="p-4 rounded-2xl border border-white/5 bg-[#16213e] hover:bg-[#1f2d52] text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98] flex flex-col justify-between min-h-[110px] shadow-md hover:shadow-lg hover:border-cyan-500/30"
+                  >
+                    {/* Top row */}
+                    <div className="flex justify-between items-start w-full">
+                      <div className="p-2.5 rounded-xl transition-all duration-300 group-hover:scale-110" style={{ backgroundColor: `${accentColor}15`, color: accentColor }}>
+                        <IconComp className="w-5 h-5" />
+                      </div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">
+                        {tmpl.type}
+                      </span>
+                    </div>
+
+                    {/* Bottom details */}
+                    <div className="mt-3">
+                      <p className="text-white font-semibold text-xs group-hover:text-cyan-400 transition-colors truncate">
+                        {tmpl.name}
+                      </p>
+                      <p className="text-gray-500 text-[10px] mt-0.5 truncate">
+                        {tmpl.fields.length} predefined fields
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Existing Entries Header */}
+            {sortedItems.length > 0 && (
+              <div className="pt-2">
+                <h3 className="text-gray-400 text-xs uppercase tracking-wider font-semibold px-1">
+                  Saved Template Entries
+                </h3>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── GRID MODE: Category Detail Page ─────────────────────── */}
         {viewMode === 'grid' && activeCategoryDetail && (() => {
-          // Compute the filtered items for the selected category
           const detailLabel = activeCategoryDetail;
-          const detailItems = activeVaultItems.filter(item => {
-            const t = item.title.toLowerCase();
-            if (detailLabel === 'passwords') return item.type === 'Website' || item.type === 'App';
-            if (detailLabel === 'cards') return item.type === 'Card';
-            if (detailLabel === 'devices') return item.type === 'Phone' || item.type === 'Door Lock';
-            if (detailLabel === 'ids') return item.type === 'Other' && (t.includes('id') || t.includes('passport') || t.includes('license'));
-            if (detailLabel === 'docs') return item.type === 'Other' && (t.includes('doc') || t.includes('pdf') || t.includes('file') || t.includes('cert'));
-            if (detailLabel === 'notes') {
-              const isId = t.includes('id') || t.includes('passport') || t.includes('license');
-              const isDoc = t.includes('doc') || t.includes('pdf') || t.includes('file') || t.includes('cert');
-              return item.type === 'Other' && !isId && !isDoc;
-            }
-            // Custom category
-            return item.categoryId === detailLabel;
-          });
           const catName = (() => {
             if (detailLabel === 'passwords') return 'Passwords';
             if (detailLabel === 'cards') return 'Cards';
@@ -606,6 +831,10 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
                       onNavigate={(id) => navigate(`/item/${id}`)}
                       onFavorite={handleFavorite}
                       favLoading={favLoading}
+                      isSelectionMode={isSelectionMode}
+                      isSelected={selectedIds.has(item.id)}
+                      onToggleSelect={handleToggleSelect}
+                      onLongPress={handleLongPress}
                     />
                   ))}
                 </div>
@@ -619,6 +848,24 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
           <div className="px-4 py-3">
             <div className="flex justify-between items-center mb-3 px-1">
               <h2 className="text-gray-400 text-xs uppercase tracking-wider font-semibold">Vault Categories</h2>
+              <div className="flex items-center gap-1.5">
+                {/* View mode toggle */}
+                <button
+                  onClick={() => { setViewMode(v => v === 'grid' ? 'list' : 'grid'); setActiveCategoryDetail(null); }}
+                  className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+                  title="Switch to List View"
+                >
+                  <List className="w-4.5 h-4.5" />
+                </button>
+                {/* Select Mode */}
+                <button
+                  onClick={() => setIsSelectionMode(true)}
+                  className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+                  title="Select Items"
+                >
+                  <CheckCircle2 className="w-4.5 h-4.5" />
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {/* Passwords */}
@@ -727,6 +974,33 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
         {/* ── LIST MODE or sidebar-filtered content ───────────────── */}
         {(viewMode === 'list' || isSelectionMode || searchQuery || sidebarFilter !== 'all') && !activeCategoryDetail && (
           <>
+            {/* Header row in list mode */}
+            {!isSelectionMode && !searchQuery && (
+              <div className="flex justify-between items-center mb-1.5 px-5 mt-2">
+                <h2 className="text-gray-400 text-xs uppercase tracking-wider font-semibold">
+                  {sidebarFilter !== 'all' ? `${sidebarFilter} Items` : 'Vault Items'}
+                </h2>
+                <div className="flex items-center gap-1.5">
+                  {/* View mode toggle */}
+                  <button
+                    onClick={() => { setViewMode(v => v === 'grid' ? 'list' : 'grid'); setActiveCategoryDetail(null); }}
+                    className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+                    title="Switch to Grid View"
+                  >
+                    <LayoutGrid className="w-4.5 h-4.5" />
+                  </button>
+                  {/* Select Mode */}
+                  <button
+                    onClick={() => setIsSelectionMode(true)}
+                    className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+                    title="Select Items"
+                  >
+                    <CheckCircle2 className="w-4.5 h-4.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Category Active Filtering Banner */}
             {activeCategory && sidebarFilter === 'all' && (
               <div className="mx-4 mt-2 mb-3 px-4 py-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-between">
@@ -745,18 +1019,26 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
 
             {/* Empty state — no search results */}
             {sortedItems.length === 0 && searchQuery ? (
-              <div className="flex flex-col items-center justify-center py-20 px-6">
-                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
-                  <Search className="w-8 h-8 text-gray-600" />
+              <div className="flex flex-col items-center justify-center py-16 px-6 animate-in fade-in duration-300">
+                <div className="w-16 h-16 rounded-full bg-cyan-500/10 flex items-center justify-center mb-4">
+                  <Search className="w-8 h-8 text-cyan-400" />
                 </div>
-                <p className="text-gray-400 text-base font-medium text-center">No results found</p>
-                <p className="text-gray-600 text-sm text-center mt-2 max-w-xs">
-                  Try a different search.{' '}
-                  <span className="text-gray-500 font-mono text-xs">
-                    "goo acc 123"
-                  </span>{' '}
-                  finds Google account safe123@gmail.com
-                </p>
+                <p className="text-white text-base font-semibold text-center">No results found for "{searchQuery}"</p>
+                <div className="mt-4 p-4 bg-[#16213e] border border-white/5 rounded-2xl max-w-xs text-center w-full">
+                  <p className="text-gray-400 text-xs font-semibold">Tips to improve search:</p>
+                  <ul className="text-gray-500 text-xs mt-1.5 space-y-1 text-left list-disc list-inside">
+                    <li>Double check spelling</li>
+                    <li>Search usernames, URLs, or labels</li>
+                    <li>Filter by categories</li>
+                  </ul>
+                </div>
+                <button
+                  onClick={() => navigate('/add')}
+                  className="mt-6 flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-xl font-semibold text-sm shadow-lg shadow-cyan-500/15 transition-all active:scale-[0.98]"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create New Item
+                </button>
               </div>
             ) : sortedItems.length === 0 && activeChip === 'favorites' ? (
               /* Empty favorites */
@@ -776,17 +1058,21 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
                   <KeyRound className="w-8 h-8 text-gray-500" />
                 </div>
                 <p className="text-gray-400 text-base font-medium text-center">
-                  {totalActive === 0 ? 'No passwords saved yet' : 'No items in this category'}
+                  {sidebarFilter === 'templates' 
+                    ? 'No template entries saved yet' 
+                    : (totalActive === 0 ? 'No passwords saved yet' : 'No items in this category')}
                 </p>
                 <p className="text-gray-600 text-sm text-center mt-1">
-                  {totalActive === 0 ? 'Tap + to add your first password' : 'Try a different filter'}
+                  {sidebarFilter === 'templates' 
+                    ? 'Choose a template above to create your first entry' 
+                    : (totalActive === 0 ? 'Tap + to add your first password' : 'Try a different filter')}
                 </p>
               </div>
             ) : (
               /* Item list */
               <div className="px-3 space-y-4 mt-3">
                 {Array.from(grouped.entries()).map(([type, typeItems]) => {
-                  const isExpanded = expandedCategories[type] !== false; // Default true
+                  const isExpanded = expandedCategories[type] === true; // Default false
                   return (
                     <div key={type}>
                       <button
@@ -807,13 +1093,17 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
                             <ItemCard
                               key={item.id}
                               item={item}
-                              onNavigate={(id) => navigate(`/item/${id}`)}
+                              onNavigate={(id) => {
+                                saveSearchQuery(debouncedQuery);
+                                navigate(`/item/${id}`);
+                              }}
                               onFavorite={handleFavorite}
                               favLoading={favLoading}
                               isSelectionMode={isSelectionMode}
                               isSelected={selectedIds.has(item.id)}
                               onToggleSelect={handleToggleSelect}
                               onLongPress={handleLongPress}
+                              searchQuery={debouncedQuery}
                             />
                           ))}
                         </div>
@@ -862,6 +1152,115 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               <Trash2 className="w-6 h-6" />
               <span className="text-[10px] font-medium text-gray-300">Delete</span>
             </button>
+            <button
+              onClick={() => setIsMoveModalOpen(true)}
+              disabled={selectedIds.size === 0}
+              className="flex flex-col items-center gap-1 text-cyan-400 disabled:opacity-50 transition-opacity"
+            >
+              <FolderOpen className="w-6 h-6" />
+              <span className="text-[10px] font-medium text-gray-300">Move</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Move to Category Modal ────────────────────────────────── */}
+      {isMoveModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#16213e] border border-white/10 rounded-3xl w-full max-w-sm max-h-[75vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-white/5">
+              <div>
+                <h3 className="text-white text-base font-bold">Move to Category</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Select a destination for {selectedIds.size} {selectedIds.size === 1 ? 'item' : 'items'}</p>
+              </div>
+              <button
+                onClick={() => setIsMoveModalOpen(false)}
+                className="p-1 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Content */}
+            <div className="flex-1 overflow-y-auto py-2 divide-y divide-white/5">
+              {/* Option: None / No category */}
+              <button
+                onClick={() => handleBulkMove(null)}
+                className="w-full px-5 py-3.5 flex items-center gap-3 text-left hover:bg-white/5 active:bg-white/10 transition-colors group"
+              >
+                <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center text-gray-400 group-hover:bg-white/10 transition-colors">
+                  <X className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-white text-sm font-semibold">No Category</p>
+                  <p className="text-gray-500 text-xs mt-0.5">Remove from current category</p>
+                </div>
+              </button>
+
+              {/* Categories list */}
+              <div className="py-2">
+                {(() => {
+                  const parents = customCategories.filter(c => !c.parentCategoryId);
+                  return parents.map(parent => {
+                    const children = customCategories.filter(c => c.parentCategoryId === parent.id);
+                    const ParentIcon = CategoryIconMap[parent.icon || 'Folder'] || Folder;
+                    
+                    return (
+                      <div key={parent.id} className="space-y-1">
+                        {/* Parent Category */}
+                        <button
+                          onClick={() => handleBulkMove(parent.id)}
+                          className="w-full px-5 py-3 flex items-center gap-3 text-left hover:bg-white/5 active:bg-white/10 transition-colors group"
+                        >
+                          <div 
+                            className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
+                            style={{ backgroundColor: `${parent.color}15`, color: parent.color }}
+                          >
+                            <ParentIcon className="w-4.5 h-4.5" />
+                          </div>
+                          <div>
+                            <p className="text-white text-sm font-semibold">{parent.name}</p>
+                            {parent.isDefault && <span className="text-[10px] text-gray-500 font-medium">Default Category</span>}
+                          </div>
+                        </button>
+
+                        {/* Child Categories */}
+                        {children.map(child => {
+                          const ChildIcon = CategoryIconMap[child.icon || 'Folder'] || Folder;
+                          return (
+                            <button
+                              key={child.id}
+                              onClick={() => handleBulkMove(child.id)}
+                              className="w-full pl-12 pr-5 py-2.5 flex items-center gap-3 text-left hover:bg-white/5 active:bg-white/10 transition-colors group"
+                            >
+                              <div className="text-gray-600 self-center mr-1 text-xs">└─</div>
+                              <div 
+                                className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+                                style={{ backgroundColor: `${child.color}15`, color: child.color }}
+                              >
+                                <ChildIcon className="w-4 h-4" />
+                              </div>
+                              <p className="text-gray-300 text-sm font-medium">{child.name}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-white/5 bg-[#121b33] flex justify-end">
+              <button
+                onClick={() => setIsMoveModalOpen(false)}
+                className="px-4 py-2 text-sm font-bold text-gray-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -10,6 +10,7 @@ import { PrivacyPage } from './components/legal/PrivacyPage';
 import { LicensePage } from './components/legal/LicensePage';
 import { SecurityDashboard } from './components/SecurityDashboard';
 import { PasswordGenerator } from './components/PasswordGenerator';
+import ManageCategories from './components/ManageCategories';
 
 export const router = createBrowserRouter([
   // Public legal pages — accessible without login
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
       { path: 'trash', Component: TrashBin },
       { path: 'security', Component: SecurityDashboard },
       { path: 'generator', Component: PasswordGenerator },
+      { path: 'categories', Component: ManageCategories },
     ],
   },
 ]);

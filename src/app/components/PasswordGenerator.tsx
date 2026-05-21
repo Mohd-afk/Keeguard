@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router';
-import { Copy, Check, RefreshCw, ShieldCheck, Timer, Wrench } from 'lucide-react';
+import { useNavigate, useOutletContext } from 'react-router';
+import { Copy, Check, RefreshCw, ShieldCheck, Timer, Wrench, AlignJustify } from 'lucide-react';
 import { toast } from 'sonner';
 import { BottomNav } from './BottomNav';
 import type { BottomTab } from './BottomNav';
@@ -150,6 +150,12 @@ function Toggle({
 // ── Main Component ────────────────────────────────────────────────────
 export function PasswordGenerator() {
   const navigate = useNavigate();
+  const { setSidebarOpen, user } = useOutletContext<{
+    setSidebarOpen: (o: boolean) => void;
+    user: any;
+  }>();
+  const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'U';
+
   const [activeTab, setActiveTab] = useState<BottomTab>('tools');
 
   useEffect(() => {
@@ -233,20 +239,32 @@ export function PasswordGenerator() {
   const activeTypes = [opts.useLower, opts.useUpper, opts.useDigits, opts.useSymbols].filter(Boolean).length;
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
+    <div className="min-h-screen max-h-screen overflow-hidden flex flex-col relative">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
-            <Wrench className="w-4 h-4 text-white" />
+      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_0px)]">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
+              aria-label="Open menu"
+            >
+              <AlignJustify className="w-5 h-5" />
+            </button>
+            <h1 className="text-white text-xl font-semibold">Password Generator</h1>
           </div>
-          <h2 className="text-white text-lg font-semibold flex-1 text-center">Tools</h2>
-          <div className="w-8" />{/* spacer for centering */}
+          <div className="flex items-center gap-2">
+            <div
+              className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
+              title={user?.email ?? 'Signed in'}
+            >
+              <span className="text-white text-sm font-bold">{userInitial}</span>
+            </div>
+          </div>
         </div>
-
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-[calc(24px+128px)]">
+      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-[200px]">
         {/* Password display card */}
         <div className="bg-[#16213e] rounded-2xl p-5 mb-5 min-h-[100px] flex items-center justify-center relative overflow-hidden">
           {/* Ghost rows for depth effect */}

@@ -1,10 +1,178 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, ChevronDown, Star } from 'lucide-react';
-import { addVaultItem, getVaultItem, updateVaultItem, encryptTotpSecret, decryptTotpSecret, type ItemType, type CustomCategory, subscribeToCustomCategories } from '../store';
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  Star,
+  Search,
+  Plus,
+  X,
+  Folder,
+  Tag,
+  Check,
+  Sparkles,
+  AlertTriangle,
+  Mail,
+  Landmark,
+  Users,
+  Gamepad,
+  CreditCard,
+  Wifi,
+  Coins,
+  Code,
+  Shield,
+  FileText,
+  Tv,
+  Server,
+  StickyNote,
+  Heart,
+} from 'lucide-react';
+import {
+  addVaultItem,
+  getVaultItem,
+  updateVaultItem,
+  encryptTotpSecret,
+  decryptTotpSecret,
+  type ItemType,
+  type CustomCategory,
+  subscribeToCustomCategories,
+  addCustomCategory,
+} from '../store';
 import { toast } from 'sonner';
+import { CategoryIconMap } from './ManageCategories';
 
 const itemTypes: ItemType[] = ['Website', 'App', 'Phone', 'Door Lock', 'Card', 'Other'];
+
+export const TEMPLATES = [
+  {
+    id: 'email',
+    name: 'Email Accounts',
+    categoryId: 'cat_email',
+    icon: Mail,
+    type: 'Website' as const,
+    titlePrefill: 'Email: ',
+    fields: ["Email Address", "Password", "Recovery Email", "2FA Enabled", "Provider"]
+  },
+  {
+    id: 'banking',
+    name: 'Banking',
+    categoryId: 'cat_banking',
+    icon: Landmark,
+    type: 'Website' as const,
+    titlePrefill: 'Bank: ',
+    fields: ["Bank Name", "Account Number", "IFSC Code", "Net Banking Username", "Net Banking Password", "ATM PIN", "Card Number (last 4)", "UPI PIN"]
+  },
+  {
+    id: 'social',
+    name: 'Social Media',
+    categoryId: 'cat_social',
+    icon: Users,
+    type: 'Website' as const,
+    titlePrefill: 'Social: ',
+    fields: ["Platform", "Username / Handle", "Password", "Linked Email", "Phone Number", "2FA Backup Codes"]
+  },
+  {
+    id: 'gaming',
+    name: 'Gaming',
+    categoryId: 'cat_gaming',
+    icon: Gamepad,
+    type: 'App' as const,
+    titlePrefill: 'Game: ',
+    fields: ["Platform", "Username", "Password", "Linked Email", "Recovery Codes", "Purchase History Notes"]
+  },
+  {
+    id: 'cards',
+    name: 'Credit / Debit Cards',
+    categoryId: 'cat_credit',
+    icon: CreditCard,
+    type: 'Card' as const,
+    titlePrefill: 'Card: ',
+    fields: ["Card Holder Name", "Card Number", "Expiry Date", "CVV", "Bank Name", "Billing Address", "PIN"]
+  },
+  {
+    id: 'wifi',
+    name: 'Wi-Fi Passwords',
+    categoryId: 'cat_wifi',
+    icon: Wifi,
+    type: 'Other' as const,
+    titlePrefill: 'Wi-Fi: ',
+    fields: ["Network Name (SSID)", "Password", "Security Type", "Router IP", "Admin Username", "Admin Password"]
+  },
+  {
+    id: 'crypto',
+    name: 'Crypto Wallets',
+    categoryId: 'cat_crypto',
+    icon: Coins,
+    type: 'Other' as const,
+    titlePrefill: 'Wallet: ',
+    fields: ["Wallet Name", "Wallet Address", "Seed Phrase", "Private Key", "Exchange Username", "Exchange Password", "2FA Secret"]
+  },
+  {
+    id: 'developer',
+    name: 'Developer Tools / APIs',
+    categoryId: 'cat_work',
+    icon: Code,
+    type: 'Other' as const,
+    titlePrefill: 'API: ',
+    fields: ["Service Name", "API Key", "API Secret", "Access Token", "Webhook URL", "Environment (Dev/Prod)", "Notes"]
+  },
+  {
+    id: 'vpn',
+    name: 'VPN',
+    categoryId: 'cat_work',
+    icon: Shield,
+    type: 'Website' as const,
+    titlePrefill: 'VPN: ',
+    fields: ["Provider", "Username", "Password", "Server Address", "Protocol", "License Key"]
+  },
+  {
+    id: 'identity',
+    name: 'Identity Documents',
+    categoryId: 'cat_identity',
+    icon: FileText,
+    type: 'Other' as const,
+    titlePrefill: 'ID: ',
+    fields: ["Document Type", "Document Number", "Full Name", "Date of Birth", "Issued By", "Issue Date", "Expiry Date", "Notes"]
+  },
+  {
+    id: 'subs',
+    name: 'Subscriptions',
+    categoryId: 'cat_subs',
+    icon: Tv,
+    type: 'Website' as const,
+    titlePrefill: 'Sub: ',
+    fields: ["Service Name", "Email Used", "Password", "Plan Type", "Billing Date", "Amount", "Payment Method", "Auto-Renewal"]
+  },
+  {
+    id: 'server',
+    name: 'Server / SSH Credentials',
+    categoryId: 'cat_work',
+    icon: Server,
+    type: 'Other' as const,
+    titlePrefill: 'Server: ',
+    fields: ["Server Name", "IP Address", "Port", "Username", "Password", "SSH Key Path", "Notes"]
+  },
+  {
+    id: 'note',
+    name: 'Secure Notes',
+    categoryId: 'cat_notes',
+    icon: StickyNote,
+    type: 'Other' as const,
+    titlePrefill: 'Note: ',
+    fields: ["Title", "Content", "Tags", "Created Date"]
+  },
+  {
+    id: 'emergency',
+    name: 'Emergency Information',
+    categoryId: 'cat_personal',
+    icon: Heart,
+    type: 'Other' as const,
+    titlePrefill: 'Emergency: ',
+    fields: ["Type", "Details", "Emergency Contact", "Location", "Notes"]
+  }
+];
 
 export function AddEditForm() {
   const [saving, setSaving] = useState(false);
@@ -31,7 +199,67 @@ export function AddEditForm() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
+  // Search & Quick Create inside picker
+  const [searchQuery, setSearchQuery] = useState('');
+  const [aiSuggestion, setAiSuggestion] = useState<{ id: string; name: string } | null>(null);
 
+  // Template custom fields state
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templateFields, setTemplateFields] = useState<Record<string, string>>({});
+  const [showFieldSecrets, setShowFieldSecrets] = useState<Record<string, boolean>>({});
+
+  const handleApplyTemplate = (tmpl: typeof TEMPLATES[number]) => {
+    const isFormFilled = title.trim() || username.trim() || password.trim() || note.trim() || Object.keys(templateFields).length > 0;
+    if (isFormFilled) {
+      if (!window.confirm('Applying this template will overwrite existing fields. Do you want to proceed?')) {
+        return;
+      }
+    }
+    setTitle(tmpl.titlePrefill);
+    setType(tmpl.type);
+    setSelectedCategoryId(tmpl.categoryId);
+    setSelectedTemplateId(tmpl.id);
+    
+    // Initialize template fields
+    const initialFields: Record<string, string> = {};
+    tmpl.fields.forEach(f => {
+      if (f === 'Port') initialFields[f] = '22';
+      else if (f === '2FA Enabled') initialFields[f] = 'No';
+      else if (f === 'Security Type') initialFields[f] = 'WPA2';
+      else if (f === 'Router IP') initialFields[f] = '192.168.1.1';
+      else if (f === 'Environment (Dev/Prod)') initialFields[f] = 'Dev';
+      else if (f === 'Created Date') initialFields[f] = new Date().toLocaleDateString();
+      else initialFields[f] = '';
+    });
+    setTemplateFields(initialFields);
+    
+    // Clear master fields
+    setUsername('');
+    setPassword('');
+    setUrl('');
+    setNote('');
+    
+    setShowAdvanced(true);
+    toast.success(`Template "${tmpl.name}" applied!`);
+  };
+
+  const handleFieldChange = (field: string, value: string) => {
+    const updated = { ...templateFields, [field]: value };
+    setTemplateFields(updated);
+    
+    // Auto-sync email/username/password to master state
+    const usernameKeys = ["Username", "Username / Handle", "Email Address", "Email Used", "Net Banking Username", "Admin Username"];
+    const passwordKeys = ["Password", "Net Banking Password", "Admin Password", "Private Key", "Seed Phrase", "PIN", "ATM PIN", "UPI PIN"];
+    const urlKeys = ["Server Address", "IP Address", "Webhook URL"];
+    
+    if (usernameKeys.includes(field)) {
+      setUsername(value);
+    } else if (passwordKeys.includes(field) && field !== '2FA Enabled') {
+      setPassword(value);
+    } else if (urlKeys.includes(field)) {
+      setUrl(value);
+    }
+  };
 
   useEffect(() => {
     const unsub = subscribeToCustomCategories((categories) => {
@@ -60,6 +288,34 @@ export function AddEditForm() {
   }, [location.state, isEdit]);
 
   useEffect(() => {
+    const queryParams = new URLSearchParams(location.search);
+    const templateParam = queryParams.get('template');
+    if (!isEdit && templateParam) {
+      const tmpl = TEMPLATES.find(t => t.id === templateParam);
+      if (tmpl) {
+        setTitle(tmpl.titlePrefill);
+        setType(tmpl.type);
+        setSelectedCategoryId(tmpl.categoryId);
+        setSelectedTemplateId(tmpl.id);
+        
+        // Initialize template fields
+        const initialFields: Record<string, string> = {};
+        tmpl.fields.forEach(f => {
+          if (f === 'Port') initialFields[f] = '22';
+          else if (f === '2FA Enabled') initialFields[f] = 'No';
+          else if (f === 'Security Type') initialFields[f] = 'WPA2';
+          else if (f === 'Router IP') initialFields[f] = '192.168.1.1';
+          else if (f === 'Environment (Dev/Prod)') initialFields[f] = 'Dev';
+          else if (f === 'Created Date') initialFields[f] = new Date().toLocaleDateString();
+          else initialFields[f] = '';
+        });
+        setTemplateFields(initialFields);
+        setShowAdvanced(true);
+      }
+    }
+  }, [location.search, isEdit]);
+
+  useEffect(() => {
     if (id) {
       const item = getVaultItem(id);
       if (item) {
@@ -68,7 +324,29 @@ export function AddEditForm() {
         setPassword(item.password);
         setType(item.type);
         setUrl(item.url);
-        setNote(item.note);
+        
+        // Parse serialized template note
+        if (item.note && item.note.startsWith('__template__:')) {
+          const lines = item.note.split('\n');
+          const header = lines[0];
+          const templateId = header.replace('__template__:', '').trim();
+          setSelectedTemplateId(templateId);
+          
+          const fieldsData: Record<string, string> = {};
+          lines.slice(1).forEach(line => {
+            const separatorIdx = line.indexOf(':');
+            if (separatorIdx !== -1) {
+              const key = line.substring(0, separatorIdx).trim();
+              const value = line.substring(separatorIdx + 1).trim();
+              fieldsData[key] = value;
+            }
+          });
+          setTemplateFields(fieldsData);
+          setNote('');
+        } else {
+          setNote(item.note || '');
+        }
+
         setIsFavorite(item.isFavorite || false);
         setSelectedCategoryId(item.categoryId || '');
         // Decrypt TOTP secret from separate encrypted context
@@ -88,8 +366,114 @@ export function AddEditForm() {
     }
   }, [id]);
 
+  // C4: AI-Based Auto Categorization Client-Side Pattern Suggestor
+  useEffect(() => {
+    // Only suggest if no category is currently set
+    if (selectedCategoryId) {
+      setAiSuggestion(null);
+      return;
+    }
 
-  const canSave = title.trim() && password.trim();
+    const textToMatch = `${title} ${url}`.toLowerCase();
+    if (!textToMatch.trim()) {
+      setAiSuggestion(null);
+      return;
+    }
+
+    const patterns = [
+      { keywords: ['bank', 'paypal', 'stripe', 'chase', 'fidelity', 'hsbc', 'boa', 'capitalone', 'finance', 'trading', 'investing'], targetId: 'cat_banking' },
+      { keywords: ['coinbase', 'wallet', 'crypto', 'binance', 'metamask', 'ledger', 'solana', 'btc', 'eth', 'trustwallet'], targetId: 'cat_crypto' },
+      { keywords: ['credit', 'debit', 'visa', 'mastercard', 'amex', 'card', 'bankcard'], targetId: 'cat_credit' },
+      { keywords: ['gmail', 'yahoo', 'outlook', 'proton', 'mail', 'inbox', 'fastmail'], targetId: 'cat_email' },
+      { keywords: ['facebook', 'instagram', 'twitter', 'x.com', 'linkedin', 'reddit', 'tiktok', 'snapchat', 'social'], targetId: 'cat_social' },
+      { keywords: ['netflix', 'spotify', 'hulu', 'disney', 'youtube', 'prime', 'sub', 'hbo', 'appletv', 'patreon'], targetId: 'cat_subs' },
+      { keywords: ['wifi', 'router', 'internet', 'broadband', 'hotspot'], targetId: 'cat_wifi' },
+      { keywords: ['github', 'gitlab', 'aws', 'slack', 'jira', 'confluence', 'vercel', 'netlify', 'heroku', 'api', 'server', 'database', 'ssh', 'credentials', 'jenkins', 'docker'], targetId: 'cat_work' },
+      { keywords: ['passport', 'driver', 'licence', 'aadhaar', 'id', 'license', 'ssn', 'nid', 'pan', 'identity'], targetId: 'cat_driver' }
+    ];
+
+    let matchedId = '';
+    for (const pattern of patterns) {
+      if (pattern.keywords.some(keyword => textToMatch.includes(keyword))) {
+        matchedId = pattern.targetId;
+        break;
+      }
+    }
+
+    if (matchedId) {
+      // Find matching loaded category
+      const targetCat = customCategories.find(c => c.id === matchedId || c.id.toLowerCase().includes(matchedId.replace('cat_', '')));
+      if (targetCat) {
+        setAiSuggestion({ id: targetCat.id, name: targetCat.name });
+        return;
+      }
+    }
+
+    setAiSuggestion(null);
+  }, [title, url, selectedCategoryId, customCategories]);
+
+  // C3: Hierarchical List Filter for Bottom Sheet Selector
+  const filteredCategories = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    
+    // Construct visible hierarchy
+    const parents = customCategories.filter((c) => !c.parentCategoryId);
+    const result: { category: CustomCategory; isChild: boolean }[] = [];
+
+    parents.forEach((parent) => {
+      const children = customCategories.filter((c) => c.parentCategoryId === parent.id);
+      const parentMatches = parent.name.toLowerCase().includes(query);
+      const matchingChildren = children.filter((c) => c.name.toLowerCase().includes(query));
+
+      if (parentMatches || matchingChildren.length > 0) {
+        result.push({ category: parent, isChild: false });
+        const childrenToShow = parentMatches ? children : matchingChildren;
+        childrenToShow.forEach((child) => {
+          result.push({ category: child, isChild: true });
+        });
+      }
+    });
+
+    // Orphan categories
+    customCategories.forEach((cat) => {
+      if (cat.parentCategoryId && !customCategories.some((p) => p.id === cat.parentCategoryId)) {
+        if (cat.name.toLowerCase().includes(query)) {
+          result.push({ category: cat, isChild: true });
+        }
+      }
+    });
+
+    return result;
+  }, [customCategories, searchQuery]);
+
+  // In-place quick category creation
+  const handleQuickCreate = async () => {
+    if (!searchQuery.trim()) return;
+    try {
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#6366f1', '#f97316', '#ef4444', '#64748b'];
+      const randomColor = colors[Math.floor(Math.random() * colors.length)];
+      
+      const newCat = await addCustomCategory({
+        name: searchQuery.trim(),
+        icon: 'Folder',
+        color: randomColor,
+        isDefault: false,
+        isHidden: false,
+        isPinned: false,
+        parentCategoryId: null,
+        sortOrder: customCategories.length,
+      });
+
+      setSelectedCategoryId(newCat.id);
+      setShowCategoryDropdown(false);
+      setSearchQuery('');
+      toast.success(`Category "${newCat.name}" created and selected!`);
+    } catch (e) {
+      toast.error('Failed to create quick category');
+    }
+  };
+
+  const canSave = title.trim() && (password.trim() || selectedTemplateId !== null);
 
   const handleSave = async () => {
     if (!canSave || saving) return;
@@ -101,13 +485,19 @@ export function AddEditForm() {
         ? await encryptTotpSecret(totpSecret.trim())
         : undefined;
 
+      const notePayload = selectedTemplateId 
+        ? `__template__:${selectedTemplateId}\n` + Object.entries(templateFields)
+            .map(([key, val]) => `${key}: ${val}`)
+            .join('\n')
+        : note.trim();
+
       const itemPayload = {
         title: title.trim(),
         username: username.trim(),
-        password,
+        password: password || '',
         type,
         url: url.trim(),
-        note: note.trim(),
+        note: notePayload,
         isFavorite,
         labels: undefined,
         totpSecretEncrypted,
@@ -139,7 +529,7 @@ export function AddEditForm() {
             <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <h2 className="text-white">{isEdit ? 'Edit Password' : 'Add New Password'}</h2>
+            <h2 className="text-white text-lg font-semibold">{isEdit ? 'Edit Password' : 'Add New Password'}</h2>
           </div>
           <button
             onClick={() => setIsFavorite(!isFavorite)}
@@ -153,69 +543,85 @@ export function AddEditForm() {
 
       {/* Form */}
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
-        {/* Type */}
-        <div>
-          <label className="text-gray-400 text-xs mb-1.5 block">Type</label>
-          <div className="relative">
-            <button
-              onClick={() => setShowTypeDropdown(!showTypeDropdown)}
-              className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white text-left flex items-center justify-between focus:outline-none focus:border-cyan-500/50"
-            >
-              <span>{type}</span>
-              <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showTypeDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showTypeDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-[#16213e] border border-gray-700/50 rounded-xl overflow-hidden z-20 shadow-xl">
-                {itemTypes.map(t => (
+        {/* Templates Picker Row */}
+        {!isEdit && (
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Quick Templates</label>
+              <span className="text-[10px] text-cyan-400 font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10">14 Presets</span>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-none -mx-4 px-4">
+              {TEMPLATES.map((tmpl) => {
+                const Icon = tmpl.icon;
+                const isSelected = selectedTemplateId === tmpl.id;
+                return (
                   <button
-                    key={t}
-                    onClick={() => { setType(t); setShowTypeDropdown(false); }}
-                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors ${t === type ? 'text-cyan-400 bg-white/5' : 'text-white'}`}
+                    key={tmpl.id}
+                    type="button"
+                    onClick={() => handleApplyTemplate(tmpl)}
+                    className={`flex flex-col items-center justify-center shrink-0 w-24 h-22 rounded-2xl p-2.5 text-center transition-all group relative overflow-hidden focus:outline-none border ${
+                      isSelected
+                        ? 'bg-cyan-950/40 border-cyan-500/80 ring-2 ring-cyan-500/30'
+                        : 'bg-[#16213e] hover:bg-[#1f305e] border-gray-700/40 hover:border-cyan-500/30'
+                    }`}
                   >
-                    {t}
+                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 via-cyan-500/0 to-cyan-500/5 group-hover:to-cyan-500/10 transition-all duration-300" />
+                    <div className={`p-2 rounded-xl transition-all mb-1 shrink-0 ${
+                      isSelected ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-gray-400 group-hover:bg-cyan-500/15 group-hover:text-cyan-400'
+                    }`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <span className={`text-[10px] font-semibold leading-tight line-clamp-2 transition-all ${
+                      isSelected ? 'text-white font-bold' : 'text-gray-300 group-hover:text-white'
+                    }`}>
+                      {tmpl.name}
+                    </span>
                   </button>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Category Selector */}
+        {/* Category Selector with Bottom Sheet Trigger */}
         <div>
           <label className="text-gray-400 text-xs mb-1.5 block">Category</label>
           <div className="relative">
             <button
               type="button"
-              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+              onClick={() => { setShowCategoryDropdown(true); setSearchQuery(''); }}
               className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white text-left flex items-center justify-between focus:outline-none focus:border-cyan-500/50"
             >
-              <span>
-                {selectedCategoryId
-                  ? customCategories.find((c) => c.id === selectedCategoryId)?.name || 'Default'
-                  : 'Default (No Custom Category)'}
+              <span className="flex items-center gap-2">
+                {selectedCategoryId ? (
+                  <>
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: customCategories.find((c) => c.id === selectedCategoryId)?.color || '#3b82f6' }}
+                    />
+                    <span>{customCategories.find((c) => c.id === selectedCategoryId)?.name || 'Default'}</span>
+                  </>
+                ) : (
+                  <span>Default (No Custom Category)</span>
+                )}
               </span>
-              <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+              <ChevronDown className="w-4 h-4 text-gray-500" />
             </button>
-            {showCategoryDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-[#16213e] border border-gray-700/50 rounded-xl overflow-hidden z-20 shadow-xl max-h-60 overflow-y-auto">
+
+            {/* C4: Smart Category Suggestor Non-intrusive AI Chip */}
+            {aiSuggestion && (
+              <div className="mt-2 flex items-center gap-2 shrink-0 animate-in fade-in slide-in-from-top-1">
                 <button
                   type="button"
-                  onClick={() => { setSelectedCategoryId(''); setShowCategoryDropdown(false); }}
-                  className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors ${!selectedCategoryId ? 'text-cyan-400 bg-white/5' : 'text-white'}`}
+                  onClick={() => {
+                    setSelectedCategoryId(aiSuggestion.id);
+                    toast.success(`Set category to "${aiSuggestion.name}"`);
+                  }}
+                  className="bg-purple-950/40 hover:bg-purple-900/50 border border-purple-500/30 rounded-full px-3 py-1.5 text-purple-300 text-[11px] font-semibold flex items-center gap-1.5 transition-all shadow-inner active:scale-95"
                 >
-                  Default (No Custom Category)
+                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                  💡 Suggestion: Set to "{aiSuggestion.name}"
                 </button>
-                {customCategories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => { setSelectedCategoryId(cat.id); setShowCategoryDropdown(false); }}
-                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors flex items-center gap-2 ${cat.id === selectedCategoryId ? 'text-cyan-400 bg-white/5' : 'text-white'}`}
-                  >
-                    <span style={{ color: cat.color }}>●</span>
-                    <span>{cat.name}</span>
-                  </button>
-                ))}
               </div>
             )}
           </div>
@@ -224,67 +630,199 @@ export function AddEditForm() {
         {/* Title */}
         <div>
           <label className="text-gray-400 text-xs mb-1.5 block">
-            {type === 'Website' ? 'Site' : 'Title'} <span className="text-red-400">*</span>
+            {type === 'Website' ? 'Site / Service Name' : 'Item Name / Title'} <span className="text-red-400">*</span>
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={type === 'Website' ? 'example.com' : 'Enter title'}
+            placeholder={type === 'Website' ? 'example.com or Google' : 'Enter title'}
             className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
           />
         </div>
 
-        {/* Username */}
-        <div>
-          <label className="text-gray-400 text-xs mb-1.5 block">Username</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Enter username or email"
-            className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
-          />
-        </div>
+        {/* Dynamic Template Fields OR Standard Fields */}
+        {selectedTemplateId ? (
+          (() => {
+            const currentTemplate = TEMPLATES.find(t => t.id === selectedTemplateId);
+            if (!currentTemplate) return null;
+            
+            return (
+              <div className="bg-[#16213e]/60 border border-cyan-500/10 rounded-2xl p-5 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center justify-between pb-3 border-b border-white/5">
+                  <span className="text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-cyan-400" />
+                    {currentTemplate.name} Fields
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('Reset template fields and return to generic form?')) {
+                        setSelectedTemplateId(null);
+                        setTemplateFields({});
+                        setUsername('');
+                        setPassword('');
+                        setUrl('');
+                      }
+                    }}
+                    className="text-[10px] font-bold text-gray-500 hover:text-red-400 transition-colors uppercase tracking-wider"
+                  >
+                    Reset Template
+                  </button>
+                </div>
+                
+                <div className="space-y-4 pt-1">
+                  {currentTemplate.fields.map((field) => {
+                    const val = templateFields[field] || '';
+                    const isPasswordLike = ["Password", "Net Banking Password", "Admin Password", "Private Key", "Seed Phrase", "PIN", "ATM PIN", "UPI PIN", "CVV"].includes(field);
+                    const isTextarea = ["Content", "Billing Address", "Seed Phrase", "Details", "Notes", "2FA Backup Codes", "Purchase History Notes"].includes(field);
+                    const isDropdown = ["2FA Enabled", "Auto-Renewal", "Environment (Dev/Prod)"].includes(field);
+                    const isSecretVisible = !!showFieldSecrets[field];
+                    
+                    return (
+                      <div key={field} className="space-y-1">
+                        <label className="text-gray-400 text-xs font-medium flex items-center justify-between">
+                          <span>{field}</span>
+                          {isPasswordLike && (
+                            <span className="text-[10px] text-cyan-500/80 font-mono font-medium">Secure</span>
+                          )}
+                        </label>
+                        
+                        {isDropdown ? (
+                          <select
+                            value={val}
+                            onChange={(e) => handleFieldChange(field, e.target.value)}
+                            className="w-full bg-[#0a0a14] border border-gray-700/40 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-cyan-500/50 transition-colors"
+                          >
+                            {field === 'Environment (Dev/Prod)' ? (
+                              <>
+                                <option value="Dev">Dev</option>
+                                <option value="Prod">Prod</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                              </>
+                            )}
+                          </select>
+                        ) : isTextarea ? (
+                          <textarea
+                            value={val}
+                            onChange={(e) => handleFieldChange(field, e.target.value)}
+                            placeholder={`Enter ${field.toLowerCase()}`}
+                            rows={3}
+                            className="w-full bg-[#0a0a14] border border-gray-700/40 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-cyan-500/50 transition-colors resize-none font-sans"
+                          />
+                        ) : (
+                          <div className="relative">
+                            <input
+                              type={isPasswordLike && !isSecretVisible ? 'password' : 'text'}
+                              value={val}
+                              onChange={(e) => handleFieldChange(field, e.target.value)}
+                              placeholder={`Enter ${field.toLowerCase()}`}
+                              className="w-full bg-[#0a0a14] border border-gray-700/40 rounded-xl py-3.5 px-4 pr-11 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-cyan-500/50 transition-colors font-sans"
+                            />
+                            {isPasswordLike && (
+                              <button
+                                type="button"
+                                onClick={() => setShowFieldSecrets(prev => ({ ...prev, [field]: !prev[field] }))}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                              >
+                                {isSecretVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()
+        ) : (
+          <div className="space-y-5 animate-in fade-in duration-200">
+            {/* Type */}
+            <div>
+              <label className="text-gray-400 text-xs mb-1.5 block">Type</label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowTypeDropdown(!showTypeDropdown)}
+                  className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white text-left flex items-center justify-between focus:outline-none focus:border-cyan-500/50"
+                >
+                  <span>{type}</span>
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showTypeDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showTypeDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-[#16213e] border border-gray-700/50 rounded-xl overflow-hidden z-20 shadow-xl">
+                    {itemTypes.map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => { setType(t); setShowTypeDropdown(false); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm hover:bg-white/5 transition-colors ${t === type ? 'text-cyan-400 bg-white/5' : 'text-white'}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
 
-        {/* Password */}
-        <div>
-          <label className="text-gray-400 text-xs mb-1.5 block">
-            Password / Secret <span className="text-red-400">*</span>
-          </label>
-          <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password or secret"
-              className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 pr-11 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
-            >
-              {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
-            </button>
-          </div>
-          <p className="text-gray-500 text-xs mt-1.5">Make sure you're saving your current password for this site</p>
-        </div>
+            {/* Username */}
+            <div>
+              <label className="text-gray-400 text-xs mb-1.5 block">Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username or email"
+                className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
+              />
+            </div>
 
-        {/* URL */}
-        {(type === 'Website' || type === 'App') && (
-          <div>
-            <label className="text-gray-400 text-xs mb-1.5 block">URL</label>
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com"
-              className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
-            />
+            {/* Password */}
+            <div>
+              <label className="text-gray-400 text-xs mb-1.5 block">
+                Password / Secret <span className="text-red-400">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password or secret"
+                  className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 pr-11 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                >
+                  {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                </button>
+              </div>
+              <p className="text-gray-500 text-xs mt-1.5">Make sure you're saving your current password for this site</p>
+            </div>
+
+            {/* URL */}
+            {(type === 'Website' || type === 'App') && (
+              <div>
+                <label className="text-gray-400 text-xs mb-1.5 block">URL</label>
+                <input
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
+                />
+              </div>
+            )}
           </div>
         )}
-
 
         {/* Advanced Options Toggle */}
         <div className="pt-2 border-t border-gray-700/30">
@@ -302,16 +840,18 @@ export function AddEditForm() {
         {showAdvanced && (
           <div className="space-y-5 animate-in slide-in-from-top-2 fade-in duration-200">
             {/* Note */}
-            <div>
-              <label className="text-gray-400 text-xs mb-1.5 block">Note</label>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Add any additional notes..."
-                rows={3}
-                className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors resize-none"
-              />
-            </div>
+            {!selectedTemplateId && (
+              <div>
+                <label className="text-gray-400 text-xs mb-1.5 block">Note</label>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Add any additional notes..."
+                  rows={3}
+                  className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors resize-none"
+                />
+              </div>
+            )}
 
             {/* TOTP Secret */}
             <div>
@@ -357,6 +897,133 @@ export function AddEditForm() {
           Save
         </button>
       </div>
+
+      {/* Category Selection Bottom Sheet Modal */}
+      {showCategoryDropdown && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
+            onClick={() => setShowCategoryDropdown(false)}
+          />
+
+          {/* Bottom Sheet Container */}
+          <div className="relative w-full max-w-lg mx-auto bg-[#1a1a2e] border-t border-white/10 rounded-t-[24px] shadow-2xl flex flex-col max-h-[85vh] z-10 animate-in slide-in-from-bottom duration-300">
+            {/* Handle Drag Bar indicator for mobile */}
+            <div className="w-12 h-1.5 bg-gray-700/50 rounded-full mx-auto my-3 shrink-0" />
+
+            {/* Title / Close header */}
+            <div className="px-4 pb-3 flex items-center justify-between border-b border-white/5">
+              <div>
+                <h3 className="text-white text-lg font-semibold flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-cyan-400" /> Select Category
+                </h3>
+                <p className="text-gray-400 text-xs mt-0.5">Organize your passwords and secrets</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCategoryDropdown(false)}
+                className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search Input Bar */}
+            <div className="p-4 border-b border-white/5 bg-[#16213e]/20">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search or quick-create category..."
+                  className="w-full bg-[#16213e] border border-gray-700/50 rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-cyan-500/50 transition-colors"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Scrollable list */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1.5 max-h-[50vh]">
+              {/* Default Option */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCategoryId('');
+                  setShowCategoryDropdown(false);
+                }}
+                className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-all flex items-center justify-between ${
+                  !selectedCategoryId
+                    ? 'bg-cyan-500/10 border border-cyan-500/20 text-cyan-400'
+                    : 'bg-[#16213e]/40 border border-transparent text-gray-300 hover:bg-[#16213e]/70'
+                }`}
+              >
+                <span className="font-semibold">Default (No Category)</span>
+                {!selectedCategoryId && <Check className="w-4 h-4 text-cyan-400" />}
+              </button>
+
+              {/* Categorized List */}
+              {filteredCategories.length > 0 ? (
+                filteredCategories.map(({ category: cat, isChild }) => {
+                  const isSelected = selectedCategoryId === cat.id;
+                  const IconComp = CategoryIconMap[cat.icon || 'Folder'] || Tag;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategoryId(cat.id);
+                        setShowCategoryDropdown(false);
+                      }}
+                      className={`w-full text-left py-3 px-4 rounded-xl text-sm transition-all flex items-center justify-between ${
+                        isSelected
+                          ? 'bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-semibold'
+                          : 'bg-[#16213e]/40 border border-transparent text-gray-300 hover:bg-[#16213e]/70'
+                      } ${isChild ? 'pl-8 border-l-2 border-white/5 ml-3' : ''}`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <IconComp className="w-4 h-4 shrink-0" style={{ color: cat.color }} />
+                        <span>{cat.name}</span>
+                      </span>
+                      {isSelected && <Check className="w-4 h-4 text-cyan-400" />}
+                    </button>
+                  );
+                })
+              ) : searchQuery.trim() ? (
+                <div className="py-6 text-center text-gray-400 text-sm">
+                  No matching categories found
+                </div>
+              ) : (
+                <div className="py-6 text-center text-gray-500 text-xs">
+                  Create custom categories to organize
+                </div>
+              )}
+            </div>
+
+            {/* Inline Quick Creation Trigger */}
+            {searchQuery.trim() && (
+              <div className="p-4 border-t border-white/5 bg-[#16213e]/40 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleQuickCreate}
+                  className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-medium py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 active:scale-[0.98] transition-all"
+                >
+                  <Plus className="w-4 h-4" /> Create Category "{searchQuery.trim()}"
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

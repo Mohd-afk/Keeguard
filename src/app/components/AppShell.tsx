@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Outlet } from 'react-router';
+import { Outlet, useNavigate } from 'react-router';
 import { LockScreen } from './LockScreen';
 import { AuthScreen } from './AuthScreen';
-import { getSettings, clearSession, clearLocalVaultData, getVaultItems, permanentlyDeleteVaultItem } from '../store';
+import { getSettings, clearSession, clearLocalVaultData, getVaultItems, permanentlyDeleteVaultItem, addVaultChangeListener, subscribeToCustomCategories, type CustomCategory, type VaultItem } from '../store';
 import { onAuthChange, signOut, isVerificationLink } from '../auth';
 import { getFirebaseAuth } from '../firebase';
 import type { User } from 'firebase/auth';
 import { createLogger } from '../utils/logger';
 import { registerCurrentDevice, listenForRevocation, updateLastActive } from '../services/deviceSession';
 import { saveUserEmailToProfile } from '../firestore';
+import { Sidebar, type SidebarFilter } from './Sidebar';
 
 const log = createLogger('UI');
 
@@ -17,6 +18,24 @@ export function AppShell() {
   const [user, setUser] = useState<User | null>(null);
   const [unlocked, setUnlocked] = useState(false);
   const [magicLinkActive, setMagicLinkActive] = useState(false);
+
+  const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all');
+  const [items, setItems] = useState<VaultItem[]>([]);
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+
+  useEffect(() => {
+    if (unlocked) {
+      setItems(getVaultItems());
+      const unsub = addVaultChangeListener((updated) => setItems([...updated]));
+      const unsubCats = subscribeToCustomCategories((categories) => setCustomCategories(categories));
+      return () => {
+        unsub();
+        unsubCats();
+      };
+    }
+  }, [unlocked]);
 
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visibilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -288,7 +307,22 @@ export function AppShell() {
   // ── Unlocked vault ───────────────────────────────────────────────
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[#1a1a2e] relative shadow-2xl">
-      <Outlet context={{ onLock: handleLock, onSignOut: handleSignOut, user }} />
+      <Outlet context={{ onLock: handleLock, onSignOut: handleSignOut, user, sidebarOpen, setSidebarOpen, sidebarFilter, setSidebarFilter }} />
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        activeFilter={sidebarFilter}
+        onFilterChange={(f) => {
+          setSidebarFilter(f);
+          navigate('/');
+        }}
+        items={items}
+        customCategories={customCategories}
+        onNavigateSettings={() => {
+          setSidebarOpen(false);
+          navigate('/settings');
+        }}
+      />
     </div>
   );
 }

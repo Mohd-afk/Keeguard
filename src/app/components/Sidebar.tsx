@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router';
 import type { CustomCategory } from '../store';
 import {
   Shield,
@@ -10,13 +11,13 @@ import {
   Tag,
   Pencil,
   AlarmClock,
-  Archive,
   BookTemplate,
   Trash2,
   Settings,
   X,
 } from 'lucide-react';
 import type { VaultItem } from '../store';
+import { CategoryIconMap } from './ManageCategories';
 
 export type SidebarFilter =
   | 'all'
@@ -26,7 +27,6 @@ export type SidebarFilter =
   | 'notes'
   | 'ids'
   | 'expiring'
-  | 'archived'
   | 'templates'
   | 'trash'
   | string;
@@ -85,6 +85,8 @@ export function Sidebar({
   customCategories,
   onNavigateSettings,
 }: SidebarProps) {
+  const navigate = useNavigate();
+
   // Lock scroll when sidebar is open
   useEffect(() => {
     if (open) {
@@ -99,6 +101,30 @@ export function Sidebar({
 
   const activeItems = items.filter((i) => !i.deletedAt);
   const trashedItems = items.filter((i) => !!i.deletedAt);
+
+  const sidebarCategories = useMemo(() => {
+    // Only display categories that are NOT hidden
+    const visibleCats = customCategories.filter((c) => !c.isHidden);
+    const parents = visibleCats.filter((c) => !c.parentCategoryId);
+    const result: { category: CustomCategory; isChild: boolean }[] = [];
+
+    parents.forEach((parent) => {
+      result.push({ category: parent, isChild: false });
+      const children = visibleCats.filter((c) => c.parentCategoryId === parent.id);
+      children.forEach((child) => {
+        result.push({ category: child, isChild: true });
+      });
+    });
+
+    // Handle orphans if parent is hidden/deleted
+    visibleCats.forEach((cat) => {
+      if (cat.parentCategoryId && !visibleCats.some((p) => p.id === cat.parentCategoryId)) {
+        result.push({ category: cat, isChild: true });
+      }
+    });
+
+    return result;
+  }, [customCategories]);
 
   const select = (f: SidebarFilter) => {
     onFilterChange(f);
@@ -200,22 +226,26 @@ export function Sidebar({
             />
 
             {/* Custom Categories — merged into same section */}
-            {customCategories.map(cat => (
-              <SidebarRow
-                key={`category-${cat.id}`}
-                icon={<Tag className="w-5 h-5" style={{ color: cat.color || '#3b82f6' }} />}
-                label={cat.name}
-                count={activeItems.filter(i => i.categoryId === cat.id).length}
-                active={activeFilter === `category-${cat.id}`}
-                onClick={() => select(`category-${cat.id}`)}
-              />
-            ))}
+            {sidebarCategories.map(({ category: cat, isChild }) => {
+              const IconComp = CategoryIconMap[cat.icon || 'Folder'] || Tag;
+              return (
+                <div key={`category-${cat.id}`} className={isChild ? 'pl-4 border-l border-white/5 ml-5' : ''}>
+                  <SidebarRow
+                    icon={<IconComp className="w-5 h-5" style={{ color: cat.color || '#3b82f6' }} />}
+                    label={cat.name}
+                    count={activeItems.filter(i => i.categoryId === cat.id).length}
+                    active={activeFilter === `category-${cat.id}`}
+                    onClick={() => select(`category-${cat.id}`)}
+                  />
+                </div>
+              );
+            })}
 
             <SidebarRow
               icon={<Pencil className="w-5 h-5" />}
               label="Manage categories"
               active={false}
-              onClick={() => { onClose(); onNavigateSettings(); }}
+              onClick={() => { onClose(); navigate('/categories'); }}
             />
           </div>
 
@@ -233,13 +263,6 @@ export function Sidebar({
               count={0}
               active={activeFilter === 'expiring'}
               onClick={() => select('expiring')}
-            />
-            <SidebarRow
-              icon={<Archive className="w-5 h-5" />}
-              label="Archived"
-              count={0}
-              active={activeFilter === 'archived'}
-              onClick={() => select('archived')}
             />
             <SidebarRow
               icon={<BookTemplate className="w-5 h-5" />}
