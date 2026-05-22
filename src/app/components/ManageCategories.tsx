@@ -15,7 +15,6 @@ import {
   Pin,
   Folder,
   Tag,
-  Sparkles,
   HelpCircle,
   KeyRound,
   Mail,
@@ -39,6 +38,8 @@ import {
   Key,
   ShoppingBag,
   AppWindow,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import {
   subscribeToCustomCategories,
@@ -48,10 +49,12 @@ import {
   reorderCustomCategories,
   getVaultItems,
   addVaultChangeListener,
+  updateVaultItem,
   type CustomCategory,
   type VaultItem
 } from '../store';
 import { toast } from 'sonner';
+import { SmartCategorizer, type OrganizationPlan } from '../services/SmartCategorizer';
 
 // Curated static icon map for premium category icons
 export const CategoryIconMap: Record<string, React.ComponentType<any>> = {
@@ -125,6 +128,12 @@ export default function ManageCategories() {
   const [reassignOption, setReassignOption] = useState<'none' | 'reassign'>('none');
   const [reassignTargetId, setReassignTargetId] = useState<string>('');
 
+  // Smart Categorizer State
+  const [showSmartModal, setShowSmartModal] = useState(false);
+  const [smartPlan, setSmartPlan] = useState<OrganizationPlan | null>(null);
+  const [isSmartLoading, setIsSmartLoading] = useState(false);
+  const [isApplyingSmart, setIsApplyingSmart] = useState(false);
+
   // Subscribe to changes
   useEffect(() => {
     const unsubCategories = subscribeToCustomCategories((cats) => {
@@ -197,7 +206,7 @@ export default function ManageCategories() {
 
   // List of eligible parents for form picker (cannot nest a child inside another child, only 1 level deep)
   const eligibleParents = useMemo(() => {
-    return categories.filter((c) => !c.parentCategoryId && !c.isDefault);
+    return categories.filter((c) => !c.parentCategoryId);
   }, [categories]);
 
   // Handle Save Category
@@ -256,6 +265,10 @@ export default function ManageCategories() {
   // Inline rename / edit modal launcher
   const startEditing = (cat: CustomCategory, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (cat.id === 'default_passwords' || cat.name === 'Passwords') {
+      toast.error('The Passwords root category is locked and cannot be modified');
+      return;
+    }
     setEditingCategoryId(cat.id);
     setEditName(cat.name);
     setEditIcon(cat.icon || 'Folder');
@@ -290,8 +303,8 @@ export default function ManageCategories() {
   // Delete category verification
   const startDeleteCategory = (cat: CustomCategory, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (cat.isDefault) {
-      toast.error('Default system categories cannot be deleted');
+    if (cat.id === 'default_passwords' || cat.name === 'Passwords') {
+      toast.error('The Passwords root category is locked and cannot be deleted');
       return;
     }
 
@@ -299,7 +312,7 @@ export default function ManageCategories() {
     setDeletingCategory(cat);
     
     // Set reassign target to first eligible category that is not this one
-    const eligibleTargets = categories.filter((c) => c.id !== cat.id && !c.isDefault);
+    const eligibleTargets = categories.filter((c) => c.id !== cat.id);
     if (eligibleTargets.length > 0) {
       setReassignTargetId(eligibleTargets[0].id);
       setReassignOption('reassign');
@@ -357,12 +370,11 @@ export default function ManageCategories() {
             </button>
             <div className="flex items-center gap-2">
               <h1 className="text-white text-xl font-semibold">Manage Categories</h1>
-              <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
             </div>
           </div>
           <div className="flex items-center gap-2">
             <div
-              className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center ml-1"
+              className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
               title={user?.email ?? 'Signed in'}
             >
               <span className="text-white text-sm font-bold">{userInitial}</span>
@@ -375,22 +387,46 @@ export default function ManageCategories() {
       <div className="flex-1 overflow-y-auto px-4 py-5 pb-[max(env(safe-area-inset-bottom),_80px)] space-y-5">
         
         {/* Toggleable Beautiful Category Creator Section */}
-        {!showAddForm ? (
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="w-full py-4 px-4 bg-gradient-to-r from-purple-600/10 to-blue-600/10 hover:from-purple-600/20 hover:to-blue-600/20 border border-purple-500/20 hover:border-purple-500/40 rounded-2xl flex items-center justify-center gap-2.5 text-purple-300 hover:text-purple-200 transition-all font-medium text-sm shadow-lg shadow-purple-950/20 shrink-0"
-          >
-            <Plus className="w-5 h-5" />
-            Create Custom Category
-          </button>
-        ) : (
+        <div className="flex gap-3">
+          {!showAddForm && (
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="flex-1 py-4 px-4 bg-gradient-to-r from-purple-600/10 to-blue-600/10 hover:from-purple-600/20 hover:to-blue-600/20 border border-purple-500/20 hover:border-purple-500/40 rounded-2xl flex items-center justify-center gap-2.5 text-purple-300 hover:text-purple-200 transition-all font-medium text-sm shadow-md shrink-0"
+            >
+              <Plus className="w-5 h-5" />
+              Create Category
+            </button>
+          )}
+
+          {!showAddForm && (
+            <button
+              onClick={async () => {
+                setIsSmartLoading(true);
+                setShowSmartModal(true);
+                try {
+                  const plan = await SmartCategorizer.planVaultOrganization(items, { categoriesArray: categories });
+                  setSmartPlan(plan);
+                } catch (e) {
+                  toast.error("Failed to generate smart plan");
+                } finally {
+                  setIsSmartLoading(false);
+                }
+              }}
+              className="flex-1 py-4 px-4 bg-gradient-to-r from-cyan-600/10 to-teal-600/10 hover:from-cyan-600/20 hover:to-teal-600/20 border border-cyan-500/20 hover:border-cyan-500/40 rounded-2xl flex items-center justify-center gap-2.5 text-cyan-300 hover:text-cyan-200 transition-all font-medium text-sm shadow-md shrink-0"
+            >
+              <Sparkles className="w-5 h-5" />
+              Auto-Organize
+            </button>
+          )}
+        </div>
+
+        {showAddForm && (
           <form
             onSubmit={handleAddCategory}
             className="bg-[#16213e]/60 border border-white/5 rounded-2xl p-5 space-y-4 shrink-0 transition-all shadow-xl"
           >
             <div className="flex items-center justify-between">
               <h3 className="text-white font-medium text-sm flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-400" />
                 New Custom Category
               </h3>
               <button
@@ -490,7 +526,7 @@ export default function ManageCategories() {
             {/* Actions */}
             <button
               type="submit"
-              className="w-full py-3 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-lg shadow-purple-950/20"
+              className="w-full py-3 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-md"
             >
               <Check className="w-4 h-4" />
               Save Category
@@ -536,8 +572,8 @@ export default function ManageCategories() {
 
                     {/* Standard Mode view or Inline Edit view */}
                     {!isEditing ? (
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           {/* Colored Icon */}
                           <div
                             className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
@@ -546,9 +582,12 @@ export default function ManageCategories() {
                             <IconComp className="w-5 h-5" />
                           </div>
 
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-white text-sm font-semibold truncate">{cat.name}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-white text-sm font-semibold truncate max-w-[120px] sm:max-w-none">{cat.name}</span>
+                              {(cat.id === 'default_passwords' || cat.name === 'Passwords') && (
+                                <Lock className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                              )}
                               {cat.isPinned && (
                                 <Pin className="w-3.5 h-3.5 text-amber-400 fill-amber-400 rotate-45 shrink-0" />
                               )}
@@ -567,7 +606,7 @@ export default function ManageCategories() {
                         </div>
 
                         {/* Right Section: Counter + Action Buttons */}
-                        <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center gap-2 flex-wrap justify-end min-w-0 flex-1 sm:flex-none">
                           <span className="bg-white/5 text-gray-300 text-xs px-2.5 py-1 rounded-lg font-bold min-w-[28px] text-center shadow-inner">
                             {itemCount}
                           </span>
@@ -614,16 +653,22 @@ export default function ManageCategories() {
                             </button>
 
                             {/* Edit Button */}
-                            <button
-                              onClick={(e) => startEditing(cat, e)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all"
-                              title="Edit Category"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
+                            {(cat.id !== 'default_passwords' && cat.name !== 'Passwords') ? (
+                              <button
+                                onClick={(e) => startEditing(cat, e)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                title="Edit Category"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <div className="p-1.5 text-gray-600 cursor-not-allowed" title="Locked category">
+                                <Edit2 className="w-4 h-4 opacity-30" />
+                              </div>
+                            )}
 
                             {/* Delete Button */}
-                            {!cat.isDefault && (
+                            {(cat.id !== 'default_passwords' && cat.name !== 'Passwords') && (
                               <button
                                 onClick={(e) => startDeleteCategory(cat, e)}
                                 className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all"
@@ -773,7 +818,7 @@ export default function ManageCategories() {
               </label>
 
               {/* Option 2: Reassign Category */}
-              {categories.filter((c) => c.id !== deletingCategory.id && !c.isDefault).length > 0 && (
+              {categories.filter((c) => c.id !== deletingCategory.id).length > 0 && (
                 <label className="flex items-col gap-3 p-3 bg-[#0a0a14]/40 border border-white/5 rounded-xl cursor-pointer hover:bg-white/5 transition-all">
                   <div className="flex items-center gap-3 w-full">
                     <input
@@ -796,7 +841,7 @@ export default function ManageCategories() {
                       className="w-full mt-2.5 bg-[#16213e] border border-white/10 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none"
                     >
                       {categories
-                        .filter((c) => c.id !== deletingCategory.id && !c.isDefault)
+                        .filter((c) => c.id !== deletingCategory.id)
                         .map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
@@ -824,6 +869,176 @@ export default function ManageCategories() {
                 Confirm Delete
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Smart Auto-Organize Modal */}
+      {showSmartModal && (
+        <div className="fixed inset-0 z-50 bg-[#0a0a14]/90 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#16213e] border border-white/10 rounded-2xl w-full max-w-2xl p-5 shadow-2xl relative animate-in fade-in zoom-in duration-200 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4 shrink-0">
+              <div className="flex items-center gap-3 text-cyan-400">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-base">Smart Categorizer</h3>
+                  <p className="text-gray-400 text-xs">AI-powered vault organization</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSmartModal(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/5"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+              {isSmartLoading ? (
+                <div className="flex flex-col items-center justify-center py-10">
+                  <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mb-4" />
+                  <p className="text-cyan-300 text-sm animate-pulse">Analyzing vault structure...</p>
+                </div>
+              ) : !smartPlan || (smartPlan.itemProposals.length === 0 && smartPlan.newCategoryProposals.length === 0) ? (
+                <div className="text-center py-10">
+                  <p className="text-gray-400">Vault is optimally organized!</p>
+                </div>
+              ) : (
+                <>
+                  {smartPlan.newCategoryProposals.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-white text-sm font-semibold mb-2">Suggested New Categories</h4>
+                      {smartPlan.newCategoryProposals.map((catProp, idx) => (
+                        <div key={`cat-${idx}`} className="flex items-center justify-between p-3 bg-cyan-950/20 border border-cyan-500/20 rounded-xl">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={catProp.approved}
+                              onChange={() => {
+                                const newPlan = { ...smartPlan };
+                                newPlan.newCategoryProposals[idx].approved = !newPlan.newCategoryProposals[idx].approved;
+                                setSmartPlan(newPlan);
+                              }}
+                              className="w-4 h-4 rounded border-gray-600 bg-transparent accent-cyan-500 cursor-pointer"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-white text-sm font-medium flex items-center gap-2">
+                                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                                Create: {catProp.categoryName}
+                              </p>
+                              <p className="text-cyan-300/70 text-[10px]">{catProp.reason}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {smartPlan.itemProposals.filter(p => p.changeType !== 'none').length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-white text-sm font-semibold mb-2">Item Adjustments</h4>
+                      {smartPlan.itemProposals.filter(p => p.changeType !== 'none').map((prop, idx) => (
+                        <div key={`item-${idx}`} className="flex items-center justify-between p-3 bg-[#0a0a14]/40 border border-white/5 rounded-xl">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={prop.approved}
+                              onChange={() => {
+                                const newPlan = { ...smartPlan };
+                                const realIdx = newPlan.itemProposals.findIndex(p => p.itemId === prop.itemId);
+                                if (realIdx > -1) {
+                                  newPlan.itemProposals[realIdx].approved = !newPlan.itemProposals[realIdx].approved;
+                                  setSmartPlan(newPlan);
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-gray-600 bg-transparent accent-cyan-500 cursor-pointer"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-white text-sm font-medium truncate">{prop.title}</p>
+                              <p className="text-gray-500 text-[10px] truncate">{prop.reason}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex flex-col items-end">
+                              <span className="text-cyan-400 text-[10px] font-semibold px-2 py-0.5 bg-cyan-500/10 rounded-md truncate max-w-[100px]">
+                                {prop.proposedCategory}
+                              </span>
+                              <span className="text-gray-500 text-[9px] mt-0.5">
+                                {(prop.confidence * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {!isSmartLoading && smartPlan && (smartPlan.itemProposals.some(p => p.changeType !== 'none') || smartPlan.newCategoryProposals.length > 0) && (
+              <div className="flex items-center gap-3 pt-4 border-t border-white/5 shrink-0">
+                <button
+                  onClick={() => setShowSmartModal(false)}
+                  className="flex-1 py-2.5 bg-[#0a0a14]/60 hover:bg-[#0a0a14] border border-white/5 rounded-xl text-gray-400 hover:text-white text-xs font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={isApplyingSmart}
+                  onClick={async () => {
+                    setIsApplyingSmart(true);
+                    let applyCount = 0;
+                    try {
+                      // 1. Create approved new categories
+                      for (const catProp of smartPlan.newCategoryProposals) {
+                        if (catProp.approved) {
+                           const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#6366f1', '#f97316', '#ef4444', '#64748b'];
+                           const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                           await addCustomCategory({
+                             name: catProp.categoryName,
+                             icon: 'Folder',
+                             color: randomColor,
+                             isDefault: false,
+                             isHidden: false,
+                             isPinned: false,
+                             parentCategoryId: null,
+                             sortOrder: categories.length,
+                           });
+                        }
+                      }
+
+                      // Refetch categories to get new IDs
+                      const updatedCategories = getVaultItems().customCategories || categories; // Fallback
+
+                      // 2. Apply item changes
+                      for (const prop of smartPlan.itemProposals) {
+                        if (prop.approved && prop.changeType !== 'none') {
+                           // Find target category ID
+                           const targetCat = updatedCategories.find(c => c.name.toLowerCase() === prop.proposedCategory.toLowerCase());
+                           if (targetCat && prop.itemId) {
+                              await updateVaultItem(prop.itemId, { categoryId: targetCat.id });
+                              applyCount++;
+                           }
+                        }
+                      }
+                      toast.success(`Applied ${applyCount} item organizations!`);
+                      setShowSmartModal(false);
+                    } catch (e) {
+                      toast.error("Failed to apply all organizations");
+                    } finally {
+                      setIsApplyingSmart(false);
+                    }
+                  }}
+                  className="flex-1 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-950/20"
+                >
+                  {isApplyingSmart ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Apply Selected
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

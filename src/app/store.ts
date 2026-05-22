@@ -194,6 +194,10 @@ export function isVaultUnlocked(): boolean {
   return !!_sessionCryptoKey;
 }
 
+export function getSessionCryptoKey(): CryptoKey | null {
+  return _sessionCryptoKey;
+}
+
 // ── ID generator ─────────────────────────────────────────────────────
 
 function generateId(): string {
@@ -1030,32 +1034,16 @@ export async function resetVault(): Promise<void> {
 
 // ── Native Autofill Sync ─────────────────────────────────────────────
 
-async function syncToNativeVault(items: VaultItem[]): Promise<void> {
+export async function syncAllToNative(): Promise<void> {
   if (Capacitor.getPlatform() !== 'android') return;
-
-  // ── Security Model: Native Autofill Database ────────────────────────────────
-  //
-  // Passwords are passed as PLAINTEXT to the native Android SQLCipher database.
-  // This is intentional and correct — the JS vault is already decrypted in
-  // memory at this point (syncToNativeVault is only called from saveVaultEverywhere
-  // or unlockVault, both of which run when the vault is unlocked).
-  //
-  // The security boundary for the native autofill DB is:
-  //   • SQLCipher AES-256 encryption of the entire database file
-  //   • The database passphrase is a per-device 256-bit random key
-  //   • That passphrase is stored wrapped by an Android Keystore key
-  //     (hardware-backed on supported devices)
-  //
-  // We do NOT apply an additional application layer of encryption here
-  // because the native autofill service cannot access the JS master-password-
-  // derived PBKDF2 key, and applying the biometric DEK (a different key) would
-  // produce a ciphertext that the native service still could not decrypt.
-  //
-  // See also: VaultItemEntity.kt for the full threat model documentation.
-  // ────────────────────────────────────────────────────────────────────────────
+  if (!isVaultUnlocked()) return;
 
   try {
-    const validItems = items.map(i => ({
+    const { getAllSharedCollectionItems } = await import('./stores/syncStore');
+    const personalItems = getVaultItems();
+    const sharedItems = getAllSharedCollectionItems();
+
+    const formattedPersonal = personalItems.map(i => ({
       id: i.id,
       title: i.title || '',
       username: i.username || '',
@@ -1068,11 +1056,29 @@ async function syncToNativeVault(items: VaultItem[]): Promise<void> {
       deletedAt: i.deletedAt ? new Date(i.deletedAt).getTime() : null,
     }));
 
-    await VaultBridge.fullSync({ items: validItems });
-    log.debug('Native SQLCipher vault sync completed', { count: validItems.length });
+    const formattedShared = sharedItems.map(i => ({
+      id: i.id,
+      title: `[Shared] ${i.title || ''}`,
+      username: '',
+      password: i.itemType === 'login' ? i.plaintext : '',
+      uris: JSON.stringify([]),
+      type: i.itemType === 'login' ? 'Website' : i.itemType === 'card' ? 'Card' : 'Other',
+      note: i.itemType === 'note' ? i.plaintext : (i.itemType !== 'login' ? i.plaintext : ''),
+      createdAt: i.createdAt ? new Date(i.createdAt).getTime() : Date.now(),
+      updatedAt: i.updatedAt ? new Date(i.updatedAt).getTime() : Date.now(),
+      deletedAt: null,
+    }));
+
+    const mergedItems = [...formattedPersonal, ...formattedShared];
+    await VaultBridge.fullSync({ items: mergedItems });
+    log.debug('Native SQLCipher vault sync (personal + shared) completed', { count: mergedItems.length });
   } catch (e) {
     log.error('Failed to sync to Native Vault', e);
   }
+}
+
+async function syncToNativeVault(items: VaultItem[]): Promise<void> {
+  await syncAllToNative();
 }
 
 async function checkAndMergeAutofillItems(): Promise<void> {

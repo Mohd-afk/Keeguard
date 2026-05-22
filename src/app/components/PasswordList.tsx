@@ -30,6 +30,7 @@ import {
   List,
   ArrowLeft,
   BookTemplate,
+  History,
 } from 'lucide-react';
 import {
   addVaultChangeListener,
@@ -81,6 +82,7 @@ const typeColors: Record<string, string> = {
 };
 
 import { BottomNav, type BottomTab } from './BottomNav';
+import { BellIcon } from './topbar/BellIcon';
 
 interface ItemCardProps {
   item: VaultItem;
@@ -213,11 +215,12 @@ interface PasswordListProps {
 
 export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   const navigate = useNavigate();
-  const { sidebarOpen, setSidebarOpen, sidebarFilter, setSidebarFilter } = useOutletContext<{
+  const { sidebarOpen, setSidebarOpen, sidebarFilter, setSidebarFilter, setNotificationDrawerOpen } = useOutletContext<{
     sidebarOpen: boolean;
     setSidebarOpen: (o: boolean) => void;
     sidebarFilter: SidebarFilter;
     setSidebarFilter: (f: SidebarFilter) => void;
+    setNotificationDrawerOpen: (o: boolean) => void;
   }>();
   const [items, setItems] = useState<VaultItem[]>(getVaultItems());
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,6 +240,12 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
 
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+
+  // Favourites & Recently Added Collapsible Section states
+  const [favouritesExpanded, setFavouritesExpanded] = useState(false);
+  const [recentExpanded, setRecentExpanded] = useState(false);
+  const [showAllFavourites, setShowAllFavourites] = useState(false);
+  const [showAllRecent, setShowAllRecent] = useState(false);
 
   // ── Full Power Search Upgrades (D1) ──────────────────────────────────
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -268,12 +277,34 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
     });
   }, []);
 
+  // ── Filter chain ────────────────────────────────────────────────────
+  const activeVaultItems = useMemo(
+    () => items.filter((i) => !i.deletedAt),
+    [items],
+  );
+
   const mostAccessedItems = useMemo(() => {
-    const activeItems = items.filter(i => !i.deletedAt);
+    const activeItems = activeVaultItems;
     const favs = activeItems.filter(i => i.isFavorite);
     if (favs.length > 0) return favs.slice(0, 3);
     return activeItems.slice(0, 3);
-  }, [items]);
+  }, [activeVaultItems]);
+
+  // Favourites list
+  const favouriteItems = useMemo(() => {
+    return activeVaultItems.filter(i => i.isFavorite);
+  }, [activeVaultItems]);
+
+  // Recently added list (sorted by updatedAt or createdAt descending)
+  const recentlyAddedItems = useMemo(() => {
+    return [...activeVaultItems]
+      .sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return timeB - timeA;
+      })
+      .slice(0, 8);
+  }, [activeVaultItems]);
 
   // Live vault sync
   useEffect(() => {
@@ -303,12 +334,6 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       setActiveTab('safe');
     }
   }, [activeTab, navigate]);
-
-  // ── Filter chain ────────────────────────────────────────────────────
-  const activeVaultItems = useMemo(
-    () => items.filter((i) => !i.deletedAt),
-    [items],
-  );
 
   // Core Vault Categories Heuristics and Item Count Calculations
   const categoryCounts = useMemo(() => {
@@ -517,6 +542,13 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   };
 
   const handleBulkMove = async (categoryId: string | null) => {
+    if (categoryId && sidebarFilter === `category-${categoryId}`) {
+      toast.info("Items are already in this category");
+      setIsMoveModalOpen(false);
+      setIsSelectionMode(false);
+      setSelectedIds(new Set());
+      return;
+    }
     try {
       const itemsCount = selectedIds.size;
       const targetCat = categoryId ? customCategories.find(c => c.id === categoryId) : null;
@@ -525,7 +557,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       for (const id of Array.from(selectedIds)) {
         await updateVaultItem(id, { categoryId: categoryId || undefined });
       }
-      setItems(getVaultItems());
+      setItems([...getVaultItems()]);
       setIsSelectionMode(false);
       setSelectedIds(new Set());
       setIsMoveModalOpen(false);
@@ -549,7 +581,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       <div className="sticky top-0 z-20 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         {/* Top row */}
         {isSelectionMode ? (
-          <div className="flex items-center justify-between px-4 py-3 bg-cyan-500/10">
+          <div className="flex items-center justify-between px-4 py-3 bg-[#16213e]/75 backdrop-blur-md border-b border-cyan-500/20 animate-in slide-in-from-top-2 duration-200">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
@@ -587,6 +619,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               <h1 className="text-white text-xl font-semibold">Safe</h1>
             </div>
             <div className="flex items-center gap-2">
+              <BellIcon onClick={() => setNotificationDrawerOpen(true)} />
               {/* Avatar */}
               <div
                 className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"
@@ -695,31 +728,162 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
           )}
         </div>
 
-        {/* Category Chips — only in list mode */}
-        {viewMode === 'list' && (
-          <div
-            className="flex gap-2 px-4 pb-3 overflow-x-auto"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
-            {CHIPS.map((chip) => (
-              <button
-                key={chip.id}
-                onClick={() => setActiveChip(chip.id)}
-                className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  activeChip === chip.id
-                    ? 'bg-cyan-500/20 text-cyan-400'
-                    : 'bg-[#16213e] text-gray-400 hover:bg-white/5 hover:text-gray-200'
-                }`}
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
-        )}
+
       </div>
 
       {/* ── Content ─────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_96px)]">
+
+        {/* Favourites & Recently Added Sections */}
+        {!activeCategoryDetail && !searchQuery && sidebarFilter === 'all' && !isSelectionMode && (
+          <div className="pt-2 space-y-4">
+            {/* Favourites Section */}
+            <div className="px-4">
+              <button
+                onClick={() => setFavouritesExpanded(!favouritesExpanded)}
+                className="w-full flex items-center justify-between py-2 text-left group hover:opacity-80 transition-opacity"
+              >
+                <div className="flex items-center gap-2">
+                  <Star className="w-4 h-4 text-cyan-400" fill={favouritesExpanded ? "currentColor" : "none"} />
+                  <span className="text-white text-sm font-semibold">Favourites</span>
+                  <span className="text-gray-500 text-xs bg-white/5 px-2 py-0.5 rounded-full">{favouriteItems.length}</span>
+                </div>
+                <div className="text-gray-400">
+                  {favouritesExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
+              </button>
+
+              {favouritesExpanded && (
+                <div className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                  {favouriteItems.length === 0 ? (
+                    <div className="bg-[#16213e]/40 border border-white/5 rounded-2xl p-4 text-center">
+                      <p className="text-gray-400 text-xs">Tap the ★ on any item to add it here</p>
+                    </div>
+                  ) : viewMode === 'grid' ? (
+                    <div 
+                      className="flex gap-3 overflow-x-auto pb-2" 
+                      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                    >
+                      {favouriteItems.slice(0, 4).map(item => (
+                        <button
+                          key={item.id}
+                          onClick={() => navigate(`/item/${item.id}`)}
+                          className="flex-shrink-0 w-32 p-3 bg-[#16213e] border border-white/5 rounded-2xl text-left hover:border-cyan-500/30 transition-all active:scale-[0.97]"
+                        >
+                          <div className={`w-8 h-8 rounded-lg ${typeColors[item.type] ?? 'bg-gray-500/10'} flex items-center justify-center mb-2`}>
+                            {typeIcons[item.type] ?? <KeyRound className="w-4 h-4 text-gray-400" />}
+                          </div>
+                          <p className="text-white text-xs font-semibold truncate">{item.title}</p>
+                          <p className="text-gray-500 text-[10px] truncate mt-0.5">{item.username || item.type}</p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="bg-[#16213e] rounded-2xl overflow-hidden divide-y divide-white/5">
+                        {favouriteItems.slice(0, showAllFavourites ? undefined : 3).map(item => (
+                          <ItemCard
+                            key={item.id}
+                            item={item}
+                            onNavigate={(id) => navigate(`/item/${id}`)}
+                            onFavorite={handleFavorite}
+                            favLoading={favLoading}
+                            isSelectionMode={isSelectionMode}
+                            isSelected={selectedIds.has(item.id)}
+                            onToggleSelect={handleToggleSelect}
+                            onLongPress={handleLongPress}
+                          />
+                        ))}
+                      </div>
+                      {favouriteItems.length > 3 && (
+                        <div className="flex justify-end pr-1">
+                          <button
+                            onClick={() => setShowAllFavourites(!showAllFavourites)}
+                            className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
+                          >
+                            {showAllFavourites ? 'Show Less' : 'See All'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Recently Added Section */}
+            {recentlyAddedItems.length > 0 && (
+              <div className="px-4">
+                <button
+                  onClick={() => setRecentExpanded(!recentExpanded)}
+                  className="w-full flex items-center justify-between py-2 text-left group hover:opacity-80 transition-opacity"
+                >
+                  <div className="flex items-center gap-2">
+                    <History className="w-4 h-4 text-cyan-400" />
+                    <span className="text-white text-sm font-semibold">Recently Added</span>
+                    <span className="text-gray-500 text-xs bg-white/5 px-2 py-0.5 rounded-full">{recentlyAddedItems.length}</span>
+                  </div>
+                  <div className="text-gray-400">
+                    {recentExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </div>
+                </button>
+
+                {recentExpanded && (
+                  <div className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                    {viewMode === 'grid' ? (
+                      <div 
+                        className="flex gap-3 overflow-x-auto pb-2" 
+                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                      >
+                        {recentlyAddedItems.map(item => (
+                          <button
+                            key={item.id}
+                            onClick={() => navigate(`/item/${item.id}`)}
+                            className="flex-shrink-0 w-32 p-3 bg-[#16213e] border border-white/5 rounded-2xl text-left hover:border-cyan-500/30 transition-all active:scale-[0.97]"
+                          >
+                            <div className={`w-8 h-8 rounded-lg ${typeColors[item.type] ?? 'bg-gray-500/10'} flex items-center justify-center mb-2`}>
+                              {typeIcons[item.type] ?? <KeyRound className="w-4 h-4 text-gray-400" />}
+                            </div>
+                            <p className="text-white text-xs font-semibold truncate">{item.title}</p>
+                            <p className="text-gray-500 text-[10px] truncate mt-0.5">{item.username || item.type}</p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="bg-[#16213e] rounded-2xl overflow-hidden divide-y divide-white/5">
+                          {recentlyAddedItems.slice(0, showAllRecent ? undefined : 3).map(item => (
+                            <ItemCard
+                              key={item.id}
+                              item={item}
+                              onNavigate={(id) => navigate(`/item/${id}`)}
+                              onFavorite={handleFavorite}
+                              favLoading={favLoading}
+                              isSelectionMode={isSelectionMode}
+                              isSelected={selectedIds.has(item.id)}
+                              onToggleSelect={handleToggleSelect}
+                              onLongPress={handleLongPress}
+                            />
+                          ))}
+                        </div>
+                        {recentlyAddedItems.length > 3 && (
+                          <div className="flex justify-end pr-1">
+                            <button
+                              onClick={() => setShowAllRecent(!showAllRecent)}
+                              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
+                            >
+                              {showAllRecent ? 'Show Less' : 'See All'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── TEMPLATES MODE: Templates Catalog ─────────────────────── */}
         {sidebarFilter === 'templates' && (
@@ -778,14 +942,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               })}
             </div>
 
-            {/* Existing Entries Header */}
-            {sortedItems.length > 0 && (
-              <div className="pt-2">
-                <h3 className="text-gray-400 text-xs uppercase tracking-wider font-semibold px-1">
-                  Saved Template Entries
-                </h3>
-              </div>
-            )}
+
           </div>
         )}
 
@@ -972,7 +1129,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
         )}
 
         {/* ── LIST MODE or sidebar-filtered content ───────────────── */}
-        {(viewMode === 'list' || isSelectionMode || searchQuery || sidebarFilter !== 'all') && !activeCategoryDetail && (
+        {(viewMode === 'list' || isSelectionMode || searchQuery || (sidebarFilter !== 'all' && sidebarFilter !== 'templates')) && !activeCategoryDetail && (
           <>
             {/* Header row in list mode */}
             {!isSelectionMode && !searchQuery && (
@@ -983,7 +1140,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
                 <div className="flex items-center gap-1.5">
                   {/* View mode toggle */}
                   <button
-                    onClick={() => { setViewMode(v => v === 'grid' ? 'list' : 'grid'); setActiveCategoryDetail(null); }}
+                    onClick={() => { setViewMode(v => { const next = v === 'grid' ? 'list' : 'grid'; if (next === 'list') setActiveChip('all'); return next; }); setActiveCategoryDetail(null); }}
                     className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
                     title="Switch to Grid View"
                   >
@@ -1142,7 +1299,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
 
       {/* ── Selection Action Bar ────────────────────────────────────── */}
       {isSelectionMode && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#16213e] border-t border-white/5 pb-[max(env(safe-area-inset-bottom),_4px)]">
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#16213e]/80 backdrop-blur-md border-t border-white/5 pb-[max(env(safe-area-inset-bottom),_4px)]">
           <div className="flex items-center justify-around py-3 px-4" style={{ maxWidth: '448px', margin: '0 auto' }}>
             <button
               onClick={handleBulkDelete}

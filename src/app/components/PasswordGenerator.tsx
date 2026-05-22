@@ -264,7 +264,7 @@ export function PasswordGenerator() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-[200px]">
+      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_180px)]">
         {/* Password display card */}
         <div className="bg-[#16213e] rounded-2xl p-5 mb-5 min-h-[100px] flex items-center justify-center relative overflow-hidden">
           {/* Ghost rows for depth effect */}
@@ -347,7 +347,7 @@ export function PasswordGenerator() {
       </div>
 
       {/* Bottom buttons */}
-      <div className="fixed bottom-[64px] left-0 right-0 max-w-md mx-auto bg-[#1a1a2e]/95 backdrop-blur-md border-t border-white/5 px-4 py-4 flex gap-3 z-20">
+      <div className="fixed bottom-[calc(max(env(safe-area-inset-bottom),_0px)_+_64px)] left-0 right-0 max-w-md mx-auto bg-[#1a1a2e]/95 backdrop-blur-md border-t border-white/5 px-4 py-4 flex gap-3 z-20">
         <button
           onClick={generate}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-gray-600 text-white hover:bg-white/5 active:scale-[0.98] transition-all font-medium"
@@ -379,7 +379,7 @@ export function PasswordGenerator() {
       </div>
 
       {clipboardCountdown !== null && (
-        <div className="fixed bottom-[144px] left-0 right-0 max-w-md mx-auto flex items-center justify-center gap-1.5 py-2 bg-[#16213e]/95 border-t border-white/5 text-gray-500 text-xs">
+        <div className="fixed bottom-[calc(max(env(safe-area-inset-bottom),_0px)_+_144px)] left-0 right-0 max-w-md mx-auto flex items-center justify-center gap-1.5 py-2 bg-[#16213e]/95 border-t border-white/5 text-gray-500 text-xs">
           <Timer className="w-3 h-3" />
           <span>Clipboard clears in <span className="text-white font-semibold">{clipboardCountdown}s</span></span>
         </div>

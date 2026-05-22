@@ -1,31 +1,175 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Each user can only read/write their own data
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    // ─── Helper functions ──────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Username reservation — anyone authenticated can check availability,
-    // only the owner can create/delete their reservation
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Check if the requesting user is an active member of a collection.
+    // Reads the members sub-document directly (consistent with Firestore security).
+    function isActiveMember(collectionId) {
+      let memberDoc = get(/databases/$(database)/documents/collections/$(collectionId)/members/$(request.auth.uid));
+      return memberDoc.data.status == 'active';
+    }
+
+    // Check if member has a specific role or higher.
+    // Roles in ascending order: viewer < editor < manager < owner
+    function hasRole(collectionId, minRole) {
+      let memberDoc = get(/databases/$(database)/documents/collections/$(collectionId)/members/$(request.auth.uid));
+      let role = memberDoc.data.role;
+      return memberDoc.data.status == 'active' && (
+        minRole == 'viewer' ||
+        (minRole == 'editor' && role in ['editor', 'manager', 'owner']) ||
+        (minRole == 'manager' && role in ['manager', 'owner']) ||
+        (minRole == 'owner' && role == 'owner')
+      );
+    }
+
+    // ─── Existing: Per-user personal data ──────────────────────────────────
+
+    match /users/{userId}/{document=**} {
+      allow read, write: if isSignedIn() && isOwner(userId);
+    }
+
+    // ─── Existing: Username reservation ────────────────────────────────────
+
     match /usernames/{username} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
         && request.resource.data.uid == request.auth.uid;
-      allow delete: if request.auth != null
+      allow delete: if isSignedIn()
         && resource.data.uid == request.auth.uid;
     }
 
-    // Email enumeration protection (hashed emails)
-    // Anyone can verify if a specific hash exists (get), but no one can list them
+    // ─── Existing: Email enumeration protection ─────────────────────────────
+
     match /registered_emails/{hash} {
       allow get: if true;
-      allow create: if request.auth != null;
+      allow create: if isSignedIn();
     }
 
-    // App config (OTA updates, etc) -> Anyone can read
+    // ─── Existing: App config ───────────────────────────────────────────────
+
     match /app_config/{document=**} {
       allow read: if true;
+    }
+
+    // ─── New: Collections ───────────────────────────────────────────────────
+    // Collection documents are created and mutated exclusively by Cloud Functions.
+    // Clients may only READ collections they are active members of.
+
+    match /collections/{collectionId} {
+      allow read: if isSignedIn() && isActiveMember(collectionId);
+      // All writes go through Cloud Functions (Admin SDK bypasses these rules).
+      allow write: if false;
+
+      // ── Members sub-collection ───────────────────────────────────────────
+      // Active members may read the member list.
+      // All writes are via Cloud Function (invite acceptance, role changes, removal).
+
+      match /members/{userId} {
+        allow read: if isSignedIn() && isActiveMember(collectionId);
+        allow write: if false;
+      }
+
+      // ── Invites sub-collection ───────────────────────────────────────────
+      // The invited user and the collection owner/manager may read an invite.
+      // All writes via Cloud Function.
+
+      match /invites/{inviteId} {
+        allow read: if isSignedIn() && (
+          resource.data.invited_user_id == request.auth.uid ||
+          resource.data.invited_by_user_id == request.auth.uid ||
+          isActiveMember(collectionId)
+        );
+        allow write: if false;
+      }
+
+      // ── Collection Items ─────────────────────────────────────────────────
+      // Active members may read items.
+      // Editor+ may write items directly (Cloud Function validates revision + role).
+      // Deletes must go through Cloud Functions (soft delete / audit trail).
+
+      match /items/{itemId} {
+        allow read: if isSignedIn() && isActiveMember(collectionId);
+        // Write is gated by editor+ role check as secondary defense.
+        // Primary enforcement is in the commitItem Cloud Function.
+        allow create, update: if isSignedIn() && hasRole(collectionId, 'editor');
+        allow delete: if false; // Soft-delete only via Cloud Function
+      }
+
+      // ── Key Envelopes (collection keys wrapped per-recipient) ─────────────
+      // Each user/device may ONLY read their own envelope.
+      // All writes via Cloud Function (issued at invite acceptance, key rotation).
+
+      match /keyEnvelopes/{recipientId} {
+        allow read: if isSignedIn() && recipientId == request.auth.uid;
+        allow write: if false;
+      }
+
+      // ── Sync Events ──────────────────────────────────────────────────────
+      // Active members may read sync events for delta catch-up.
+      // Only Cloud Functions write sync events.
+
+      match /syncEvents/{eventId} {
+        allow read: if isSignedIn() && isActiveMember(collectionId);
+        allow write: if false;
+      }
+    }
+
+    // ─── New: User notifications ─────────────────────────────────────────────
+    // Users can read and mark-read their own notifications.
+    // Cloud Functions create notifications (write is via Admin SDK).
+
+    match /users/{userId}/notifications/{notificationId} {
+      allow read: if isSignedIn() && isOwner(userId);
+      // Allow client to mark as read (is_read, read_at fields only).
+      allow update: if isSignedIn() && isOwner(userId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['is_read', 'read_at']);
+      allow create, delete: if false; // Cloud Function only
+    }
+
+    // ─── New: Audit Events ───────────────────────────────────────────────────
+    // Read-only for admin/Cloud Function use. No client access.
+
+    match /auditEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    // ─── New: Security Events ────────────────────────────────────────────────
+    // Read-only for admin/Cloud Function use. No client access.
+
+    match /securityEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    // ─── New: Rate Limit Counters (Cloud Function internal) ─────────────────
+
+    match /rateLimits/{document=**} {
+      allow read, write: if false;
+    }
+
+    // ─── New: Invite Cooldowns (Cloud Function internal) ─────────────────────
+
+    match /inviteCooldowns/{document=**} {
+      allow read, write: if false;
+    }
+
+    // ─── New: Public user profiles (display name, avatar for invite UI) ──────
+    // Any authenticated user may read minimal public profile fields.
+    // Users write their own profile (username, display_name, avatar_url).
+
+    match /userProfiles/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isOwner(userId);
     }
   }
 }

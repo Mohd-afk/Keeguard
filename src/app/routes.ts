@@ -11,12 +11,11 @@ import { LicensePage } from './components/legal/LicensePage';
 import { SecurityDashboard } from './components/SecurityDashboard';
 import { PasswordGenerator } from './components/PasswordGenerator';
 import ManageCategories from './components/ManageCategories';
+import { CollectionListPage } from './pages/collections/CollectionListPage';
+import { CollectionDetailPage } from './pages/collections/CollectionDetailPage';
+import { CollectionAccessPage } from './pages/collections/CollectionAccessPage';
 
 export const router = createBrowserRouter([
-  // Public legal pages — accessible without login
-  { path: 'terms',   Component: TermsPage },
-  { path: 'privacy', Component: PrivacyPage },
-  { path: 'license', Component: LicensePage },
   {
     path: '/',
     Component: AppShell,
@@ -30,6 +29,14 @@ export const router = createBrowserRouter([
       { path: 'security', Component: SecurityDashboard },
       { path: 'generator', Component: PasswordGenerator },
       { path: 'categories', Component: ManageCategories },
+      // Shared collection pages
+      { path: 'collections', Component: CollectionListPage },
+      { path: 'collections/:id', Component: CollectionDetailPage },
+      { path: 'collections/:id/access', Component: CollectionAccessPage },
+      // Legal pages — nested under AppShell so navigate(-1) returns to Settings
+      { path: 'terms', Component: TermsPage },
+      { path: 'privacy', Component: PrivacyPage },
+      { path: 'license', Component: LicensePage },
     ],
   },
 ]);

@@ -10,6 +10,8 @@ import { createLogger } from '../utils/logger';
 import { registerCurrentDevice, listenForRevocation, updateLastActive } from '../services/deviceSession';
 import { saveUserEmailToProfile } from '../firestore';
 import { Sidebar, type SidebarFilter } from './Sidebar';
+import { NotificationDrawer } from './notifications/NotificationDrawer';
+import { ConflictResolverSheet } from './sync/ConflictResolverSheet';
 
 const log = createLogger('UI');
 
@@ -24,6 +26,7 @@ export function AppShell() {
   const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all');
   const [items, setItems] = useState<VaultItem[]>([]);
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+  const [notificationDrawerOpen, setNotificationDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (unlocked) {
@@ -306,8 +309,8 @@ export function AppShell() {
 
   // ── Unlocked vault ───────────────────────────────────────────────
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-[#1a1a2e] relative shadow-2xl">
-      <Outlet context={{ onLock: handleLock, onSignOut: handleSignOut, user, sidebarOpen, setSidebarOpen, sidebarFilter, setSidebarFilter }} />
+    <div className="max-w-md mx-auto min-h-screen bg-[#1a1a2e] relative shadow-2xl overflow-hidden">
+      <Outlet context={{ onLock: handleLock, onSignOut: handleSignOut, user, sidebarOpen, setSidebarOpen, sidebarFilter, setSidebarFilter, setNotificationDrawerOpen }} />
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -323,6 +326,12 @@ export function AppShell() {
           navigate('/settings');
         }}
       />
+
+      {/* Global Realtime Sync Conflict Resolver overlay */}
+      <ConflictResolverSheet />
+
+      {/* Global Notifications Drawer */}
+      <NotificationDrawer open={notificationDrawerOpen} onClose={() => setNotificationDrawerOpen(false)} />
     </div>
   );
 }

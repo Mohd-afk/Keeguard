@@ -1,13 +1,16 @@
 import { ArrowLeft, Shield } from 'lucide-react';
+import { useNavigate } from 'react-router';
 
 export function PrivacyPage() {
+    const navigate = useNavigate();
+
     return (
         <div className="min-h-screen bg-[#1a1a2e] text-white">
             {/* Header */}
-            <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5">
+            <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_0px)]">
                 <div className="flex items-center gap-3 px-4 py-3 max-w-2xl mx-auto">
                     <button
-                        onClick={() => window.history.back()}
+                        onClick={() => navigate(-1)}
                         className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 transition-colors"
                     >
                         <ArrowLeft className="w-5 h-5" />
@@ -20,7 +23,7 @@ export function PrivacyPage() {
             </div>
 
             {/* Content */}
-            <div className="max-w-2xl mx-auto px-4 py-8 space-y-8 pb-16">
+            <div className="max-w-2xl mx-auto px-4 py-8 space-y-8 pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_24px)]">
                 {/* Zero-knowledge callout */}
                 <div className="bg-gradient-to-r from-cyan-500/10 to-blue-600/10 border border-cyan-500/20 rounded-2xl p-5">
                     <p className="text-cyan-300 text-sm font-medium mb-1">Zero-Knowledge Architecture</p>

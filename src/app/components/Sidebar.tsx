@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import type { CustomCategory } from '../store';
 import {
@@ -15,6 +15,7 @@ import {
   Trash2,
   Settings,
   X,
+  ChevronRight,
 } from 'lucide-react';
 import type { VaultItem } from '../store';
 import { CategoryIconMap } from './ManageCategories';
@@ -47,12 +48,14 @@ function SidebarRow({
   count,
   active,
   onClick,
+  chevron,
 }: {
   icon: React.ReactNode;
   label: string;
   count?: number;
   active: boolean;
   onClick: () => void;
+  chevron?: React.ReactNode;
 }) {
   return (
     <button
@@ -63,6 +66,7 @@ function SidebarRow({
           : 'text-gray-300 hover:bg-white/5 active:bg-white/10'
       }`}
     >
+      {chevron}
       <span className={`shrink-0 ${active ? 'text-cyan-400' : 'text-gray-400'}`}>
         {icon}
       </span>
@@ -87,6 +91,48 @@ export function Sidebar({
 }: SidebarProps) {
   const navigate = useNavigate();
 
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+
+  const toggleParent = (parentId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(parentId)) {
+        next.delete(parentId);
+      } else {
+        next.add(parentId);
+      }
+      return next;
+    });
+  };
+
+  const activeItems = items.filter((i) => !i.deletedAt);
+  const trashedItems = items.filter((i) => !!i.deletedAt);
+
+  const hierarchicalCategories = useMemo(() => {
+    const visibleCats = customCategories.filter((c) => !c.isHidden);
+    const parents = visibleCats.filter((c) => !c.parentCategoryId);
+    const orphans = visibleCats.filter(
+      (c) => c.parentCategoryId && !visibleCats.some((p) => p.id === c.parentCategoryId)
+    );
+
+    return [
+      ...parents.map((parent) => ({
+        parent,
+        children: visibleCats.filter((c) => c.parentCategoryId === parent.id),
+      })),
+      ...orphans.map((orphan) => ({
+        parent: orphan,
+        children: [],
+      })),
+    ];
+  }, [customCategories]);
+
+  const select = (f: SidebarFilter) => {
+    onFilterChange(f);
+    onClose();
+  };
+
   // Lock scroll when sidebar is open
   useEffect(() => {
     if (open) {
@@ -98,38 +144,6 @@ export function Sidebar({
       document.body.style.overflow = '';
     };
   }, [open]);
-
-  const activeItems = items.filter((i) => !i.deletedAt);
-  const trashedItems = items.filter((i) => !!i.deletedAt);
-
-  const sidebarCategories = useMemo(() => {
-    // Only display categories that are NOT hidden
-    const visibleCats = customCategories.filter((c) => !c.isHidden);
-    const parents = visibleCats.filter((c) => !c.parentCategoryId);
-    const result: { category: CustomCategory; isChild: boolean }[] = [];
-
-    parents.forEach((parent) => {
-      result.push({ category: parent, isChild: false });
-      const children = visibleCats.filter((c) => c.parentCategoryId === parent.id);
-      children.forEach((child) => {
-        result.push({ category: child, isChild: true });
-      });
-    });
-
-    // Handle orphans if parent is hidden/deleted
-    visibleCats.forEach((cat) => {
-      if (cat.parentCategoryId && !visibleCats.some((p) => p.id === cat.parentCategoryId)) {
-        result.push({ category: cat, isChild: true });
-      }
-    });
-
-    return result;
-  }, [customCategories]);
-
-  const select = (f: SidebarFilter) => {
-    onFilterChange(f);
-    onClose();
-  };
 
   return (
     <>
@@ -172,7 +186,7 @@ export function Sidebar({
         </div>
 
         {/* Scroll area */}
-        <div className="flex-1 overflow-y-auto py-2">
+        <div className="flex-1 overflow-y-auto pt-2 pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_16px)]">
           {/* All */}
           <div className="px-2 mb-1">
             <SidebarRow
@@ -184,59 +198,72 @@ export function Sidebar({
             />
           </div>
 
-          {/* Categories — built-in + custom in one section */}
-          <div className="px-4 py-2">
-            <p className="text-gray-500 text-xs uppercase tracking-widest mb-1">Categories</p>
+          {/* Shared Vaults */}
+          <div className="px-2 mb-1">
+            <SidebarRow
+              icon={<Users className="w-5 h-5 text-cyan-400" />}
+              label="Shared Vaults"
+              active={false}
+              onClick={() => {
+                onClose();
+                navigate('/collections');
+              }}
+            />
           </div>
-          <div className="px-2 space-y-0.5">
-            <SidebarRow
-              icon={<Clock className="w-5 h-5" />}
-              label="One-time codes"
-              count={activeItems.filter((i) => !!i.totpSecretEncrypted || !!i.totpSecret).length}
-              active={activeFilter === 'codes'}
-              onClick={() => select('codes')}
-            />
-            <SidebarRow
-              icon={<Users className="w-5 h-5" />}
-              label="Passkeys"
-              count={0}
-              active={activeFilter === 'passkeys'}
-              onClick={() => select('passkeys')}
-            />
-            <SidebarRow
-              icon={<CreditCard className="w-5 h-5" />}
-              label="Payment cards"
-              count={activeItems.filter((i) => i.type === 'Card').length}
-              active={activeFilter === 'cards'}
-              onClick={() => select('cards')}
-            />
-            <SidebarRow
-              icon={<FileText className="w-5 h-5" />}
-              label="Notes"
-              count={activeItems.filter((i) => !!i.note && !i.password).length}
-              active={activeFilter === 'notes'}
-              onClick={() => select('notes')}
-            />
-            <SidebarRow
-              icon={<IdCard className="w-5 h-5" />}
-              label="IDs"
-              count={0}
-              active={activeFilter === 'ids'}
-              onClick={() => select('ids')}
-            />
 
-            {/* Custom Categories — merged into same section */}
-            {sidebarCategories.map(({ category: cat, isChild }) => {
-              const IconComp = CategoryIconMap[cat.icon || 'Folder'] || Tag;
+            {/* Custom Categories */}
+            <div className="px-2 space-y-0.5">
+              {hierarchicalCategories.map(({ parent, children }) => {
+                const ParentIcon = CategoryIconMap[parent.icon || 'Folder'] || Tag;
+              const isExpanded = !collapsedCategories.has(parent.id);
+              const hasChildren = children.length > 0;
+
               return (
-                <div key={`category-${cat.id}`} className={isChild ? 'pl-4 border-l border-white/5 ml-5' : ''}>
+                <div key={`parent-group-${parent.id}`} className="space-y-0.5">
                   <SidebarRow
-                    icon={<IconComp className="w-5 h-5" style={{ color: cat.color || '#3b82f6' }} />}
-                    label={cat.name}
-                    count={activeItems.filter(i => i.categoryId === cat.id).length}
-                    active={activeFilter === `category-${cat.id}`}
-                    onClick={() => select(`category-${cat.id}`)}
+                    icon={<ParentIcon className="w-5 h-5" style={{ color: parent.color || '#3b82f6' }} />}
+                    label={parent.name}
+                    count={activeItems.filter((i) => i.categoryId === parent.id).length}
+                    active={activeFilter === `category-${parent.id}`}
+                    onClick={() => select(`category-${parent.id}`)}
+                    chevron={
+                      hasChildren ? (
+                        <button
+                          onClick={(e) => toggleParent(parent.id, e)}
+                          className="p-1 -ml-1 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                        >
+                          <ChevronRight
+                            className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                              isExpanded ? 'rotate-90' : 'rotate-0'
+                            }`}
+                          />
+                        </button>
+                      ) : null
+                    }
                   />
+
+                  {/* Children container with smooth transition */}
+                  <div
+                    className={`overflow-hidden transition-all duration-150 ease-in-out pl-4 border-l border-white/5 ml-5 space-y-0.5`}
+                    style={{
+                      maxHeight: isExpanded ? `${children.length * 48}px` : '0px',
+                      opacity: isExpanded ? 1 : 0,
+                    }}
+                  >
+                    {children.map((child) => {
+                      const ChildIcon = CategoryIconMap[child.icon || 'Folder'] || Tag;
+                      return (
+                        <SidebarRow
+                          key={`category-${child.id}`}
+                          icon={<ChildIcon className="w-5 h-5" style={{ color: child.color || '#3b82f6' }} />}
+                          label={child.name}
+                          count={activeItems.filter((i) => i.categoryId === child.id).length}
+                          active={activeFilter === `category-${child.id}`}
+                          onClick={() => select(`category-${child.id}`)}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}
@@ -245,7 +272,10 @@ export function Sidebar({
               icon={<Pencil className="w-5 h-5" />}
               label="Manage categories"
               active={false}
-              onClick={() => { onClose(); navigate('/categories'); }}
+              onClick={() => {
+                onClose();
+                navigate('/categories');
+              }}
             />
           </div>
 

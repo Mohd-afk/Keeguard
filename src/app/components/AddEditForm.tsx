@@ -42,6 +42,7 @@ import {
 } from '../store';
 import { toast } from 'sonner';
 import { CategoryIconMap } from './ManageCategories';
+import { SmartCategorizer } from '../services/SmartCategorizer';
 
 const itemTypes: ItemType[] = ['Website', 'App', 'Phone', 'Door Lock', 'Card', 'Other'];
 
@@ -374,43 +375,40 @@ export function AddEditForm() {
       return;
     }
 
-    const textToMatch = `${title} ${url}`.toLowerCase();
-    if (!textToMatch.trim()) {
-      setAiSuggestion(null);
-      return;
-    }
-
-    const patterns = [
-      { keywords: ['bank', 'paypal', 'stripe', 'chase', 'fidelity', 'hsbc', 'boa', 'capitalone', 'finance', 'trading', 'investing'], targetId: 'cat_banking' },
-      { keywords: ['coinbase', 'wallet', 'crypto', 'binance', 'metamask', 'ledger', 'solana', 'btc', 'eth', 'trustwallet'], targetId: 'cat_crypto' },
-      { keywords: ['credit', 'debit', 'visa', 'mastercard', 'amex', 'card', 'bankcard'], targetId: 'cat_credit' },
-      { keywords: ['gmail', 'yahoo', 'outlook', 'proton', 'mail', 'inbox', 'fastmail'], targetId: 'cat_email' },
-      { keywords: ['facebook', 'instagram', 'twitter', 'x.com', 'linkedin', 'reddit', 'tiktok', 'snapchat', 'social'], targetId: 'cat_social' },
-      { keywords: ['netflix', 'spotify', 'hulu', 'disney', 'youtube', 'prime', 'sub', 'hbo', 'appletv', 'patreon'], targetId: 'cat_subs' },
-      { keywords: ['wifi', 'router', 'internet', 'broadband', 'hotspot'], targetId: 'cat_wifi' },
-      { keywords: ['github', 'gitlab', 'aws', 'slack', 'jira', 'confluence', 'vercel', 'netlify', 'heroku', 'api', 'server', 'database', 'ssh', 'credentials', 'jenkins', 'docker'], targetId: 'cat_work' },
-      { keywords: ['passport', 'driver', 'licence', 'aadhaar', 'id', 'license', 'ssn', 'nid', 'pan', 'identity'], targetId: 'cat_driver' }
-    ];
-
-    let matchedId = '';
-    for (const pattern of patterns) {
-      if (pattern.keywords.some(keyword => textToMatch.includes(keyword))) {
-        matchedId = pattern.targetId;
-        break;
-      }
-    }
-
-    if (matchedId) {
-      // Find matching loaded category
-      const targetCat = customCategories.find(c => c.id === matchedId || c.id.toLowerCase().includes(matchedId.replace('cat_', '')));
-      if (targetCat) {
-        setAiSuggestion({ id: targetCat.id, name: targetCat.name });
+    const suggestCategory = async () => {
+      const textToMatch = `${title} ${url}`.trim();
+      if (!textToMatch) {
+        setAiSuggestion(null);
         return;
       }
-    }
 
-    setAiSuggestion(null);
-  }, [title, url, selectedCategoryId, customCategories]);
+      const result = await SmartCategorizer.categorizeEntry({ title, url, username });
+      
+      if (result.category !== 'Uncategorized' && (result.action === 'Suggest' || result.action === 'Auto-categorize')) {
+        // Find matching loaded category
+        const targetCat = customCategories.find(c => 
+          c.name.toLowerCase() === result.category.toLowerCase() || 
+          c.id === result.category || 
+          c.id.toLowerCase().includes(result.category.toLowerCase().replace('cat_', ''))
+        );
+        
+        if (targetCat) {
+          setAiSuggestion({ id: targetCat.id, name: targetCat.name });
+        } else {
+          // Suggest the name directly, clicking will auto-create
+          setAiSuggestion({ id: `new_${result.category}`, name: result.category });
+        }
+      } else {
+        setAiSuggestion(null);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      suggestCategory();
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [title, url, username, selectedCategoryId, customCategories]);
 
   // C3: Hierarchical List Filter for Bottom Sheet Selector
   const filteredCategories = useMemo(() => {
@@ -504,6 +502,17 @@ export function AddEditForm() {
         totpSecret: undefined, // Never store raw TOTP in vault blob
         categoryId: selectedCategoryId || undefined,
       };
+
+      // Learn from user decision if they manually picked a category
+      if (selectedCategoryId && (url.trim() || title.trim())) {
+        const selectedCat = customCategories.find(c => c.id === selectedCategoryId);
+        if (selectedCat && selectedCat.name) {
+           SmartCategorizer.learnFromUserDecision({
+              domain: url.trim() || title.trim(),
+              chosenCategory: selectedCat.name
+           });
+        }
+      }
 
       if (isEdit && id) {
         await updateVaultItem(id, itemPayload);
@@ -613,9 +622,31 @@ export function AddEditForm() {
               <div className="mt-2 flex items-center gap-2 shrink-0 animate-in fade-in slide-in-from-top-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedCategoryId(aiSuggestion.id);
-                    toast.success(`Set category to "${aiSuggestion.name}"`);
+                  onClick={async () => {
+                    if (aiSuggestion.id.startsWith('new_')) {
+                       // Auto-create category
+                       try {
+                         const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#6366f1', '#f97316', '#ef4444', '#64748b'];
+                         const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                         const newCat = await addCustomCategory({
+                           name: aiSuggestion.name,
+                           icon: 'Folder',
+                           color: randomColor,
+                           isDefault: false,
+                           isHidden: false,
+                           isPinned: false,
+                           parentCategoryId: null,
+                           sortOrder: customCategories.length,
+                         });
+                         setSelectedCategoryId(newCat.id);
+                         toast.success(`Category "${newCat.name}" created and selected!`);
+                       } catch (e) {
+                         toast.error('Failed to create quick category');
+                       }
+                    } else {
+                       setSelectedCategoryId(aiSuggestion.id);
+                       toast.success(`Set category to "${aiSuggestion.name}"`);
+                    }
                   }}
                   className="bg-purple-950/40 hover:bg-purple-900/50 border border-purple-500/30 rounded-full px-3 py-1.5 text-purple-300 text-[11px] font-semibold flex items-center gap-1.5 transition-all shadow-inner active:scale-95"
                 >

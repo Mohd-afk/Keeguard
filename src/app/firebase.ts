@@ -12,6 +12,7 @@ import {
     type Auth,
 } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFunctions, type Functions } from 'firebase/functions';
 import { Capacitor } from '@capacitor/core';
 
 // ── Module-level holders (populated after initFirebase()) ────────────
@@ -19,10 +20,16 @@ import { Capacitor } from '@capacitor/core';
 let _app: FirebaseApp | null = null;
 let _auth: Auth | null = null;
 let _db: Firestore | null = null;
+let _functions: Functions | null = null;
 let _initialized = false;
 
 // ── Lazy getters ─────────────────────────────────────────────────────
 // These throw clearly if accessed before initFirebase() is called.
+
+export function getFirebaseApp(): FirebaseApp {
+    if (!_app) throw new Error('[Firebase] App not initialized. Call initFirebase() first.');
+    return _app;
+}
 
 export function getFirebaseAuth(): Auth {
     if (!_auth) throw new Error('[Firebase] Auth not initialized. Call initFirebase() first.');
@@ -32,6 +39,11 @@ export function getFirebaseAuth(): Auth {
 export function getFirebaseDb(): Firestore {
     if (!_db) throw new Error('[Firebase] Firestore not initialized. Call initFirebase() first.');
     return _db;
+}
+
+export function getFirebaseFunctions(): Functions {
+    if (!_functions) throw new Error('[Firebase] Functions not initialized. Call initFirebase() first.');
+    return _functions;
 }
 
 // Keep legacy exports pointing to lazy getters for backward compatibility.
@@ -86,7 +98,10 @@ export async function initFirebase(): Promise<void> {
 
     // 3. Init Firestore
     _db = getFirestore(_app);
-    console.log('[Firebase] App + Auth + Firestore created for project:', firebaseConfig.projectId);
+    
+    // 4. Init Functions
+    _functions = getFunctions(_app);
+    console.log('[Firebase] App + Auth + Firestore + Functions created for project:', firebaseConfig.projectId);
 
     _initialized = true;
     console.log('[Firebase] Initialization complete.');

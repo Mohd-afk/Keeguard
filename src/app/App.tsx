@@ -9,6 +9,8 @@ import { initUpdater, OTA_JUST_UPDATED_KEY } from './services/updater';
 import { checkApkUpdateRequired } from './services/apk-update-checker';
 import CriticalUpdateScreen from './components/CriticalUpdateScreen';
 import ApkUpdateBanner from './components/ApkUpdateBanner';
+import { AutofillBridge, type AutofillSaveEvent } from './services/autofillBridge';
+import { AutofillSaveBottomSheet } from './components/AutofillSaveBottomSheet';
 
 export default function App() {
   const [criticalUpdate, setCriticalUpdate] = useState(false);
@@ -16,6 +18,27 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [apkUpdateRequired, setApkUpdateRequired] = useState(false);
   const [apkDownloadUrl, setApkDownloadUrl] = useState('https://github.com/Mohd-afk/securevault-app/releases/latest');
+  const [activeSaveRequest, setActiveSaveRequest] = useState<AutofillSaveEvent | null>(null);
+
+  useEffect(() => {
+    let listenerHandle: any = null;
+    if (Capacitor.isNativePlatform()) {
+      AutofillBridge.addListener('autofillSaveRequest', (event) => {
+        console.log('[Autofill] Received save request:', event);
+        setActiveSaveRequest(event);
+      }).then(handle => {
+        listenerHandle = handle;
+      }).catch(err => {
+        console.error('[Autofill] Failed to add listener:', err);
+      });
+    }
+
+    return () => {
+      if (listenerHandle) {
+        listenerHandle.remove();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const _bm = (k: string) => { try { const p = localStorage.getItem('OTA_DEBUG_LOG') || ''; localStorage.setItem('OTA_DEBUG_LOG', p + '\n' + k + ': ' + new Date().toISOString()); } catch(e) {} };
@@ -191,6 +214,7 @@ export default function App() {
               },
             }}
           />
+          <AutofillSaveBottomSheet event={activeSaveRequest} onDismiss={() => setActiveSaveRequest(null)} />
         </>
       )}
     </div>
