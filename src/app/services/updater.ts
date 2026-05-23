@@ -21,12 +21,12 @@ const log = createLogger('OTA');
 // ─── Constants ──────────────────────────────────────────────────────
 
 /** Keys used in localStorage to track the OTA update state */
-const PENDING_VERSION_KEY = 'sv_ota_pending_version';
+const PENDING_VERSION_KEY   = 'sv_ota_pending_version';
 const PENDING_BUNDLE_ID_KEY = 'sv_ota_pending_bundle_id';
-const ACTIVE_VERSION_KEY = 'sv_ota_active_version';
-const FAILED_VERSIONS_KEY = 'sv_ota_failed_versions';
+const FAILED_VERSIONS_KEY   = 'sv_ota_failed_versions';
 /** Written before reload() — read by App.tsx on next boot to show the success toast */
 export const OTA_JUST_UPDATED_KEY = 'sv_ota_just_updated';
+
 /**
  * Tracks the native binary version (from App.getInfo()) that was running
  * when OTA state was last written. If the native version changes (i.e. the
@@ -37,7 +37,7 @@ const NATIVE_VERSION_KEY = 'sv_ota_native_version';
 
 /** Firestore path: app_config/latest_version */
 const VERSION_DOC_PATH = 'app_config';
-const VERSION_DOC_ID = 'latest_version';
+const VERSION_DOC_ID   = 'latest_version';
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -98,6 +98,38 @@ interface UpdaterOptions {
   onCriticalUpdate?: () => void;
 }
 
+// ─── Ground-Truth Version Resolution ────────────────────────────────
+
+/**
+ * Returns the true currently-running OTA bundle version.
+ *
+ * ⚠️ KEY FIX: We no longer rely on localStorage as the primary source.
+ * localStorage can be cleared/corrupted/poisoned by the old "POISON CLEAR"
+ * logic. Instead, we ask CapacitorUpdater directly what bundle is active.
+ *
+ * Resolution order:
+ *  1. CapacitorUpdater.current().bundle.version  (if not 'builtin' / not empty)
+ *  2. '0.0.0'  (tells checkForUpdate to always pull the latest OTA bundle)
+ */
+async function getActiveVersion(): Promise<string> {
+  try {
+    const current = await CapacitorUpdater.current();
+    const bundleVersion = current?.bundle?.version;
+    const bundleId      = current?.bundle?.id;
+
+    // 'builtin' means no OTA bundle is active — treat as 0.0.0 so we always download
+    if (bundleId && bundleId !== 'builtin' && bundleVersion && bundleVersion !== 'builtin') {
+      log.debug(`[OTA] Ground-truth active bundle version: ${bundleVersion} (id: ${bundleId})`);
+      return bundleVersion;
+    }
+    log.debug(`[OTA] Running on builtin bundle — active version treated as 0.0.0`);
+    return '0.0.0';
+  } catch (e) {
+    log.warn('[OTA] Could not read current bundle version from CapacitorUpdater. Defaulting to 0.0.0.', e);
+    return '0.0.0';
+  }
+}
+
 // ─── Core Functions ─────────────────────────────────────────────────
 
 /**
@@ -105,9 +137,11 @@ interface UpdaterOptions {
  * Call AFTER notifyAppReady() and AFTER initFirebase() have both been called.
  *
  * Flow:
- * 1. Fetch latest version metadata from Firestore
- * 2. Compare with locally stored version
- * 3. If newer: download bundle → set bundle → THEN persist version
+ * 1. Detect native APK version changes and clear stale state
+ * 2. Verify post-boot bundle state (confirm or rollback pending update)
+ * 3. Fetch latest version metadata from Firestore
+ * 4. Compare with the LIVE running bundle version (from CapacitorUpdater, not localStorage)
+ * 5. If newer: download bundle → set as next bundle
  */
 export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
   // OTA updates only work on native platforms (Android/iOS), not web
@@ -116,18 +150,9 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
     return;
   }
 
-  // ── MIGRATION GUARD: Detect native APK version changes ──────────────────
-  // Problem: resetWhenUpdate=false means localStorage persists across APK
-  // installs. If the user installs a new major APK (e.g. v3.0.0) while an OTA
-  // download was in progress (sv_ota_pending_version = "3.0.2"), the new APK
-  // boots with isBuiltin=true AND a stale pending version. The boot logic below
-  // sees (isBuiltin + pendingVersion) and calls addFailedVersion("3.0.2"),
-  // permanently blacklisting v3.0.2. The OTA check then sees
-  // hasFailedVersion("3.0.2") === true and SKIPS IT FOREVER.
-  //
-  // Fix: compare current native binary version against what was stored when OTA
-  // state was last written. On mismatch, wipe all OTA keys before any further
-  // logic runs, giving the updater a clean slate on the new native base.
+  // ── STEP 1: MIGRATION GUARD — Detect native APK version changes ──────────
+  // If the user installs a new APK, all OTA localStorage state is invalid.
+  // Clear it to prevent version blacklisting poisoning.
   try {
     let currentNativeVersion: string;
     try {
@@ -143,12 +168,8 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
         `[OTA MIGRATION] Native APK version changed: ${storedNativeVersion} → ${currentNativeVersion}. ` +
         `Clearing all stale OTA state to prevent false-rollback poisoning.`
       );
-      // Clear all OTA keys. Without this, a version that was mid-download when
-      // the APK was replaced would be permanently marked as "failed" (rolled back)
-      // and never re-attempted, silently blocking all future OTA updates.
       localStorage.removeItem(PENDING_VERSION_KEY);
       localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
-      localStorage.removeItem(ACTIVE_VERSION_KEY);
       localStorage.removeItem(FAILED_VERSIONS_KEY);
       log.info('[OTA MIGRATION] All OTA localStorage keys cleared. OTA state reset for new native base.');
     }
@@ -160,75 +181,56 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
     log.warn('[OTA MIGRATION] Could not read native version for check. Skipping migration guard.', e);
   }
 
-  // ── ONE-TIME BLACKLIST RESET ───────────────────────────────────────────
-  // Clear the failed versions list once on boot to give devices that got
-  // stuck on blacklisted rollbacks a fresh opportunity to pull the v4.0.2 bundle.
+  // ── STEP 2: POST-BOOT VERIFICATION ───────────────────────────────────────
+  // Check if we just successfully applied a pending OTA bundle.
+  // If so, confirm it. If there was a rollback, mark the version as failed.
   try {
-    const didClearFailedVersions = localStorage.getItem('sv_ota_cleared_failed_versions_v402');
-    if (!didClearFailedVersions) {
-      localStorage.removeItem(FAILED_VERSIONS_KEY);
-      localStorage.setItem('sv_ota_cleared_failed_versions_v402', 'true');
-      log.info('[OTA_EVENT: failed_versions_cleared] Cleared failed versions blacklist for 4.0.2 migration.');
-    }
-  } catch (e) {
-    log.warn('Could not run one-time failed versions clear:', e);
-  }
-
-  // Verification step: check if we just rebooted from an update
-  try {
-    const pendingVersion = localStorage.getItem(PENDING_VERSION_KEY);
+    const pendingVersion  = localStorage.getItem(PENDING_VERSION_KEY);
     const pendingBundleId = localStorage.getItem(PENDING_BUNDLE_ID_KEY);
-    
+
     const current = await CapacitorUpdater.current();
-    const currentBundleId = current?.bundle?.id || 'builtin';
+    const currentBundleId      = current?.bundle?.id || 'builtin';
     const currentBundleVersion = current?.bundle?.version || 'N/A';
-    const isBuiltin = currentBundleId === 'builtin';
-    const bundleIdMatch = !!(pendingBundleId && currentBundleId === pendingBundleId);
+    const isBuiltin            = currentBundleId === 'builtin';
+    const bundleIdMatch        = !!(pendingBundleId && currentBundleId === pendingBundleId);
 
     log.info(`[OTA DIAGNOSTICS] Post-boot state:
-      - pendingVersion: ${pendingVersion}
-      - pendingBundleId: ${pendingBundleId}
-      - current.bundle.id: ${currentBundleId}
+      - pendingVersion:       ${pendingVersion}
+      - pendingBundleId:      ${pendingBundleId}
+      - current.bundle.id:    ${currentBundleId}
       - current.bundle.version: ${currentBundleVersion}
-      - isBuiltin: ${isBuiltin}
-      - bundleIdMatch: ${bundleIdMatch}
+      - isBuiltin:            ${isBuiltin}
+      - bundleIdMatch:        ${bundleIdMatch}
     `);
 
-    if (bundleIdMatch && !isBuiltin) {
-      log.info(`[OTA_EVENT: promoted] Promoting pending OTA version ${pendingVersion} to ACTIVE post-restart`);
-      if (pendingVersion) localStorage.setItem(ACTIVE_VERSION_KEY, pendingVersion);
-      localStorage.removeItem(PENDING_VERSION_KEY);
-      localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
-    } else {
-      // Rollback or mismatch detected!
-      if (pendingBundleId || pendingVersion) {
-        log.warn(
-          `OTA update failed or was cleared. Bundle mismatch (expected ${pendingBundleId}, got ${currentBundleId}). ` +
-          `Clearing pending state to prevent false success loops.`
-        );
-        if (pendingVersion) addFailedVersion(pendingVersion);
-        log.warn(`[OTA_EVENT: rollback_detected] Version ${pendingVersion || 'unknown'} failed to boot. Recorded as failed.`);
+    if (pendingVersion || pendingBundleId) {
+      if (bundleIdMatch && !isBuiltin) {
+        // ✅ SUCCESS: The pending bundle is now active — it booted correctly.
+        log.info(`[OTA_EVENT: promoted] OTA version ${pendingVersion} confirmed running. Clearing pending state.`);
         localStorage.removeItem(PENDING_VERSION_KEY);
         localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
-      } else if (isBuiltin) {
-        // ── POISON CLEAR ─────────────────────────────────────────────────
-        // We are on builtin with no pending download — a clean boot.
-        // Clear ACTIVE_VERSION_KEY so the next update check sees 0.0.0
-        // and always attempts a fresh download. Also wipe the failed list
-        // because previous failures were tied to a different bundle slot.
-        const activeV = localStorage.getItem(ACTIVE_VERSION_KEY);
-        if (activeV) {
-          log.warn(`[OTA POISON CLEAR] On builtin with no pending. Clearing ACTIVE_VERSION_KEY=${activeV} and FAILED_VERSIONS_KEY to unblock updates.`);
-          localStorage.removeItem(ACTIVE_VERSION_KEY);
-          localStorage.removeItem(FAILED_VERSIONS_KEY);
-        }
+        // NOTE: We do NOT write ACTIVE_VERSION_KEY — getActiveVersion() reads from
+        // CapacitorUpdater directly now, so localStorage is not the authority.
+      } else {
+        // ❌ ROLLBACK: The bundle we expected is not running. Mark it failed.
+        log.warn(
+          `[OTA_EVENT: rollback_detected] Expected bundle ${pendingBundleId}, but running ${currentBundleId}. ` +
+          `Version ${pendingVersion || 'unknown'} failed to boot. Recording as failed.`
+        );
+        if (pendingVersion) addFailedVersion(pendingVersion);
+        localStorage.removeItem(PENDING_VERSION_KEY);
+        localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
       }
     }
+    // NOTE: We have intentionally REMOVED the old "POISON CLEAR" block that used to
+    // wipe ACTIVE_VERSION_KEY when running on builtin with no pending bundle. That
+    // logic caused updatethr loops. Version authority is now CapacitorUpdater.current().
 
   } catch (e) {
-    log.warn(`Could not verify current bundle from CapacitorUpdater:`, e);
+    log.warn(`[OTA] Could not verify current bundle from CapacitorUpdater:`, e);
   }
 
+  // ── STEP 3: RUN THE UPDATE CHECK ─────────────────────────────────────────
   try {
     await checkForUpdate(options);
   } catch (err) {
@@ -249,7 +251,7 @@ export async function forceCheckForUpdate(): Promise<'latest' | 'downloaded' | '
 
   try {
     log.info('Manual OTA check: Initiating check...');
-    
+
     // 1. Read latest version doc from Firestore
     const db = getFirebaseDb();
     const versionRef = doc(db, VERSION_DOC_PATH, VERSION_DOC_ID);
@@ -261,15 +263,18 @@ export async function forceCheckForUpdate(): Promise<'latest' | 'downloaded' | '
     }
 
     const remote = snapshot.data() as VersionMetadata;
-    const activeVersion = localStorage.getItem(ACTIVE_VERSION_KEY) || '0.0.0';
 
-    // 2. Compare versions
+    // 2. Get the ground-truth running version
+    const activeVersion = await getActiveVersion();
+    log.info(`Manual OTA check: running=${activeVersion}, remote=${remote.version}`);
+
     if (compareVersions(remote.version, activeVersion) <= 0) {
       log.info(`Manual OTA check: Already on latest (${activeVersion} >= ${remote.version})`);
+      toast('You are already on the latest version!', { duration: 3000, position: 'bottom-center' });
       return 'latest';
     }
 
-    // Ensure native compatibility
+    // 3. Ensure native compatibility
     const minAppVersionRequired = remote.min_apk_version || remote.minAppVersion;
     if (minAppVersionRequired) {
       let nativeVersion: string;
@@ -285,10 +290,12 @@ export async function forceCheckForUpdate(): Promise<'latest' | 'downloaded' | '
       }
     }
 
-    // Ensure not blacklisted
+    // 4. Ensure not blacklisted
     if (hasFailedVersion(remote.version)) {
       log.warn(`Manual OTA check: Skip blacklisted version ${remote.version}`);
-      return 'latest';
+      // Clear the blacklist and retry — the user explicitly asked for an update
+      localStorage.removeItem(FAILED_VERSIONS_KEY);
+      log.info('Manual OTA check: Cleared failed versions blacklist on user-initiated check.');
     }
 
     if (!remote.url || !remote.url.trim()) {
@@ -296,7 +303,7 @@ export async function forceCheckForUpdate(): Promise<'latest' | 'downloaded' | '
       return 'latest';
     }
 
-    // 3. New version found — trigger download
+    // 5. New version found — trigger download
     log.info(`Manual OTA check: Downloading ${remote.version}...`);
     await downloadAndApply(remote);
     return 'downloaded';
@@ -324,18 +331,20 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
   }
 
   const remote = snapshot.data() as VersionMetadata;
-  log.info(`Remote version: ${remote.version}`, { critical: remote.critical, minAppVersion: remote.minAppVersion });
+  log.info(`Remote version: ${remote.version}`, { critical: remote.critical, url: remote.url });
 
-  // 2. Compare with locally stored active version
-  const activeVersion = localStorage.getItem(ACTIVE_VERSION_KEY) || '0.0.0';
-  log.info(`Local active version: ${activeVersion}`);
+  // 2. Get the ground-truth active version from CapacitorUpdater (NOT localStorage)
+  const activeVersion = await getActiveVersion();
+  log.info(`[OTA_EVENT: check] Active (running) version: ${activeVersion}`);
 
   if (compareVersions(remote.version, activeVersion) <= 0) {
-    log.info(`[OTA_EVENT: check_skip] Already on latest or newer version (${activeVersion} >= ${remote.version}). No update needed.`);
+    log.info(`[OTA_EVENT: check_skip] Already running latest or newer (${activeVersion} >= ${remote.version}). No update needed.`);
     return;
   }
 
-  // 2.5 Ensure native minimum app version requirements are met
+  log.info(`[OTA_EVENT: update_available] New version ${remote.version} available (running: ${activeVersion})`);
+
+  // 3. Ensure native minimum app version requirements are met
   const minAppVersionRequired = remote.min_apk_version || remote.minAppVersion;
   if (minAppVersionRequired) {
     try {
@@ -347,36 +356,31 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
         nativeVersion = (await App.getInfo()).version;
       }
       if (compareVersions(nativeVersion, minAppVersionRequired) < 0) {
-        log.warn(`[OTA_EVENT: check_failed] Remote update requires minAppVersion/min_apk_version ${minAppVersionRequired}, but native app is ${nativeVersion}. Skipping.`);
+        log.warn(`[OTA_EVENT: check_failed] Remote update requires minAppVersion ${minAppVersionRequired}, but native app is ${nativeVersion}. Skipping.`);
         return;
       }
     } catch (e) {
-      log.warn('Could not check native version for minAppVersion/min_apk_version enforcement', e);
+      log.warn('Could not check native version for minAppVersion enforcement', e);
     }
   }
 
-  // 2.6 Reject known broken bundles
+  // 4. Skip known-broken bundles
   if (hasFailedVersion(remote.version)) {
-    log.warn(`[OTA_EVENT: skip_failed] Remote version ${remote.version} previously failed to boot. Skipping to prevent infinite crash loop.`);
+    log.warn(`[OTA_EVENT: skip_failed] Remote version ${remote.version} previously failed to boot. Skipping to prevent crash loop.`);
     return;
   }
 
-  // 3. New version available — download it
-  log.info(`New version available: ${remote.version} (active: ${activeVersion})`);
-
-  // Guard: if the bundle URL is empty/missing, this is an APK-only release.
-  // There is no OTA zip to fetch. Skip silently — the APK update checker will
-  // handle notifying the user via ApkUpdateBanner instead.
+  // 5. Guard: no URL = APK-only release, skip OTA
   if (!remote.url || !remote.url.trim()) {
     log.warn(
       `[OTA_EVENT: skip_no_url] Remote version ${remote.version} has no OTA bundle URL. ` +
-      `This is an APK-only release. Skipping OTA download to avoid breaking the app.`
+      `This is an APK-only release. Skipping OTA download.`
     );
     return;
   }
 
   if (remote.critical) {
-    log.warn('CRITICAL update — showing force-update screen');
+    log.warn('[OTA] CRITICAL update — showing force-update screen');
     options.onCriticalUpdate?.();
   }
 
@@ -386,15 +390,14 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
 /**
  * Download the update bundle and apply it.
  *
- * IMPORTANT: Version is persisted ONLY AFTER a successful set().
- * If download or set fails, the local version key is NOT updated,
- * ensuring the app retries on next launch.
+ * IMPORTANT: We set the bundle as NEXT (applied on next restart), not immediately.
+ * Pending state is tracked in localStorage so the next boot can confirm or rollback.
  */
 async function downloadAndApply(remote: VersionMetadata): Promise<void> {
   log.info(`[OTA_EVENT: downloading] Silent background download from: ${remote.url}`);
 
   try {
-    // Download the zip bundle silently — passing checksum if available to ensure Capgo bundle validation passes
+    // Download the zip bundle — pass checksum if available for Capgo bundle validation
     const downloadParams: any = {
       url: remote.url,
       version: remote.version,
@@ -402,14 +405,15 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
     if (remote.checksum) {
       downloadParams.checksum = remote.checksum;
     }
-    
+
     log.info('[OTA_EVENT: downloading] Invoking CapacitorUpdater.download', downloadParams);
     const bundle = await CapacitorUpdater.download(downloadParams);
 
-    log.info(`[OTA_EVENT: downloaded] Bundle ready: ${bundle.id}`);
+    log.info(`[OTA_EVENT: downloaded] Bundle ready: id=${bundle.id}, version=${bundle.version}`);
 
-    // Persist state as PENDING before staging.
-    // Not marked ACTIVE until the next successful boot confirms it.
+    // Persist pending state BEFORE staging.
+    // On next boot, we verify the running bundle matches this pending ID.
+    // If it does → success. If not → rollback detected → mark as failed.
     localStorage.setItem(PENDING_VERSION_KEY, remote.version);
     localStorage.setItem(PENDING_BUNDLE_ID_KEY, bundle.id);
 
@@ -421,17 +425,16 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
     // The update will apply the next time the user naturally opens the app.
     await CapacitorUpdater.next({ id: bundle.id });
 
-    log.info(`[OTA_EVENT: staged] Bundle ${bundle.id} staged. Will apply on next app restart.`);
+    log.info(`[OTA_EVENT: staged] Bundle ${bundle.id} (v${remote.version}) staged. Will apply on next app restart.`);
 
-    // Notify the user with a single non-intrusive toast from the bottom center exactly as requested
-    toast('New version downloaded. Please restart to see the changes.', {
+    toast(`✨ v${remote.version} downloaded! Restart to get the new features.`, {
       duration: 8000,
       position: 'bottom-center',
     });
 
-  } catch (err) {
-    console.error('[OTA] Silent download failed:', err);
-    // Clean up — don't leave stale pending state
+  } catch (err: any) {
+    log.error('[OTA] Silent download/staging failed:', err);
+    // Clean up — don't leave stale pending state that would cause false rollback detection
     localStorage.removeItem(PENDING_VERSION_KEY);
     localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
     localStorage.removeItem(OTA_JUST_UPDATED_KEY);
@@ -439,4 +442,3 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
     throw err;
   }
 }
-

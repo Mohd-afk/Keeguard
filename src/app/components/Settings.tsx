@@ -130,9 +130,26 @@ export function Settings() {
     const [activeOtaVersion, setActiveOtaVersion] = useState<string | null>(null);
     const [checkingUpdates, setCheckingUpdates] = useState(false);
 
+    // Load the live OTA bundle version from CapacitorUpdater (not localStorage)
+    // so the displayed version is always the ground truth.
     useEffect(() => {
-        const active = localStorage.getItem('sv_ota_active_version');
-        setActiveOtaVersion(active);
+        const loadActiveVersion = async () => {
+            if (!Capacitor.isNativePlatform()) return;
+            try {
+                const { CapacitorUpdater: CU } = await import('@capgo/capacitor-updater');
+                const current = await CU.current();
+                const bundleVersion = current?.bundle?.version;
+                const bundleId = current?.bundle?.id;
+                if (bundleId && bundleId !== 'builtin' && bundleVersion && bundleVersion !== 'builtin') {
+                    setActiveOtaVersion(bundleVersion);
+                } else {
+                    setActiveOtaVersion(null); // running on native APK builtin bundle
+                }
+            } catch (e) {
+                setActiveOtaVersion(null);
+            }
+        };
+        loadActiveVersion();
     }, []);
 
     const handleCheckForUpdates = async () => {
@@ -142,9 +159,18 @@ export function Settings() {
             if (result === 'latest' || result === 'not_supported') {
                 toast.success('Your app is up to date!', { position: 'bottom-center' });
             } else if (result === 'downloaded') {
-                // Refresh active ota version info so the UI updates
-                const active = localStorage.getItem('sv_ota_active_version');
-                setActiveOtaVersion(active);
+                // Re-read the live bundle version after a successful download staging
+                if (Capacitor.isNativePlatform()) {
+                    try {
+                        const { CapacitorUpdater: CU } = await import('@capgo/capacitor-updater');
+                        const current = await CU.current();
+                        const bundleVersion = current?.bundle?.version;
+                        const bundleId = current?.bundle?.id;
+                        if (bundleId && bundleId !== 'builtin' && bundleVersion) {
+                            setActiveOtaVersion(bundleVersion);
+                        }
+                    } catch (e) { /* ignore */ }
+                }
             } else {
                 toast.error('Could not connect to update server. Please check your network connection.', { position: 'bottom-center' });
             }

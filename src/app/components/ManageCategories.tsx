@@ -1010,8 +1010,8 @@ export default function ManageCategories() {
                         }
                       }
 
-                      // Refetch categories to get new IDs
-                      const updatedCategories = getVaultItems().customCategories || categories; // Fallback
+                      // Use the categories already in state (they were just updated above via addCategory calls)
+                      const updatedCategories: typeof categories = categories;
 
                       // 2. Apply item changes
                       for (const prop of smartPlan.itemProposals) {
