@@ -31,6 +31,8 @@ export const commitItem = functions.https.onCall(async (data, context) => {
     itemKeyVersion,
     wrappedItemKey,
     isDelete,
+    vaultItemId,
+    ownerUserId,
   } = data;
 
   if (!collectionId || !itemId || baseRevision === undefined) {
@@ -103,6 +105,9 @@ export const commitItem = functions.https.onCall(async (data, context) => {
           updated_at: now,
           deleted_at: null,
         };
+
+        if (vaultItemId) itemPayload.vault_item_id = vaultItemId;
+        if (ownerUserId) itemPayload.owner_user_id = ownerUserId;
 
         if (!exists) {
           itemPayload.created_by_user_id = actorUserId;

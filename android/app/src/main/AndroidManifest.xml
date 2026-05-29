@@ -55,6 +55,14 @@
             android:showOnLockScreen="true"
             android:launchMode="singleInstance" />
 
+        <activity
+            android:name=".autofill.CredentialDeliveryActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="false"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

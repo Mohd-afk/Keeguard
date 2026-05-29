@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, useNavigate } from 'react-router';
 import { LockScreen } from './LockScreen';
 import { AuthScreen } from './AuthScreen';
-import { getSettings, clearSession, clearLocalVaultData, getVaultItems, permanentlyDeleteVaultItem, addVaultChangeListener, subscribeToCustomCategories, type CustomCategory, type VaultItem } from '../store';
+import { getSettings, loadSettingsWithCloud, clearSession, clearLocalVaultData, getVaultItems, permanentlyDeleteVaultItem, addVaultChangeListener, subscribeToCustomCategories, type CustomCategory, type VaultItem } from '../store';
 import { onAuthChange, signOut, isVerificationLink } from '../auth';
 import { getFirebaseAuth } from '../firebase';
 import type { User } from 'firebase/auth';
@@ -27,15 +27,37 @@ export function AppShell() {
   const [items, setItems] = useState<VaultItem[]>([]);
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
   const [notificationDrawerOpen, setNotificationDrawerOpen] = useState(false);
+  const [autoLockTimeout, setAutoLockTimeout] = useState<number>(5);
+  const [lockOnHide, setLockOnHide] = useState<boolean>(true);
 
   useEffect(() => {
     if (unlocked) {
       setItems(getVaultItems());
       const unsub = addVaultChangeListener((updated) => setItems([...updated]));
       const unsubCats = subscribeToCustomCategories((categories) => setCustomCategories(categories));
+      
+      const syncSettings = () => {
+        loadSettingsWithCloud().then((s) => {
+          log.info('AppShell: Settings loaded and synced with cloud:', s);
+          setAutoLockTimeout(s.autoLockTimeout);
+          setLockOnHide(s.lockOnHide);
+        }).catch(err => {
+          log.error('AppShell: Failed to load settings with cloud:', err);
+          getSettings().then(s => {
+            setAutoLockTimeout(s.autoLockTimeout);
+            setLockOnHide(s.lockOnHide);
+          });
+        });
+      };
+
+      syncSettings();
+
+      window.addEventListener('focus', syncSettings);
+
       return () => {
         unsub();
         unsubCats();
+        window.removeEventListener('focus', syncSettings);
       };
     }
   }, [unlocked]);
@@ -159,73 +181,46 @@ export function AppShell() {
 
   // ── Auto-lock on inactivity ──────────────────────────────────────
   useEffect(() => {
-    if (!unlocked) return;
+    if (!unlocked || autoLockTimeout === 0) return;
 
-    let cancelled = false;
+    const timeoutMs = autoLockTimeout * 60 * 1000;
 
-    getSettings().then((settings) => {
-      if (cancelled || settings.autoLockTimeout === 0) return;
+    const resetTimer = () => {
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+      inactivityTimer.current = setTimeout(handleLock, timeoutMs);
+    };
 
-      const timeoutMs = settings.autoLockTimeout * 60 * 1000;
-
-      const resetTimer = () => {
-        if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-        inactivityTimer.current = setTimeout(handleLock, timeoutMs);
-      };
-
-      const events = ['mousemove', 'keydown', 'touchstart', 'click', 'scroll'];
-      events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }));
-      resetTimer();
-
-      // Store cleanup for this specific invocation
-      cleanupRef.current = () => {
-        events.forEach((e) => window.removeEventListener(e, resetTimer));
-        if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-      };
-    });
-
-    const cleanupRef = { current: null as (() => void) | null };
+    const events = ['mousemove', 'keydown', 'touchstart', 'click', 'scroll'];
+    events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }));
+    resetTimer();
 
     return () => {
-      cancelled = true;
-      cleanupRef.current?.();
+      events.forEach((e) => window.removeEventListener(e, resetTimer));
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     };
-  }, [unlocked, handleLock]);
+  }, [unlocked, handleLock, autoLockTimeout]);
 
   // ── Auto-lock on tab hide ────────────────────────────────────────
   useEffect(() => {
-    if (!unlocked) return;
+    if (!unlocked || !lockOnHide) return;
 
-    let cancelled = false;
-
-    getSettings().then((settings) => {
-      if (cancelled || !settings.lockOnHide) return;
-
-      const handleVisibility = () => {
-        if (document.hidden) {
-          visibilityTimer.current = setTimeout(handleLock, 30_000);
-        } else {
-          if (visibilityTimer.current) {
-            clearTimeout(visibilityTimer.current);
-            visibilityTimer.current = null;
-          }
+    const handleVisibility = () => {
+      if (document.hidden) {
+        visibilityTimer.current = setTimeout(handleLock, 30_000);
+      } else {
+        if (visibilityTimer.current) {
+          clearTimeout(visibilityTimer.current);
+          visibilityTimer.current = null;
         }
-      };
-
-      document.addEventListener('visibilitychange', handleVisibility);
-      cleanupRef.current = () => {
-        document.removeEventListener('visibilitychange', handleVisibility);
-        if (visibilityTimer.current) clearTimeout(visibilityTimer.current);
-      };
-    });
-
-    const cleanupRef = { current: null as (() => void) | null };
-
-    return () => {
-      cancelled = true;
-      cleanupRef.current?.();
+      }
     };
-  }, [unlocked, handleLock]);
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (visibilityTimer.current) clearTimeout(visibilityTimer.current);
+    };
+  }, [unlocked, handleLock, lockOnHide]);
 
   // ── Device Session tracking ────────────────────────────────────────
   useEffect(() => {
@@ -321,6 +316,7 @@ export function AppShell() {
         }}
         items={items}
         customCategories={customCategories}
+        user={user}
         onNavigateSettings={() => {
           setSidebarOpen(false);
           navigate('/settings');

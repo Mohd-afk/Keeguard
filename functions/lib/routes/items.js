@@ -16,7 +16,7 @@ function checkAuth(context) {
 }
 exports.commitItem = functions.https.onCall(async (data, context) => {
     const actorUserId = checkAuth(context);
-    const { collectionId, itemId, baseRevision, titleEnc, itemType, ciphertext, iv, authTag, itemKeyVersion, wrappedItemKey, isDelete, } = data;
+    const { collectionId, itemId, baseRevision, titleEnc, itemType, ciphertext, iv, authTag, itemKeyVersion, wrappedItemKey, isDelete, vaultItemId, ownerUserId, } = data;
     if (!collectionId || !itemId || baseRevision === undefined) {
         throw new functions.https.HttpsError('invalid-argument', 'Missing required arguments: collectionId, itemId, baseRevision.');
     }
@@ -75,6 +75,10 @@ exports.commitItem = functions.https.onCall(async (data, context) => {
                     updated_at: now,
                     deleted_at: null,
                 };
+                if (vaultItemId)
+                    itemPayload.vault_item_id = vaultItemId;
+                if (ownerUserId)
+                    itemPayload.owner_user_id = ownerUserId;
                 if (!exists) {
                     itemPayload.created_by_user_id = actorUserId;
                     itemPayload.created_at = now;

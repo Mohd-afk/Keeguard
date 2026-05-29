@@ -25,8 +25,8 @@ export function RoleSelect({ value, onChange }: RoleSelectProps) {
     },
     {
       id: 'editor',
-      title: 'Editor',
-      desc: 'Can read, create, update, and delete passwords. Cannot manage members.',
+      title: 'Collaborator',
+      desc: 'Can add, edit, and delete contents. Cannot manage members or invites.',
       icon: <Edit className="w-4 h-4" />,
       color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/25',
       activeBorder: 'border-cyan-500 ring-cyan-500/20 bg-cyan-500/5',

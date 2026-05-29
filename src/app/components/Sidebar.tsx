@@ -16,9 +16,19 @@ import {
   Settings,
   X,
   ChevronRight,
+  Share2,
+  Plus,
+  FolderHeart,
+  ChevronDown,
 } from 'lucide-react';
 import type { VaultItem } from '../store';
+import type { User } from 'firebase/auth';
 import { CategoryIconMap } from './ManageCategories';
+import {
+  subscribeToMyCollections,
+  subscribeToSharedCollection,
+  type SharedCollection,
+} from '../firestore/collections';
 
 export type SidebarFilter =
   | 'all'
@@ -39,6 +49,7 @@ interface SidebarProps {
   onFilterChange: (filter: SidebarFilter) => void;
   items: VaultItem[];
   customCategories: CustomCategory[];
+  user: User | null;
   onNavigateSettings: () => void;
 }
 
@@ -87,11 +98,65 @@ export function Sidebar({
   onFilterChange,
   items,
   customCategories,
+  user,
   onNavigateSettings,
 }: SidebarProps) {
   const navigate = useNavigate();
 
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+
+  // ── Shared Vaults tree state ───────────────────────────────────────────────
+  const [sharedVaultsOpen, setSharedVaultsOpen] = useState(false);
+  const [myCollectionIds, setMyCollectionIds] = useState<string[]>([]);
+  const [collectionMeta, setCollectionMeta] = useState<Record<string, SharedCollection>>({});
+
+  // Subscribe to all collections this user is a member of
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeToMyCollections(user.uid, (ids) => {
+      setMyCollectionIds(ids);
+    });
+    return unsub;
+  }, [user]);
+
+  // Subscribe to metadata for each collection
+  useEffect(() => {
+    if (myCollectionIds.length === 0) return;
+    const unsubs: (() => void)[] = [];
+    myCollectionIds.forEach((cid) => {
+      const unsub = subscribeToSharedCollection(cid, (col) => {
+        if (col) {
+          setCollectionMeta((prev) => ({ ...prev, [cid]: col }));
+        }
+      });
+      unsubs.push(unsub);
+    });
+    return () => unsubs.forEach((u) => u());
+  }, [myCollectionIds]);
+
+  // Collections where user is NOT the owner (shared-by-others) and not archived
+  const guestCollections = useMemo(() => {
+    if (!user) return [];
+    return myCollectionIds
+      .map((id) => collectionMeta[id])
+      .filter((c): c is SharedCollection => !!c && c.owner_user_id !== user.uid && c.status !== 'archived');
+  }, [myCollectionIds, collectionMeta, user]);
+
+  // Collections owned by this user and not archived
+  const ownedCollections = useMemo(() => {
+    if (!user) return [];
+    return myCollectionIds
+      .map((id) => collectionMeta[id])
+      .filter((c): c is SharedCollection => !!c && c.owner_user_id === user.uid && c.status !== 'archived');
+  }, [myCollectionIds, collectionMeta, user]);
+
+  // Archived collections (both owned and guest)
+  const archivedCollections = useMemo(() => {
+    if (!user) return [];
+    return myCollectionIds
+      .map((id) => collectionMeta[id])
+      .filter((c): c is SharedCollection => !!c && c.status === 'archived');
+  }, [myCollectionIds, collectionMeta, user]);
 
   const toggleParent = (parentId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -198,15 +263,144 @@ export function Sidebar({
             />
           </div>
 
-          {/* Shared Vaults */}
+          {/* Shared — expandable accordion */}
+          <div className="px-2 mb-1">
+            <button
+              onClick={() => setSharedVaultsOpen((o) => !o)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-gray-300 hover:bg-white/5 active:bg-white/10"
+            >
+              <span className="shrink-0 text-gray-400">
+                <Users className="w-5 h-5 text-cyan-400" />
+              </span>
+              <span className="flex-1 text-left font-medium text-sm">Shared Vaults</span>
+              <div className="flex items-center gap-1.5">
+                {(guestCollections.length + ownedCollections.length) > 0 && (
+                  <span className="text-sm tabular-nums text-gray-500">
+                    {guestCollections.length + ownedCollections.length}
+                  </span>
+                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                    navigate('/collections');
+                  }}
+                  className="p-1 rounded-md hover:bg-white/10 text-gray-400 hover:text-cyan-400 transition-colors"
+                  title="New shared vault"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-gray-500 transition-transform duration-150 ${
+                    sharedVaultsOpen ? 'rotate-180' : 'rotate-0'
+                  }`}
+                />
+              </div>
+            </button>
+
+            {/* Expanded: hierarchical collections groups */}
+            <div
+              className="overflow-hidden transition-all duration-150 ease-in-out pl-3 border-l border-white/5 ml-5 space-y-3.5"
+              style={{
+                maxHeight: sharedVaultsOpen ? '500px' : '0px',
+                opacity: sharedVaultsOpen ? 1 : 0,
+                paddingTop: sharedVaultsOpen ? '8px' : '0px',
+                paddingBottom: sharedVaultsOpen ? '8px' : '0px',
+              }}
+            >
+              {/* 1. Shared With Me (Guest) */}
+              <div className="space-y-1">
+                <p className="text-gray-500 text-[9px] font-black uppercase tracking-widest px-2.5">
+                  Shared With Me ({guestCollections.length})
+                </p>
+                {guestCollections.length === 0 ? (
+                  <p className="px-2.5 py-1 text-[10px] text-gray-600 font-medium">None</p>
+                ) : (
+                  guestCollections.map((col) => (
+                    <button
+                      key={col.id}
+                      onClick={() => {
+                        onClose();
+                        navigate(`/collections/${col.id}`);
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-gray-300 hover:bg-white/5 hover:text-cyan-400 transition-all text-xs font-semibold group truncate"
+                    >
+                      <FolderHeart className="w-3.5 h-3.5 shrink-0 text-cyan-400/70 group-hover:text-cyan-400 transition-colors" />
+                      <span className="flex-1 text-left truncate">{col.name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {/* 2. My Shared Collections (Owned) */}
+              <div className="space-y-1">
+                <p className="text-gray-500 text-[9px] font-black uppercase tracking-widest px-2.5">
+                  My Shared Vaults ({ownedCollections.length})
+                </p>
+                {ownedCollections.length === 0 ? (
+                  <p className="px-2.5 py-1 text-[10px] text-gray-600 font-medium">None</p>
+                ) : (
+                  ownedCollections.map((col) => (
+                    <button
+                      key={col.id}
+                      onClick={() => {
+                        onClose();
+                        navigate(`/collections/${col.id}`);
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-gray-300 hover:bg-white/5 hover:text-cyan-400 transition-all text-xs font-semibold group truncate"
+                    >
+                      <FolderHeart className="w-3.5 h-3.5 shrink-0 text-amber-500/70 group-hover:text-amber-400 transition-colors" />
+                      <span className="flex-1 text-left truncate">{col.name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {/* 3. Archived (If any) */}
+              {archivedCollections.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-gray-500 text-[9px] font-black uppercase tracking-widest px-2.5">
+                    Archived ({archivedCollections.length})
+                  </p>
+                  {archivedCollections.map((col) => (
+                    <button
+                      key={col.id}
+                      onClick={() => {
+                        onClose();
+                        navigate(`/collections/${col.id}`);
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-gray-500 hover:bg-white/5 hover:text-cyan-400 transition-all text-xs font-semibold group truncate"
+                    >
+                      <FolderHeart className="w-3.5 h-3.5 shrink-0 text-gray-600 group-hover:text-gray-400 transition-colors" />
+                      <span className="flex-1 text-left truncate line-through decoration-white/20">{col.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Link to all collections */}
+              <button
+                onClick={() => {
+                  onClose();
+                  navigate('/collections');
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-2 mt-1 rounded-xl text-cyan-400/60 hover:text-cyan-400 hover:bg-white/5 transition-all text-[9px] font-black uppercase tracking-wider"
+              >
+                <Users className="w-3.5 h-3.5 shrink-0" />
+                Manage All Vaults
+              </button>
+            </div>
+          </div>
+
+          {/* Pending Requests */}
           <div className="px-2 mb-1">
             <SidebarRow
-              icon={<Users className="w-5 h-5 text-cyan-400" />}
-              label="Shared Vaults"
+              icon={<Shield className="w-5 h-5 text-cyan-400" />}
+              label="Pending Requests"
               active={false}
               onClick={() => {
                 onClose();
-                navigate('/collections');
+                navigate('/pending-requests');
               }}
             />
           </div>
@@ -220,6 +414,8 @@ export function Sidebar({
 
               return (
                 <div key={`parent-group-${parent.id}`} className="space-y-0.5">
+                  <div className="flex items-center group/catrow">
+                  <div className="flex-1 min-w-0">
                   <SidebarRow
                     icon={<ParentIcon className="w-5 h-5" style={{ color: parent.color || '#3b82f6' }} />}
                     label={parent.name}
@@ -241,6 +437,20 @@ export function Sidebar({
                       ) : null
                     }
                   />
+                  </div>
+                  {/* Share icon — only visible on hover of the category row */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClose();
+                      navigate(`/collections`);
+                    }}
+                    title={`Share "${parent.name}"`}
+                    className="opacity-0 group-hover/catrow:opacity-100 mr-2 p-1.5 rounded-lg hover:bg-cyan-500/10 text-gray-500 hover:text-cyan-400 transition-all duration-150 shrink-0"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                  </button>
+                  </div>
 
                   {/* Children container with smooth transition */}
                   <div

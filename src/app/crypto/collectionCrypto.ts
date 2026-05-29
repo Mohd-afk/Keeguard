@@ -390,6 +390,19 @@ async function unwrapItemKey(wrappedB64: string, collectionKey: CryptoKey): Prom
   );
 }
 
+/**
+ * Decrypts an item key using the old collection key and re-wraps it using the new collection key.
+ */
+export async function rewrapItemKey(
+  wrappedItemKeyB64: string,
+  oldCollectionKey: CryptoKey,
+  newCollectionKey: CryptoKey
+): Promise<string> {
+  log.debug('Re-wrapping item key with new collection key');
+  const itemKey = await unwrapItemKey(wrappedItemKeyB64, oldCollectionKey);
+  return wrapItemKey(itemKey, newCollectionKey);
+}
+
 // ── Collection Item Encrypt / Decrypt ─────────────────────────────────────────
 
 /**

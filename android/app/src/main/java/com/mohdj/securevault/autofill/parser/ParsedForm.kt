@@ -7,6 +7,7 @@ enum class FormType {
 data class ParsedForm(
     val formType: FormType,
     val usernameField: ParsedField? = null,
+    val emailField: ParsedField? = null,
     val passwordField: ParsedField? = null,
     val newPasswordField: ParsedField? = null,
     val confirmPasswordField: ParsedField? = null,
@@ -17,6 +18,7 @@ data class ParsedForm(
     val hasPasswordField: Boolean get() = passwordField != null
     val allAutofillIds get() = listOfNotNull(
         usernameField?.autofillId,
+        emailField?.autofillId,
         passwordField?.autofillId,
         newPasswordField?.autofillId,
         confirmPasswordField?.autofillId

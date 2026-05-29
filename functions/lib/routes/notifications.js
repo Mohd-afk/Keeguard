@@ -3,9 +3,10 @@
 // Endpoints for managing notification read status.
 // ─────────────────────────────────────────────────────────────────────────────
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.markNotificationRead = void 0;
+exports.respondToShareRequest = exports.markNotificationRead = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const inviteService_1 = require("../services/inviteService");
 function checkAuth(context) {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
@@ -34,6 +35,52 @@ exports.markNotificationRead = functions.https.onCall(async (data, context) => {
     catch (err) {
         console.error('Error in markNotificationRead:', err);
         throw new functions.https.HttpsError('internal', err.message || 'Failed to mark read');
+    }
+});
+/**
+ * Accepts or declines a folder share invite and marks the notification as read.
+ */
+exports.respondToShareRequest = functions.https.onCall(async (data, context) => {
+    const actorUserId = checkAuth(context);
+    const { notificationId, accept } = data;
+    if (!notificationId || accept === undefined) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required arguments: notificationId, accept.');
+    }
+    const db = admin.firestore();
+    const notificationRef = db
+        .collection('users')
+        .doc(actorUserId)
+        .collection('notifications')
+        .doc(notificationId);
+    try {
+        const notifSnap = await notificationRef.get();
+        if (!notifSnap.exists) {
+            throw new functions.https.HttpsError('not-found', 'Notification not found');
+        }
+        const notifData = notifSnap.data();
+        const metadata = notifData.metadata || {};
+        const collectionId = metadata.collection_id;
+        const inviteId = metadata.invite_id;
+        if (!collectionId || !inviteId) {
+            throw new functions.https.HttpsError('failed-precondition', 'Notification does not contain collection_id or invite_id metadata.');
+        }
+        // Process accept or decline
+        if (accept) {
+            await (0, inviteService_1.acceptCollectionInvite)(collectionId, actorUserId, inviteId);
+        }
+        else {
+            await (0, inviteService_1.declineCollectionInvite)(collectionId, actorUserId, inviteId);
+        }
+        // Mark read
+        await notificationRef.update({
+            status: 'read',
+            read_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { success: true };
+    }
+    catch (err) {
+        console.error('Error in respondToShareRequest:', err);
+        throw new functions.https.HttpsError('internal', err.message || 'Failed to respond to share request');
     }
 });
 //# sourceMappingURL=notifications.js.map

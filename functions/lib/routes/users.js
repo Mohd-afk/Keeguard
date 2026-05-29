@@ -3,7 +3,7 @@
 // Handles privacy-preserving username prefix search with uniform response times.
 // ─────────────────────────────────────────────────────────────────────────────
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchUsers = void 0;
+exports.getConnections = exports.searchUsers = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const rateLimitService_1 = require("../services/rateLimitService");
@@ -41,17 +41,29 @@ exports.searchUsers = functions.https.onCall(async (data, context) => {
     }
     const db = admin.firestore();
     // 3. Query usernames starting with queryText
-    const snap = await db
-        .collection('usernames')
-        .where(admin.firestore.FieldPath.documentId(), '>=', queryText)
-        .where(admin.firestore.FieldPath.documentId(), '<=', queryText + '\uf8ff')
-        .limit(10)
-        .get();
+    // Exact match preference to prevent enumeration, otherwise fuzzy prefix query limited to 5
+    const exactSnap = await db.collection('usernames').doc(queryText).get();
+    let usernamesDocs = [];
+    if (exactSnap.exists) {
+        usernamesDocs = [exactSnap];
+    }
+    else {
+        const snap = await db
+            .collection('usernames')
+            .where(admin.firestore.FieldPath.documentId(), '>=', queryText)
+            .where(admin.firestore.FieldPath.documentId(), '<=', queryText + '\uf8ff')
+            .limit(5)
+            .get();
+        usernamesDocs = snap.docs;
+    }
     const results = [];
     // Fetch profiles in parallel to enrich search results with display details
-    const profilePromises = snap.docs.map(async (doc) => {
+    const profilePromises = usernamesDocs.map(async (doc) => {
         const username = doc.id;
-        const userUid = doc.data().uid;
+        const uData = doc.data();
+        if (!uData)
+            return;
+        const userUid = uData.uid;
         if (userUid === uid)
             return; // Don't return self
         const profileSnap = await db
@@ -74,5 +86,63 @@ exports.searchUsers = functions.https.onCall(async (data, context) => {
         await new Promise((resolve) => setTimeout(resolve, 100 - elapsed));
     }
     return { results };
+});
+/**
+ * Fetch the recent users list based on active memberships in the current user's shared collections.
+ */
+exports.getConnections = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+    const uid = context.auth.uid;
+    const db = admin.firestore();
+    try {
+        // 1. Find collections where this user is an active member
+        const memberSnap = await db
+            .collectionGroup('members')
+            .where('user_id', '==', uid)
+            .where('status', '==', 'active')
+            .get();
+        const collectionIds = memberSnap.docs.map((doc) => doc.ref.parent.parent.id);
+        if (collectionIds.length === 0) {
+            return { connections: [] };
+        }
+        const connectionsMap = new Map();
+        // 2. Fetch active members of these collections in parallel
+        const fetchPromises = collectionIds.map(async (cid) => {
+            const memsSnap = await db
+                .collection('collections')
+                .doc(cid)
+                .collection('members')
+                .where('status', '==', 'active')
+                .get();
+            for (const mDoc of memsSnap.docs) {
+                const mData = mDoc.data();
+                const memberUid = mData.user_id;
+                if (memberUid === uid)
+                    continue; // Skip self
+                if (!connectionsMap.has(memberUid)) {
+                    const profileSnap = await db
+                        .collection('users')
+                        .doc(memberUid)
+                        .collection('data')
+                        .doc('profile')
+                        .get();
+                    const profileData = profileSnap.exists ? profileSnap.data() : {};
+                    connectionsMap.set(memberUid, {
+                        uid: memberUid,
+                        username: profileData.username || 'unknown',
+                        displayName: profileData.displayName || profileData.display_name || undefined,
+                    });
+                }
+            }
+        });
+        await Promise.all(fetchPromises);
+        return { connections: Array.from(connectionsMap.values()) };
+    }
+    catch (err) {
+        console.error('Error in getConnections:', err);
+        throw new functions.https.HttpsError('internal', err.message || 'Failed to fetch connections');
+    }
 });
 //# sourceMappingURL=users.js.map

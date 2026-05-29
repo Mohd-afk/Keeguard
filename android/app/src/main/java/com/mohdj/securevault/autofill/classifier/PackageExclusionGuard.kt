@@ -15,14 +15,23 @@ class PackageExclusionGuard {
     private var userBlocklist: Set<String> = emptySet()
 
     fun shouldSkip(structure: AssistStructure): Boolean {
-        val pkg = structure.activityComponent.packageName
-        // Rule 1: ALWAYS skip our own app — fixes unlock prompt on our own search/master-password fields
-        if (pkg == BuildConfigProvider.applicationId) return true
-        if (systemPrefixes.any { pkg.startsWith(it) }) return true
-        if (pkg in hardcodedBlocklist) return true
-        if (pkg in userBlocklist) return true
+        val pkg = structure.activityComponent?.packageName ?: ""
+        return shouldSkip(pkg)
+    }
+
+    /**
+     * Visible for testing. Checks package blocklist rules directly without AssistStructure mocks.
+     */
+    fun shouldSkip(packageName: String): Boolean {
+        if (packageName.isBlank()) return false
+        if (packageName == BuildConfigProvider.applicationId) return true
+        if (systemPrefixes.any { packageName.startsWith(it) }) return true
+        if (packageName in hardcodedBlocklist) return true
+        if (packageName in userBlocklist) return true
         return false
     }
 
-    fun updateUserBlocklist(packages: Set<String>) { userBlocklist = packages }
+    fun updateUserBlocklist(packages: Set<String>) { 
+        userBlocklist = packages 
+    }
 }

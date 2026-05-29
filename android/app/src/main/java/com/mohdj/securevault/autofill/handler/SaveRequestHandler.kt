@@ -1,7 +1,9 @@
 package com.mohdj.securevault.autofill.handler
 
 import android.content.Context
-import android.content.Intent
+import com.mohdj.securevault.autofill.AutofillEvent
+import com.mohdj.securevault.autofill.AutofillEventBus
+import com.mohdj.securevault.autofill.SecureLogger
 import com.mohdj.securevault.autofill.matcher.CredentialMatcher
 import com.mohdj.securevault.autofill.matcher.VaultCredential
 import com.mohdj.securevault.autofill.matcher.VaultRepository
@@ -26,19 +28,24 @@ class SaveRequestHandler(
         extractedUsername: String?,
         extractedPassword: String?
     ): SaveResult {
-        if (extractedUsername.isNullOrBlank() && extractedPassword.isNullOrBlank()) {
+        val username = extractedUsername ?: ""
+        val password = extractedPassword ?: ""
+
+        // 1. Verify via FormSubmissionHeuristics
+        if (!FormSubmissionHeuristics.shouldPromptSave(parsedForm, username, password)) {
+            SecureLogger.i("SaveRequestHandler: FormSubmissionHeuristics rejected save trigger.")
             return SaveResult.IncompleteData
         }
-        val password = extractedPassword ?: return SaveResult.IncompleteData
 
-        val existing = extractedUsername?.let {
-            credentialMatcher.findByUsernameAndDomain(it, parsedForm.canonicalIdentifier)
-        }
+        // 2. Find if this credential already exists in database
+        val existing = if (username.isNotEmpty()) {
+            credentialMatcher.findByUsernameAndDomain(username, parsedForm.canonicalIdentifier)
+        } else null
 
         return when {
             existing == null -> {
                 val suggestedCat = categorySuggester.suggest(parsedForm)
-                SaveResult.NeedsNewSave(extractedUsername ?: "", password, suggestedCat)
+                SaveResult.NeedsNewSave(username, password, suggestedCat)
             }
             existing.password != password -> {
                 SaveResult.NeedsUpdate(existing.id, existing.username, password)
@@ -47,30 +54,38 @@ class SaveRequestHandler(
         }
     }
 
-    // Launches the in-app save bottom sheet via a broadcast to the Capacitor layer
+    /**
+     * Launches the in-app save bottom sheet by emitting an event to the AutofillEventBus.
+     */
     fun launchSaveUI(result: SaveResult, parsedForm: ParsedForm) {
         when (result) {
             is SaveResult.NeedsNewSave -> {
-                val intent = Intent("com.mohdj.securevault.AUTOFILL_SAVE").apply {
-                    putExtra("action", "new")
-                    putExtra("domain", parsedForm.canonicalIdentifier)
-                    putExtra("username", result.username)
-                    putExtra("password", result.password)
-                    putExtra("suggested_category_id", result.suggestedCategoryId)
-                }
-                context.sendBroadcast(intent)
+                val event = AutofillEvent.SaveRequestEvent(
+                    action = "new",
+                    domain = parsedForm.canonicalIdentifier,
+                    username = result.username,
+                    password = result.password,
+                    credentialId = "",
+                    suggestedCategoryId = result.suggestedCategoryId
+                )
+                val success = AutofillEventBus.trySend(event)
+                SecureLogger.i("SaveRequestHandler: Dispatched new save event via EventBus (success=$success)")
             }
             is SaveResult.NeedsUpdate -> {
-                val intent = Intent("com.mohdj.securevault.AUTOFILL_SAVE").apply {
-                    putExtra("action", "update")
-                    putExtra("domain", parsedForm.canonicalIdentifier)
-                    putExtra("credential_id", result.existingId)
-                    putExtra("username", result.username)
-                    putExtra("new_password", result.newPassword)
-                }
-                context.sendBroadcast(intent)
+                val event = AutofillEvent.SaveRequestEvent(
+                    action = "update",
+                    domain = parsedForm.canonicalIdentifier,
+                    username = result.username,
+                    password = result.newPassword,
+                    credentialId = result.existingId,
+                    suggestedCategoryId = null
+                )
+                val success = AutofillEventBus.trySend(event)
+                SecureLogger.i("SaveRequestHandler: Dispatched update save event via EventBus (success=$success)")
             }
-            else -> { /* No-op */ }
+            else -> {
+                SecureLogger.d("SaveRequestHandler: No change detected or incomplete data. Skipping Save UI.")
+            }
         }
     }
 }

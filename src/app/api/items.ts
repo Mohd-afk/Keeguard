@@ -17,6 +17,8 @@ export interface CommitItemParams {
   itemKeyVersion?: number;
   wrappedItemKey?: string;
   isDelete?: boolean;
+  vaultItemId?: string;
+  ownerUserId?: string;
 }
 
 export interface CommitItemResult {

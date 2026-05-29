@@ -31,6 +31,7 @@ import {
   ArrowLeft,
   BookTemplate,
   History,
+  Share2,
 } from 'lucide-react';
 import {
   addVaultChangeListener,
@@ -568,7 +569,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
+    <div className="min-h-screen bg-[#1a1a2e] flex flex-col animate-page">
       {/* ── Sort Modal ──────────────────────────────────────────────── */}
       <SortModal
         open={sortModalOpen}
@@ -581,7 +582,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       <div className="sticky top-0 z-20 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         {/* Top row */}
         {isSelectionMode ? (
-          <div className="flex items-center justify-between px-4 py-3 bg-[#16213e]/75 backdrop-blur-md border-b border-cyan-500/20 animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between px-4 py-3 bg-[#16213e]/75 backdrop-blur-md border-b border-cyan-500/20 animate-in slide-in-from-top-2 duration-200 h-14">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
@@ -607,7 +608,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center justify-between px-4 py-3 h-14">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSidebarOpen(true)}
@@ -1104,24 +1105,36 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               </button>
 
               {/* Custom Categories */}
-              {customCategories.map((cat) => {
+              {customCategories.filter(cat => !cat.isHidden).map((cat) => {
                 const count = categoryCounts.custom[cat.id] || 0;
                 return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCategoryDetail(cat.id)}
-                    className="p-3.5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98]"
-                    style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#16213e' }}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="p-2 rounded-xl" style={{ backgroundColor: `${cat.color}15`, color: cat.color }}>
-                        <Shield className="w-5 h-5" />
+                  <div key={cat.id} className="relative group/catcard">
+                    <button
+                      onClick={() => setActiveCategoryDetail(cat.id)}
+                      className="w-full p-3.5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98]"
+                      style={{ borderColor: 'rgba(255,255,255,0.05)', background: '#16213e' }}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="p-2 rounded-xl" style={{ backgroundColor: `${cat.color}15`, color: cat.color }}>
+                          <Shield className="w-5 h-5" />
+                        </div>
+                        <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">{count}</span>
                       </div>
-                      <span className="text-xs font-semibold text-gray-400 group-hover:text-gray-300 bg-white/5 px-2 py-0.5 rounded-full">{count}</span>
-                    </div>
-                    <p className="text-white font-medium text-sm mt-3 truncate">{cat.name}</p>
-                    <p className="text-gray-500 text-xs mt-0.5 truncate">Custom category</p>
-                  </button>
+                      <p className="text-white font-medium text-sm mt-3 truncate">{cat.name}</p>
+                      <p className="text-gray-500 text-xs mt-0.5 truncate">Custom category</p>
+                    </button>
+                    {/* Share button — appears on hover */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate('/collections');
+                      }}
+                      title={`Share "${cat.name}"`}
+                      className="absolute top-2 right-2 opacity-0 group-hover/catcard:opacity-100 p-1.5 rounded-lg bg-[#1a1a2e]/80 hover:bg-cyan-500/10 text-gray-500 hover:text-cyan-400 transition-all duration-200 border border-white/5 hover:border-cyan-500/20"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 );
               })}
             </div>

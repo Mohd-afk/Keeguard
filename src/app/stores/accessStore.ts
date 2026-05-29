@@ -132,6 +132,7 @@ export async function sendInvite(
   targetUsername: string,
   role: Exclude<CollectionRole, 'owner'>,
   message?: string,
+  recipientEnvelope?: { wrappedKey: string; senderPublicKeyB64: string }
 ): Promise<string> {
   const cid = _activeCollectionId;
   if (!cid) throw new Error('No active collection selected');
@@ -142,6 +143,7 @@ export async function sendInvite(
     targetUsername,
     role,
     message,
+    recipientEnvelope,
   });
 
   log.info('Invite sent successfully', { inviteId });
@@ -181,5 +183,14 @@ export async function removeMember(targetUserId: string): Promise<void> {
 
   log.info('Removing member from collection', { targetUserId, cid });
   await apiRemoveMember(cid, targetUserId);
-  log.info('Member removed successfully');
+  log.info('Member removed successfully, triggering key rotation');
+
+  try {
+    const { rotateCollectionKey } = await import('./syncStore');
+    await rotateCollectionKey(cid, targetUserId);
+    log.info('Collection keys rotated successfully');
+  } catch (rotErr) {
+    log.error('Key rotation failed after member removal', rotErr);
+    // Log error but don't crash UI since member is already removed from access list on Firestore
+  }
 }

@@ -14,12 +14,12 @@ function checkAuth(context) {
 }
 exports.createInvite = functions.https.onCall(async (data, context) => {
     const actorUserId = checkAuth(context);
-    const { collectionId, targetUsername, role, message } = data;
+    const { collectionId, targetUsername, role, message, recipientEnvelope } = data;
     if (!collectionId || !targetUsername || !role) {
         throw new functions.https.HttpsError('invalid-argument', 'Missing required arguments: collectionId, targetUsername, role.');
     }
     try {
-        const inviteId = await (0, inviteService_1.createCollectionInvite)(collectionId, actorUserId, targetUsername, role, message || null);
+        const inviteId = await (0, inviteService_1.createCollectionInvite)(collectionId, actorUserId, targetUsername, role, message || null, recipientEnvelope);
         return { success: true, inviteId };
     }
     catch (err) {

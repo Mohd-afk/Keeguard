@@ -1,35 +1,13 @@
 package com.mohdj.securevault.autofill
 
+import android.content.Context
+import com.mohdj.securevault.autofill.security.CategorySyncSecurity
 import com.mohdj.securevault.autofill.suggestion.CategoryRepository
+import org.json.JSONObject
 
-/**
- * AutofillCategoryRepositoryAdapter
- *
- * Implements the autofill module's [CategoryRepository] interface.
- *
- * In the current architecture, the category data lives in Firestore and is only
- * accessible from the JS/WebView layer. The native autofill context cannot make
- * live Firestore calls without breaking the service's coroutine/offline model.
- *
- * Strategy:
- *   - A hardcoded map covers the built-in default category keys that
- *     [SmartCategorySuggester] produces. These keys are resolved to stable
- *     string IDs that match what the JS vault uses for its default categories.
- *   - If no match is found, falls back to the root "Passwords" category ID.
- *   - The JS layer can override the final category at confirm-time via the
- *     [AutofillBridgePlugin.saveCredentialFromAutofill] call, so the native
- *     suggestion is a best-effort pre-selection only.
- *
- * Future improvement: The JS vault bridge plugin could push live category IDs
- * into SharedPreferences when the vault is unlocked, allowing this adapter
- * to resolve live IDs dynamically.
- */
-class AutofillCategoryRepositoryAdapter : CategoryRepository {
+class AutofillCategoryRepositoryAdapter(private val context: Context) : CategoryRepository {
 
-    // Default category keys produced by SmartCategorySuggester → display names.
-    // These IDs must match the actual Firestore category document IDs used by
-    // the JS vault layer. If you rename categories, update this map accordingly.
-    private val categoryKeyToId: Map<String, String> = mapOf(
+    private val defaultCategoryKeyToId: Map<String, String> = mapOf(
         "email"          to "cat_email",
         "social_media"   to "cat_social",
         "gaming"         to "cat_gaming",
@@ -42,8 +20,33 @@ class AutofillCategoryRepositoryAdapter : CategoryRepository {
 
     private val rootPasswordsCategoryId = "cat_passwords"
 
-    override suspend fun getCategoryIdByKey(key: String): String? =
-        categoryKeyToId[key]
+    override suspend fun getCategoryIdByKey(key: String): String? {
+        // Attempt to load dynamic categories from SharedPreferences
+        val prefs = context.getSharedPreferences("kg_live_categories", Context.MODE_PRIVATE)
+        val payload = prefs.getString("categories_payload", null)
+        val hmac = prefs.getString("categories_hmac", null)
+
+        if (!payload.isNullOrBlank() && !hmac.isNullOrBlank()) {
+            // Verify HMAC signature before using payload
+            if (CategorySyncSecurity.verifyHmac(payload, hmac)) {
+                try {
+                    val json = JSONObject(payload)
+                    if (json.has(key)) {
+                        val dynamicId = json.getString(key)
+                        if (dynamicId.isNotEmpty()) {
+                            return dynamicId
+                        }
+                    }
+                } catch (e: Exception) {
+                    SecureLogger.e("AutofillCategoryRepositoryAdapter: JSON parsing of sync categories failed", e)
+                }
+            } else {
+                SecureLogger.w("AutofillCategoryRepositoryAdapter: HMAC signature verification failed for sync categories! Falling back to defaults.")
+            }
+        }
+
+        return defaultCategoryKeyToId[key]
+    }
 
     override suspend fun getRootPasswordsCategoryId(): String =
         rootPasswordsCategoryId

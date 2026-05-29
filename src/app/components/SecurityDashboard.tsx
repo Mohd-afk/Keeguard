@@ -231,6 +231,34 @@ function DetailListScreen({
   );
 }
 
+// ── Timestamp formatter ───────────────────────────────────────────────
+function formatLastChecked(isoString: string | null): string {
+  if (!isoString) return 'Never checked';
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return 'Never checked';
+    
+    const optionsDate: Intl.DateTimeFormatOptions = {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    };
+    
+    const optionsTime: Intl.DateTimeFormatOptions = {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    };
+    
+    const datePart = date.toLocaleDateString('en-US', optionsDate);
+    const timePart = date.toLocaleTimeString('en-US', optionsTime);
+    
+    return `${datePart} at ${timePart}`;
+  } catch (e) {
+    return 'Never checked';
+  }
+}
+
 // ── Main SecurityDashboard ────────────────────────────────────────────
 type DashboardState = 'idle' | 'checking' | 'done';
 type DetailView = null | 'compromised' | 'weak' | 'reused' | '2fa';
@@ -243,17 +271,51 @@ export function SecurityDashboard() {
   }>();
   const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'U';
 
-  const [dashState, setDashState] = useState<DashboardState>('idle');
+  const [dashState, setDashState] = useState<DashboardState>(() => {
+    return localStorage.getItem('keeguard_security_analysis_result') ? 'done' : 'idle';
+  });
   const [progress, setProgress] = useState({ checked: 0, total: 0 });
   const [lastChecked, setLastChecked] = useState<string | null>(
     () => localStorage.getItem('keeguard_security_last_checked')
   );
-  const [analysis, setAnalysis] = useState<SecurityAnalysis | null>(null);
-  const [detailView, setDetailView] = useState<DetailView>(null);
-
+  
   const items = getVaultItems().filter((i) => !i.deletedAt);
-
   const { weak, reused, twoFaMissing, total } = analyzeVault(items);
+
+  const [analysis, setAnalysis] = useState<SecurityAnalysis | null>(() => {
+    try {
+      const savedResult = localStorage.getItem('keeguard_security_analysis_result');
+      if (savedResult) {
+        const parsed = JSON.parse(savedResult);
+        const compromisedIds = new Set(parsed.compromisedIds || []);
+        const unavailableIds = new Set(parsed.unavailableIds || []);
+        const active = getVaultItems().filter((i) => !i.deletedAt && i.password);
+        
+        return {
+          weak: active.filter((i) => {
+            const p = i.password;
+            return p.length < 10 || !/[A-Z]/.test(p) || !/[0-9]/.test(p);
+          }),
+          reused: (() => {
+            const passwordCount = new Map<string, number>();
+            active.forEach((i) => {
+              passwordCount.set(i.password, (passwordCount.get(i.password) || 0) + 1);
+            });
+            return active.filter((i) => (passwordCount.get(i.password) || 0) > 1);
+          })(),
+          twoFaMissing: active.filter((i) => i.password && !i.totpSecretEncrypted && !i.totpSecret),
+          compromised: active.filter((i) => compromisedIds.has(i.id)),
+          unavailable: active.filter((i) => unavailableIds.has(i.id)),
+          total: active.length,
+        };
+      }
+    } catch (e) {
+      console.error('Failed to restore security check analysis', e);
+    }
+    return null;
+  });
+  
+  const [detailView, setDetailView] = useState<DetailView>(null);
 
   const runSecurityCheck = useCallback(async () => {
     setDashState('checking');
@@ -269,17 +331,23 @@ export function SecurityDashboard() {
     const compromisedIds = new Set(result.compromised);
     const unavailableIds = new Set(result.unavailable);
 
-    setAnalysis({
+    const currentAnalysis = {
       weak,
       reused,
       twoFaMissing,
       compromised: active.filter((i) => compromisedIds.has(i.id)),
       unavailable: active.filter((i) => unavailableIds.has(i.id)),
       total,
-    });
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setLastChecked(timeStr);
-    localStorage.setItem('keeguard_security_last_checked', timeStr);
+    };
+
+    setAnalysis(currentAnalysis);
+    const timeStamp = new Date().toISOString();
+    setLastChecked(timeStamp);
+    localStorage.setItem('keeguard_security_last_checked', timeStamp);
+    localStorage.setItem('keeguard_security_analysis_result', JSON.stringify({
+      compromisedIds: Array.from(compromisedIds),
+      unavailableIds: Array.from(unavailableIds),
+    }));
     setDashState('done');
   }, [items, weak, reused, twoFaMissing, total]);
 
@@ -304,9 +372,9 @@ export function SecurityDashboard() {
   // ── Checking state ───────────────────────────────────────────────────
   if (dashState === 'checking') {
     return (
-      <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
-        <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_0px)]">
-          <div className="flex items-center justify-between px-4 py-3">
+      <div className="min-h-screen bg-[#1a1a2e] flex flex-col animate-page">
+        <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
+          <div className="flex items-center justify-between px-4 py-3 h-14">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSidebarOpen(true)}
@@ -378,10 +446,10 @@ export function SecurityDashboard() {
   const display2FA = analysis?.twoFaMissing.length ?? twoFaMissing.length;
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
+    <div className="min-h-screen bg-[#1a1a2e] flex flex-col animate-page">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_0px)]">
-        <div className="flex items-center justify-between px-4 py-3">
+      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
+        <div className="flex items-center justify-between px-4 py-3 h-14">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -414,8 +482,8 @@ export function SecurityDashboard() {
         />
 
         {/* Last checked */}
-        <p className="text-center text-gray-500 text-sm mt-2">
-          {lastChecked ? `Last checked: ${lastChecked}` : 'Never checked'}
+        <p className="text-center text-gray-500 text-xs mt-3">
+          Last checked: <span className="text-gray-300 font-semibold">{formatLastChecked(lastChecked)}</span>
         </p>
 
         {/* Compromised result banner */}

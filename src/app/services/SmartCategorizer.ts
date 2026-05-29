@@ -1,7 +1,9 @@
 /**
  * SmartCategorizer.ts
- * Production-grade smart categorizer core for password managers.
+ * Premium Multi-Signal AI-assisted organization engine for KeeGuard.
  */
+
+// ── Types ────────────────────────────────────────────────────────────
 
 export interface VaultItemData {
   id?: string;
@@ -13,20 +15,34 @@ export interface VaultItemData {
   name?: string;
   username?: string;
   notes?: string;
+  note?: string; // standard note mapping
   metadata?: string;
   category?: string;
   categoryId?: string;
   type?: string;
+  labels?: string[];
+  tags?: string[];
+  totpIssuer?: string;
+  packageName?: string;
+  source?: string;
+  createdFrom?: string;
   [key: string]: any;
 }
 
 export interface CategorizeResult {
   category: string;
+  predictedCategoryId?: string;
+  predictedCategoryKey?: string;
+  serviceName: string;
   confidence: number;
+  confidenceScore?: number;
   source: string;
   action: string;
   evidence: string[];
-  alternatives: { category: string; confidence: number }[];
+  alternatives: { category: string; confidence: number; predictedCategoryId?: string }[];
+  needsReview: boolean;
+  duplicateClusterKey?: string;
+  suggestedIconSource?: string;
 }
 
 export interface ItemProposal {
@@ -45,6 +61,9 @@ export interface ItemProposal {
   approved: boolean;
   evidence: string[];
   alternatives: any[];
+  needsReview: boolean;
+  duplicateClusterKey?: string;
+  suggestedIconSource?: string;
 }
 
 export interface NewCategoryProposal {
@@ -78,23 +97,438 @@ export interface OrganizationPlan {
   };
 }
 
+export interface ExtractedSignals {
+  title: string;
+  domain: string;
+  packageName: string;
+  customFields: Record<string, string>;
+  notes: string;
+  totpIssuer: string;
+  username: string;
+  usernameDomain: string;
+  passwordType: 'api_key' | 'regular';
+  existingCategoryId?: string;
+  tags: string[];
+  source: string;
+}
+
+// ── 1. Learned Preference Store ──────────────────────────────────────
+
+export class LearnedPreferenceStoreService {
+  private key = 'securevault_learned_preferences';
+
+  getPreferences(): Record<string, string> {
+    if (typeof localStorage === 'undefined') return {};
+    try {
+      const stored = localStorage.getItem(this.key);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  savePreference(pattern: string, category: string) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const prefs = this.getPreferences();
+      prefs[pattern.toLowerCase().trim()] = category;
+      localStorage.setItem(this.key, JSON.stringify(prefs));
+    } catch (e) {
+      console.error('Failed to save learned preference:', e);
+    }
+  }
+
+  match(text: string): { category: string; weight: number } | null {
+    const prefs = this.getPreferences();
+    const cleanText = text.toLowerCase().trim();
+    if (!cleanText) return null;
+
+    for (const [pattern, category] of Object.entries(prefs)) {
+      if (cleanText.includes(pattern) || pattern.includes(cleanText)) {
+        return { category, weight: 0.90 };
+      }
+    }
+    return null;
+  }
+}
+
+export const LearnedPreferenceStore = new LearnedPreferenceStoreService();
+
+// ── 2. Signal Extractor ──────────────────────────────────────────────
+
+export class SignalExtractorService {
+  extract(item: VaultItemData): ExtractedSignals {
+    const title = (item.title || item.name || item.appName || '').trim();
+    const url = (item.url || item.website || item.domain || '').trim();
+    const notes = (item.notes || item.note || '').trim();
+    const username = (item.username || '').trim();
+    const packageName = (item.packageName || '').trim();
+    const tags = Array.isArray(item.tags) ? item.tags : (item.labels || []);
+    const totpIssuer = (item.totpIssuer || '').trim();
+    const existingCategoryId = item.categoryId || item.category || undefined;
+    const source = (item.source || item.createdFrom || 'manual').trim();
+
+    // Normalize domain
+    let domain = '';
+    if (url) {
+      try {
+        const withProto = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+        const parsed = new URL(withProto);
+        domain = parsed.hostname.toLowerCase().replace(/^www\./, '');
+      } catch {
+        domain = url.toLowerCase().replace(/^www\./, '').trim();
+      }
+    }
+
+    // Extract identifier from package name
+    let packageDomain = '';
+    if (packageName) {
+      const parts = packageName.toLowerCase().split('.');
+      if (parts.length >= 2) {
+        const candidate = parts.find(p => p !== 'com' && p !== 'android' && p !== 'apps' && p !== 'mshop' && p !== 'katana');
+        if (candidate) packageDomain = candidate;
+      }
+    }
+
+    // Parse serialized custom fields from notes (template layout support)
+    const customFields: Record<string, string> = {};
+    if (notes && notes.startsWith('__template__:')) {
+      const lines = notes.split('\n');
+      lines.slice(1).forEach(line => {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx !== -1) {
+          const key = line.substring(0, colonIdx).trim().toLowerCase();
+          const value = line.substring(colonIdx + 1).trim();
+          customFields[key] = value;
+        }
+      });
+    }
+
+    let usernameDomain = '';
+    if (username && username.includes('@')) {
+      usernameDomain = username.split('@')[1].toLowerCase().trim();
+    }
+
+    // Determine credential pattern to check if it's an infra/API key
+    let passwordType: 'api_key' | 'regular' = 'regular';
+    const pwd = String(item.password || '');
+    if (pwd.length > 24 && /^[A-Za-z0-9_\-]+$/.test(pwd)) {
+      passwordType = 'api_key';
+    }
+
+    return {
+      title,
+      domain: domain || packageDomain,
+      packageName,
+      customFields,
+      notes,
+      totpIssuer,
+      username,
+      usernameDomain,
+      passwordType,
+      existingCategoryId,
+      tags,
+      source
+    };
+  }
+}
+
+export const SignalExtractor = new SignalExtractorService();
+
+// ── 3. Category Inference Engine ─────────────────────────────────────
+
+interface ScoreDetail {
+  category: string;
+  score: number;
+  evidence: string[];
+}
+
+export class CategoryInferenceEngineService {
+  private categoryRules = [
+    {
+      key: 'email',
+      id: 'cat_email',
+      name: 'Email & Communication',
+      indicators: ['gmail', 'outlook', 'yahoo', 'proton', 'zoho', 'hotmail', 'icloud', 'mailbox', 'inbox', 'mail', 'imap', 'smtp'],
+      extraFields: ['recovery email', 'mailbox password', 'app password']
+    },
+    {
+      key: 'social_media',
+      id: 'cat_social',
+      name: 'Social Media',
+      indicators: ['instagram', 'facebook', 'x', 'twitter', 'snapchat', 'reddit', 'discord', 'telegram', 'whatsapp', 'linkedin', 'tiktok', 'pinterest']
+    },
+    {
+      key: 'banking',
+      id: 'cat_banking',
+      name: 'Banking & Finance',
+      indicators: ['bank', 'credit', 'debit', 'card', 'finance', 'wealth', 'upi', 'wallet', 'payment', 'paypal', 'stripe', 'ifsc', 'netbanking', 'cash', 'mpin', 'cif', 'account number', 'cardholder']
+    },
+    {
+      key: 'shopping',
+      id: 'cat_subs',
+      name: 'Shopping',
+      indicators: ['amazon', 'flipkart', 'myntra', 'etsy', 'shopify', 'ecommerce', 'order', 'seller', 'marketplace', 'ebay']
+    },
+    {
+      key: 'work',
+      id: 'cat_work',
+      name: 'Work & Productivity',
+      indicators: ['github', 'gitlab', 'jira', 'atlassian', 'slack', 'figma', 'aws', 'azure', 'gcp', 'office', 'admin', 'dashboard', 'workspace', 'sso', 'vpn', 'teams', 'zoom', 'notion', 'trello', 'confluence']
+    },
+    {
+      key: 'entertainment',
+      id: 'cat_subs',
+      name: 'Entertainment',
+      indicators: ['netflix', 'spotify', 'youtube', 'prime video', 'hulu', 'disney', 'hbomax', 'appletv', 'twitch', 'soundcloud', 'crunchyroll']
+    },
+    {
+      key: 'gaming',
+      id: 'cat_gaming',
+      name: 'Gaming',
+      indicators: ['steam', 'epic', 'riot', 'ubisoft', 'ea', 'playstation', 'xbox', 'roblox', 'battle.net', 'gog', 'nintendo', 'game']
+    },
+    {
+      key: 'developer_or_infra',
+      id: 'cat_work',
+      name: 'Cloud Infrastructure',
+      indicators: ['api key', 'ssh', 'server', 'db', 'postgres', 'mongodb', 'docker', 'kubernetes', 'cloudflare', 'vps', 'hosting', 'redis', 'mysql', 'heroku', 'digitalocean']
+    }
+  ];
+
+  private matchesIndicator(text: string, ind: string): boolean {
+    const textLower = text.toLowerCase();
+    const indLower = ind.toLowerCase();
+    
+    // For single-letter indicators like 'x', enforce word boundaries
+    if (indLower.length <= 2) {
+      const escaped = indLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+      return regex.test(textLower);
+    }
+    
+    return textLower.includes(indLower);
+  }
+
+  score(signals: ExtractedSignals, prefsStore: LearnedPreferenceStoreService): ScoreDetail[] {
+    const scoresMap = new Map<string, { score: number; evidence: string[] }>();
+
+    const getScoreObj = (categoryName: string) => {
+      if (!scoresMap.has(categoryName)) {
+        scoresMap.set(categoryName, { score: 0, evidence: [] });
+      }
+      return scoresMap.get(categoryName)!;
+    };
+
+    const titleLower = signals.title.toLowerCase();
+    const domainLower = signals.domain.toLowerCase();
+    const notesLower = signals.notes.toLowerCase();
+    const totpIssuerLower = signals.totpIssuer.toLowerCase();
+    
+    const customFieldsLowerKeys = Object.keys(signals.customFields);
+    const customFieldsLowerValues = Object.values(signals.customFields).map(v => v.toLowerCase());
+
+    // 1. Learned Preference Overrides (weight 0.90)
+    const matchText = `${signals.domain} ${signals.title}`.trim();
+    const override = prefsStore.match(matchText);
+    if (override) {
+      const scoreObj = getScoreObj(override.category);
+      scoreObj.score += override.weight;
+      scoreObj.evidence.push(`Matched historical user override: '${override.category}'`);
+    }
+
+    // 2. High-priority Rules (Weights: exact domain/package 1.0, title keyword 0.85, custom field 0.80, TOTP 0.75, notes 0.70)
+    for (const rule of this.categoryRules) {
+      const scoreObj = getScoreObj(rule.name);
+
+      // Exact domain or package name match
+      if (domainLower && rule.indicators.some(ind => this.matchesIndicator(domainLower, ind))) {
+        scoreObj.score += 1.0;
+        scoreObj.evidence.push(`Domain exact match clue: '${signals.domain}'`);
+      }
+
+      // Title keyword match
+      if (titleLower && rule.indicators.some(ind => this.matchesIndicator(titleLower, ind))) {
+        scoreObj.score += 0.85;
+        scoreObj.evidence.push(`Title keyword matched clue: '${signals.title}'`);
+      }
+
+      // Custom fields match (e.g. Card, Cardholder, Net Banking)
+      const hasCustomFieldKey = customFieldsLowerKeys.some(k => rule.indicators.some(ind => this.matchesIndicator(k, ind))) || 
+                                (rule.extraFields && customFieldsLowerKeys.some(k => rule.extraFields!.some(ef => this.matchesIndicator(k, ef))));
+      const hasCustomFieldValue = customFieldsLowerValues.some(v => rule.indicators.some(ind => this.matchesIndicator(v, ind)));
+      if (hasCustomFieldKey || hasCustomFieldValue) {
+        scoreObj.score += 0.80;
+        scoreObj.evidence.push(`Template custom fields matched for '${rule.name}'`);
+      }
+
+      // TOTP Issuer match
+      if (totpIssuerLower && rule.indicators.some(ind => this.matchesIndicator(totpIssuerLower, ind))) {
+        scoreObj.score += 0.75;
+        scoreObj.evidence.push(`TOTP issuer match: '${signals.totpIssuer}'`);
+      }
+
+      // Notes keyword match
+      if (notesLower && rule.indicators.some(ind => this.matchesIndicator(notesLower, ind))) {
+        scoreObj.score += 0.70;
+        scoreObj.evidence.push(`Notes matched keyword clue for '${rule.name}'`);
+      }
+    }
+
+    // 3. Medium-priority Rules (Username domain hint 0.35, tags 0.65)
+    // Username domain hint: don't classify as email unless it is actual email site
+    if (signals.usernameDomain) {
+      const ud = signals.usernameDomain;
+      const isPublicEmailServer = ['gmail.com', 'outlook.com', 'yahoo.com', 'hotmail.com', 'proton.me', 'icloud.com'].includes(ud);
+      
+      for (const rule of this.categoryRules) {
+        const scoreObj = getScoreObj(rule.name);
+        
+        if (rule.indicators.some(ind => this.matchesIndicator(ud, ind))) {
+          if (rule.key === 'email') {
+            const isEmailService = rule.indicators.some(ind => this.matchesIndicator(domainLower, ind)) || rule.indicators.some(ind => this.matchesIndicator(titleLower, ind));
+            if (isEmailService) {
+              scoreObj.score += 0.35;
+              scoreObj.evidence.push(`Username domain hint matches email provider`);
+            }
+          } else {
+            if (!isPublicEmailServer) {
+              scoreObj.score += 0.35;
+              scoreObj.evidence.push(`Company email domain hints work account`);
+            }
+          }
+        }
+      }
+    }
+
+    // Tags/Labels match
+    if (signals.tags.length > 0) {
+      signals.tags.forEach(tag => {
+        const tagLower = tag.toLowerCase().trim();
+        for (const rule of this.categoryRules) {
+          const scoreObj = getScoreObj(rule.name);
+          if (tagLower === rule.key || tagLower === rule.name.toLowerCase() || rule.indicators.some(ind => tagLower.includes(ind))) {
+            scoreObj.score += 0.65;
+            scoreObj.evidence.push(`Attached tag matched: '${tag}'`);
+          }
+        }
+      });
+    }
+
+    // 4. API Key/Infra credential pattern detection
+    if (signals.passwordType === 'api_key') {
+      const devObj = getScoreObj('Cloud Infrastructure');
+      devObj.score += 0.50;
+      devObj.evidence.push(`Credential length/format suggests API key / server token`);
+    }
+
+    const results: ScoreDetail[] = [];
+    scoresMap.forEach((val, category) => {
+      if (val.score > 0) {
+        results.push({
+          category,
+          score: Math.min(1.0, val.score),
+          evidence: val.evidence
+        });
+      }
+    });
+
+    return results.sort((a, b) => b.score - a.score);
+  }
+}
+
+export const CategoryInferenceEngine = new CategoryInferenceEngineService();
+
+// ── 4. Review Queue ──────────────────────────────────────────────────
+
+export class ReviewQueueService {
+  private queueKey = 'securevault_review_queue';
+
+  getItemsToReview(): string[] {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(this.queueKey);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  addToQueue(itemId: string) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const queue = new Set(this.getItemsToReview());
+      queue.add(itemId);
+      localStorage.setItem(this.queueKey, JSON.stringify(Array.from(queue)));
+    } catch (e) {
+      console.error('Failed to add item to review queue:', e);
+    }
+  }
+
+  removeFromQueue(itemId: string) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const queue = this.getItemsToReview().filter(id => id !== itemId);
+      localStorage.setItem(this.queueKey, JSON.stringify(queue));
+    } catch (e) {
+      console.error('Failed to remove item from review queue:', e);
+    }
+  }
+}
+
+export const ReviewQueue = new ReviewQueueService();
+
+// ── 5. Smart Organizer Engine (Exposing SmartCategorizer) ────────────
+
 class SmartCategorizerService {
   private worker: Worker | null = null;
   private categories: Set<string>;
   private allowNewCategories: boolean;
-  private autoApplyThreshold: number;
-  private suggestThreshold: number;
-  private moveThreshold: number;
-  private newCategoryThreshold: number;
   
-  private userOverrides: Map<string, string>;
-  private userCategoryAffinities: Map<string, number>;
-  private trustedDb: Map<string, string>;
-  private blacklistTokens: Set<string>;
-  private keywordRules: any[];
+  // Custom thresholds mapping the weights requirements
+  private autoApplyThreshold = 0.8;
+  private suggestThreshold = 0.55;
+  private moveThreshold = 0.8;
+  private newCategoryThreshold = 0.86;
 
   private callbacks: Map<number, { resolve: (value: any) => void, reject: (reason?: any) => void }>;
   private msgId: number;
+
+  private BRAND_Synonyms: Record<string, string> = {
+    'google mail': 'Gmail',
+    'googlemail': 'Gmail',
+    'gmail': 'Gmail',
+    'mail.google.com': 'Gmail',
+    'gmail.com': 'Gmail',
+    'workspace mail': 'Gmail',
+    'amazon': 'Amazon',
+    'amazon.com': 'Amazon',
+    'amazon.co.uk': 'Amazon',
+    'aws': 'Amazon Web Services',
+    'github.com': 'GitHub',
+    'github': 'GitHub',
+    'gitlab.com': 'GitLab',
+    'gitlab': 'GitLab',
+    'steam': 'Steam',
+    'steampowered.com': 'Steam',
+    'netflix': 'Netflix',
+    'netflix.com': 'Netflix',
+    'spotify': 'Spotify',
+    'spotify.com': 'Spotify',
+    'facebook': 'Facebook',
+    'facebook.com': 'Facebook'
+  };
+
+  private categoryKeyMap: Record<string, { id: string; key: string }> = {
+    'Email & Communication': { id: 'cat_email', key: 'email' },
+    'Social Media': { id: 'cat_social', key: 'social_media' },
+    'Banking & Finance': { id: 'cat_banking', key: 'banking' },
+    'Shopping': { id: 'cat_subs', key: 'shopping' },
+    'Work & Productivity': { id: 'cat_work', key: 'work' },
+    'Entertainment': { id: 'cat_subs', key: 'entertainment' },
+    'Gaming': { id: 'cat_gaming', key: 'gaming' },
+    'Cloud Infrastructure': { id: 'cat_work', key: 'developer_or_infra' }
+  };
 
   constructor() {
     this.categories = new Set([
@@ -113,58 +547,6 @@ class SmartCategorizerService {
     ]);
 
     this.allowNewCategories = true;
-    this.autoApplyThreshold = 0.9;
-    this.suggestThreshold = 0.7;
-    this.moveThreshold = 0.8;
-    this.newCategoryThreshold = 0.86;
-
-    this.userOverrides = new Map();
-    this.userCategoryAffinities = new Map();
-    
-    this.trustedDb = new Map([
-      ['gmail.com', 'Email & Communication'],
-      ['mail.google.com', 'Email & Communication'],
-      ['outlook.com', 'Email & Communication'],
-      ['yahoo.com', 'Email & Communication'],
-      ['steampowered.com', 'Gaming'],
-      ['epicgames.com', 'Gaming'],
-      ['playstation.com', 'Gaming'],
-      ['xbox.com', 'Gaming'],
-      ['hdfcbank.com', 'Banking & Finance'],
-      ['onlinesbi.sbi', 'Banking & Finance'],
-      ['icicibank.com', 'Banking & Finance'],
-      ['chase.com', 'Banking & Finance'],
-      ['amazon.com', 'Shopping'],
-      ['flipkart.com', 'Shopping'],
-      ['github.com', 'Work & Productivity'], // Mapped Development to Work for simpler hierarchy
-      ['gitlab.com', 'Work & Productivity'],
-      ['aws.amazon.com', 'Cloud Infrastructure'],
-      ['console.aws.amazon.com', 'Cloud Infrastructure'],
-      ['notion.so', 'Work & Productivity'],
-      ['slack.com', 'Work & Productivity'],
-      ['zoom.us', 'Work & Productivity'],
-      ['netflix.com', 'Entertainment'],
-      ['spotify.com', 'Entertainment']
-    ]);
-
-    this.blacklistTokens = new Set([
-      'login', 'signin', 'account', 'secure', 'portal', 'online', 'web', 'app', 'home', 'com', 'org', 'net'
-    ]);
-
-    this.keywordRules = [
-      { category: 'Banking & Finance', weight: 0.62, patterns: [/\bbank\b/i, /\bcredit\b/i, /\bloan\b/i, /\bfinance\b/i, /\bwealth\b/i, /\bupi\b/i, /\bcard\b/i, /\bpaypal\b/i, /\bstripe\b/i] },
-      { category: 'Email & Communication', weight: 0.65, patterns: [/\bmail\b/i, /\binbox\b/i, /\bemail\b/i, /\bwebmail\b/i, /\bproton\b/i] },
-      { category: 'Gaming', weight: 0.68, patterns: [/\bsteam\b/i, /\bgame\b/i, /\bgaming\b/i, /\bplaystation\b/i, /\bxbox\b/i, /\bnintendo\b/i, /\bepic\b/i] },
-      { category: 'Shopping', weight: 0.64, patterns: [/\bshop\b/i, /\bstore\b/i, /\bbuy\b/i, /\bcart\b/i, /\border\b/i, /\bmarket\b/i] },
-      { category: 'Social Media', weight: 0.66, patterns: [/\bsocial\b/i, /\bchat\b/i, /\bcommunity\b/i, /\bfriends\b/i, /\bmessage\b/i, /\bfacebook\b/i, /\binstagram\b/i, /\btwitter\b/i, /\btiktok\b/i] },
-      { category: 'Education', weight: 0.69, patterns: [/\bschool\b/i, /\bcollege\b/i, /\buniversity\b/i, /\bstudent\b/i, /\bmoodle\b/i, /\bcourse\b/i] },
-      { category: 'Work & Productivity', weight: 0.61, patterns: [/\bworkspace\b/i, /\bteam\b/i, /\bemployee\b/i, /\bcompany\b/i, /\binternal\b/i, /\boffice\b/i, /\bdeveloper\b/i, /\bapi\b/i, /\bgit\b/i, /\brepository\b/i, /\bdeploy\b/i] },
-      { category: 'Cloud Infrastructure', weight: 0.72, patterns: [/\bcloud\b/i, /\baws\b/i, /\bazure\b/i, /\bgcp\b/i, /\bkubernetes\b/i, /\bdevops\b/i, /\bserver\b/i, /\bdatabase\b/i] },
-      { category: 'Entertainment', weight: 0.63, patterns: [/\bstream\b/i, /\bmovie\b/i, /\bvideo\b/i, /\bmusic\b/i, /\bott\b/i, /\bnetflix\b/i, /\bhulu\b/i, /\bdisney\b/i] },
-      { category: 'Travel', weight: 0.64, patterns: [/\bflight\b/i, /\bhotel\b/i, /\btrip\b/i, /\btravel\b/i, /\bbooking\b/i] },
-      { category: 'Healthcare', weight: 0.67, patterns: [/\bhospital\b/i, /\bhealth\b/i, /\bclinic\b/i, /\bmedical\b/i, /\bdoctor\b/i] },
-    ];
-
     this.callbacks = new Map();
     this.msgId = 0;
 
@@ -189,33 +571,130 @@ class SmartCategorizerService {
     }
   }
 
-  // --- Core API ---
+  resolveServiceName(title: string, domain: string): string {
+    const rawName = `${domain} ${title}`.toLowerCase().trim();
+    for (const [key, value] of Object.entries(this.BRAND_Synonyms)) {
+      if (rawName.includes(key)) {
+        return value;
+      }
+    }
+    const cleanTitle = (title || domain || 'Unknown Account').trim();
+    const firstWord = cleanTitle.split(/[^\p{L}\p{N}]+/u)[0] || cleanTitle;
+    return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+  }
+
+  generateDuplicateClusterKey(title: string, username: string): string {
+    const normTitle = title.toLowerCase().replace(/[^\w]/g, '').slice(0, 10);
+    const normUser = username.toLowerCase().replace(/[^\w]/g, '');
+    return normTitle && normUser ? `dup_${normTitle}_${normUser}` : `dup_cluster_${Math.random().toString(36).substring(7)}`;
+  }
+
+  // --- Core Compatibility API ---
 
   async categorizeEntry(entry: VaultItemData, options: { mode?: 'new-entry' | 'organize-existing' } = {}): Promise<CategorizeResult> {
-    const normalized = this._normalizeEntry(entry);
-    const signals: any[] = [];
+    const signals = SignalExtractor.extract(entry);
+    const scored = CategoryInferenceEngine.score(signals, LearnedPreferenceStore);
 
-    const overrideSignal = this._scoreUserOverride(normalized);
-    if (overrideSignal) signals.push(overrideSignal);
-
-    const trustedSignal = this._scoreTrustedDatabase(normalized);
-    if (trustedSignal) signals.push(trustedSignal);
-
-    signals.push(...this._scoreHeuristics(normalized));
-    signals.push(...this._scoreUserHistory(normalized));
-
-    const mergedSignals = this._mergeSignals(signals);
-
-    let mlSignal = null;
-    if (this.worker && normalized.contextText.length >= 4) {
+    // If ML is active, try to fetch secondary Zero-Shot classifications
+    let mlScore: any = null;
+    if (this.worker && `${signals.title} ${signals.domain} ${signals.notes}`.trim().length >= 4) {
       try {
-        mlSignal = await this._scoreLocalAI(normalized);
-        if (mlSignal) mergedSignals.push(mlSignal);
+        mlScore = await this._scoreLocalAI(`${signals.title} ${signals.domain} ${signals.notes}`);
       } catch (_) {}
     }
 
-    const ranked = this._rankCandidates(mergedSignals);
-    return this._finalizeDecision(normalized, ranked, options.mode || 'new-entry');
+    // Merge heuristics/ovr and ML score
+    if (mlScore && mlScore.category) {
+      const found = scored.find(s => s.category === mlScore.category);
+      if (found) {
+        found.score = Math.min(1.0, found.score + (mlScore.score * 0.25));
+        found.evidence.push("Local Zero-Shot AI matched category");
+      } else {
+        scored.push({
+          category: mlScore.category,
+          score: mlScore.score,
+          evidence: ["Local Zero-Shot AI classified entry"]
+        });
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+
+    // Finalize category selection based on confidence score
+    const winner = scored[0];
+    const second = scored[1];
+    
+    // Safety Margin penalty for close alternatives
+    let confidence = winner ? winner.score : 0;
+    if (winner && second) {
+      const margin = winner.score - second.score;
+      if (margin < 0.08) confidence = Math.max(0, confidence - 0.08);
+      if (margin < 0.04) confidence = Math.max(0, confidence - 0.06);
+    }
+    confidence = Math.round(confidence * 100) / 100;
+
+    const resolvedService = this.resolveServiceName(signals.title, signals.domain);
+    const categoryName = confidence >= this.suggestThreshold && winner ? winner.category : 'Uncategorized';
+
+    const needsReview = confidence < this.suggestThreshold;
+    if (needsReview && entry.id) {
+      ReviewQueue.addToQueue(entry.id);
+    } else if (entry.id) {
+      ReviewQueue.removeFromQueue(entry.id);
+    }
+
+    const mapping = this.categoryKeyMap[categoryName] || { id: 'default_passwords', key: 'general' };
+
+    // Format top 3 alternatives
+    const alternatives = scored.slice(1, 4).map(s => {
+      const mapAlt = this.categoryKeyMap[s.category] || { id: 'default_passwords', key: 'general' };
+      return {
+        category: s.category,
+        confidence: Math.round(s.score * 100) / 100,
+        predictedCategoryId: mapAlt.id
+      };
+    });
+
+    const isBanking = categoryName === 'Banking & Finance';
+    const isShopping = categoryName === 'Shopping';
+    
+    // Icon inference
+    let suggestedIcon = 'KeyRound';
+    if (categoryName === 'Email & Communication') suggestedIcon = 'Mail';
+    else if (categoryName === 'Social Media') suggestedIcon = 'Users';
+    else if (isBanking) {
+      if (signals.notes.toLowerCase().includes('crypto') || signals.title.toLowerCase().includes('crypto')) suggestedIcon = 'Wallet';
+      else if (signals.notes.toLowerCase().includes('card') || signals.title.toLowerCase().includes('card')) suggestedIcon = 'CreditCard';
+      else suggestedIcon = 'Landmark';
+    }
+    else if (isShopping) suggestedIcon = 'ShoppingBag';
+    else if (categoryName === 'Work & Productivity') suggestedIcon = 'Briefcase';
+    else if (categoryName === 'Entertainment') suggestedIcon = 'Tv';
+    else if (categoryName === 'Gaming') suggestedIcon = 'Gamepad2';
+    else if (categoryName === 'Cloud Infrastructure') suggestedIcon = 'Server';
+
+    let action = 'leave-uncategorized';
+    if (confidence >= this.autoApplyThreshold) {
+      action = 'auto-categorize';
+    } else if (confidence >= this.suggestThreshold) {
+      action = 'suggest';
+    }
+
+    return {
+      category: categoryName,
+      predictedCategoryId: mapping.id,
+      predictedCategoryKey: mapping.key,
+      serviceName: resolvedService,
+      confidence,
+      confidenceScore: confidence,
+      source: winner ? winner.evidence.join(', ') : 'No signal found',
+      action,
+      evidence: winner ? winner.evidence : ['Vague metadata, no strong clues'],
+      alternatives,
+      needsReview,
+      duplicateClusterKey: this.generateDuplicateClusterKey(signals.title, signals.username),
+      suggestedIconSource: suggestedIcon
+    };
   }
 
   async planVaultOrganization(vaultItems: VaultItemData[], options: { includeCategorized?: boolean; includeUncategorized?: boolean; createNewCategories?: boolean; categoriesArray?: {id: string, name: string}[] } = {}): Promise<OrganizationPlan> {
@@ -223,22 +702,20 @@ class SmartCategorizerService {
     const includeUncategorized = options.includeUncategorized ?? true;
     const createNewCategories = options.createNewCategories ?? this.allowNewCategories;
 
-    // Sync knowledge of current custom categories
     if (options.categoriesArray) {
-        for (const cat of options.categoriesArray) {
-            this.categories.add(cat.name);
-        }
+      for (const cat of options.categoriesArray) {
+        this.categories.add(cat.name);
+      }
     }
 
     const proposals: ItemProposal[] = [];
     const clusterBuckets = new Map<string, any[]>();
 
     for (const item of vaultItems) {
-      // Find the name of the current category
       let currentCategoryName = 'Uncategorized';
       if (item.categoryId && options.categoriesArray) {
-         const found = options.categoriesArray.find(c => c.id === item.categoryId);
-         if (found) currentCategoryName = found.name;
+        const found = options.categoriesArray.find(c => c.id === item.categoryId);
+        if (found) currentCategoryName = found.name;
       }
 
       const isUncategorized = currentCategoryName === 'Uncategorized';
@@ -270,21 +747,19 @@ class SmartCategorizerService {
   }
 
   learnFromUserDecision({ domain, chosenCategory }: { domain: string; chosenCategory: string }) {
-    const normalizedDomain = this._normalizeHostname(domain);
-    if (!normalizedDomain || !chosenCategory) return;
+    if (!domain || !chosenCategory) return;
+    
+    // Track preference in secure localStorage-backed store
+    LearnedPreferenceStore.savePreference(domain, chosenCategory);
 
-    this.userOverrides.set(normalizedDomain, chosenCategory);
-
-    const existing = this.userCategoryAffinities.get(chosenCategory) || 0;
-    this.userCategoryAffinities.set(chosenCategory, existing + 1);
     this.categories.add(chosenCategory);
   }
 
-  // --- Internal Methods ---
+  // --- Internal Methods ───
 
   private _buildItemProposal(item: VaultItemData, result: CategorizeResult, currentCategoryName: string): ItemProposal {
     const proposedCategory = result.category;
-    const sameCategory = currentCategoryName === proposedCategory || currentCategoryName.toLowerCase() === proposedCategory.toLowerCase();
+    const sameCategory = currentCategoryName.toLowerCase() === proposedCategory.toLowerCase();
 
     let changeType: 'none' | 'categorize' | 'move' | 'suggest-move' = 'none';
     let reason = 'No change suggested';
@@ -292,22 +767,22 @@ class SmartCategorizerService {
 
     if (currentCategoryName === 'Uncategorized' && proposedCategory !== 'Uncategorized') {
       changeType = 'categorize';
-      reason = `Categorize uncategorized item as ${proposedCategory}`;
-      recommended = result.confidence >= this.suggestThreshold;
+      reason = `Categorize as ${proposedCategory} (${result.confidence * 100}% confidence)`;
+      recommended = result.confidence >= this.autoApplyThreshold;
     } else if (!sameCategory && proposedCategory !== 'Uncategorized' && result.confidence >= this.moveThreshold) {
       changeType = 'move';
-      reason = `Move from ${currentCategoryName} to ${proposedCategory}`;
+      reason = `Highly confident move to ${proposedCategory}`;
       recommended = true;
     } else if (!sameCategory && proposedCategory !== 'Uncategorized') {
       changeType = 'suggest-move';
-      reason = `Possible better fit in ${proposedCategory}`;
+      reason = `Suggested shift to ${proposedCategory} (Review recommended)`;
       recommended = false;
     }
 
     return {
       itemId: item.id || '',
       title: item.title || item.appName || item.domain || item.username || 'Unknown item',
-      domain: this._normalizeHostname(item.domain || item.url || ''),
+      domain: item.domain || item.url || '',
       username: item.username || '',
       currentCategory: currentCategoryName,
       proposedCategory,
@@ -319,7 +794,10 @@ class SmartCategorizerService {
       recommended,
       approved: recommended,
       evidence: result.evidence,
-      alternatives: result.alternatives || []
+      alternatives: result.alternatives || [],
+      needsReview: result.needsReview,
+      duplicateClusterKey: result.duplicateClusterKey,
+      suggestedIconSource: result.suggestedIconSource
     };
   }
 
@@ -336,19 +814,14 @@ class SmartCategorizerService {
       if (!inferredName || this.categories.has(inferredName)) continue;
 
       const avgConfidence = bucket.reduce((sum: number, x: any) => sum + (x.result.confidence || 0), 0) / bucket.length;
-      const distinctCurrentCategories = new Set(bucket.map((x: any) => x.proposal.currentCategory));
-      const uncategorizedCount = bucket.filter((x: any) => x.proposal.currentCategory === 'Uncategorized').length;
-
       if (avgConfidence < this.newCategoryThreshold) continue;
-      // Allow new category if it unifies multiple categories or categorizes many uncategorized items
-      if (distinctCurrentCategories.size > 3 && uncategorizedCount < 2) continue;
 
       proposals.push({
         categoryName: inferredName,
-        confidence: this._round(avgConfidence),
+        confidence: Math.round(avgConfidence * 100) / 100,
         basedOnItems: bucket.map((x: any) => x.item.id),
         itemCount: bucket.length,
-        reason: `Create new category '${inferredName}' for similar items that cluster together`,
+        reason: `Cluster with ${bucket.length} items indicates custom domain category '${inferredName}'`,
         approved: false
       });
     }
@@ -390,118 +863,7 @@ class SmartCategorizerService {
     };
   }
 
-  private _scoreUserOverride(entry: any) {
-    const direct = this.userOverrides.get(entry.hostname);
-    if (!direct) return null;
-    return {
-      category: direct,
-      score: 1.0,
-      source: 'user-override',
-      evidence: [`User previously selected ${direct} for ${entry.hostname}`]
-    };
-  }
-
-  private _scoreTrustedDatabase(entry: any) {
-    const exact = this.trustedDb.get(entry.hostname);
-    if (exact) {
-      return {
-        category: exact,
-        score: 0.98,
-        source: 'trusted-db',
-        evidence: [`Trusted mapping matched hostname ${entry.hostname}`]
-      };
-    }
-
-    const root = this._rootDomain(entry.hostname);
-    const rootMatch = this.trustedDb.get(root);
-    if (rootMatch) {
-      return {
-        category: rootMatch,
-        score: 0.95,
-        source: 'trusted-db-root',
-        evidence: [`Trusted mapping matched root domain ${root}`]
-      };
-    }
-
-    return null;
-  }
-
-  private _scoreHeuristics(entry: any) {
-    const signals = [];
-    const text = entry.contextText;
-    const tokenSet = new Set(entry.tokens);
-
-    for (const rule of this.keywordRules) {
-      let matches = 0;
-      const evidence = [];
-      for (const pattern of rule.patterns) {
-        if (pattern.test(text)) {
-          matches += 1;
-          evidence.push(`Matched ${pattern} in metadata`);
-        }
-      }
-
-      let score = rule.weight;
-      if (matches > 1) score += Math.min(0.14, matches * 0.04);
-      if (rule.category === 'Education' && entry.hostname.endsWith('.edu')) {
-        score += 0.18;
-        evidence.push('Hostname uses .edu TLD');
-      }
-      if (rule.category === 'Banking & Finance' && /bank|pay|finance|card/i.test(entry.hostname)) {
-        score += 0.12;
-        evidence.push('Financial token found in hostname');
-      }
-      if (rule.category === 'Email & Communication' && /mail/i.test(entry.hostname)) {
-        score += 0.12;
-        evidence.push('Mail token found in hostname');
-      }
-      if (rule.category === 'Gaming' && /steam|xbox|playstation|epic/i.test(entry.hostname)) {
-        score += 0.14;
-        evidence.push('Gaming token found in hostname');
-      }
-
-      if (/riverbank/i.test(entry.hostname) && rule.category === 'Banking & Finance') {
-        score -= 0.28;
-        evidence.push('False-positive suppression applied for riverbank-like hostname');
-      }
-
-      if (matches > 0) {
-        signals.push({
-          category: rule.category,
-          score: this._clamp(score, 0, 0.96),
-          source: 'heuristics',
-          evidence
-        });
-      }
-    }
-
-    if (tokenSet.has('support') && tokenSet.has('ticket')) {
-      signals.push({
-        category: 'Work & Productivity',
-        score: 0.74,
-        source: 'heuristics',
-        evidence: ['Support and ticket tokens indicate internal or work system']
-      });
-    }
-
-    return signals;
-  }
-
-  private _scoreUserHistory(entry: any) {
-    const signals = [];
-    for (const [category, count] of this.userCategoryAffinities.entries()) {
-      if (count < 3) continue;
-      signals.push({
-        category,
-        score: this._clamp(0.45 + Math.min(0.2, count * 0.02), 0, 0.7),
-        source: 'user-history',
-        evidence: [`User often assigns items to ${category}`]
-      });
-    }
-    return signals;
-  }
-
-  private _scoreLocalAI(entry: any): Promise<any> {
+  private _scoreLocalAI(text: string): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this.worker) return resolve(null);
       const id = ++this.msgId;
@@ -510,161 +872,28 @@ class SmartCategorizerService {
           else {
              resolve({
                 category: result.label,
-                score: this._clamp(result.score || 0, 0, 0.94),
-                source: 'local-ai',
-                evidence: ['Local AI fallback classified entry from contextual metadata']
+                score: result.score || 0,
+                source: 'local-ai'
              });
           }
       }, reject });
-      this.worker.postMessage({ id, text: entry.contextText });
+      this.worker.postMessage({ id, text });
       
       setTimeout(() => {
         if (this.callbacks.has(id)) {
           this.callbacks.delete(id);
-          resolve(null); // Don't throw, just ignore ML result on timeout
+          resolve(null);
         }
-      }, 5000);
+      }, 3500);
     });
   }
 
-  private _mergeSignals(signals: any[]) {
-    const merged = new Map();
-    for (const signal of signals) {
-      if (!signal || !signal.category) continue;
-      const existing = merged.get(signal.category);
-      if (!existing) {
-        merged.set(signal.category, {
-          category: signal.category,
-          score: signal.score,
-          sources: [signal.source],
-          evidence: [...(signal.evidence || [])]
-        });
-      } else {
-        existing.score = this._clamp(existing.score + (signal.score * 0.35), 0, 0.99);
-        existing.sources.push(signal.source);
-        existing.evidence.push(...(signal.evidence || []));
-        merged.set(signal.category, existing);
-      }
-    }
-    return Array.from(merged.values());
-  }
-
-  private _rankCandidates(candidates: any[]) {
-    return candidates
-      .map(x => ({
-        ...x,
-        score: this._round(x.score),
-        sources: Array.from(new Set(x.sources || [])),
-        evidence: Array.from(new Set(x.evidence || [])).slice(0, 5)
-      }))
-      .sort((a, b) => b.score - a.score);
-  }
-
-  private _finalizeDecision(entry: any, ranked: any[], mode: string): CategorizeResult {
-    if (ranked.length === 0) {
-      return {
-        category: 'Uncategorized',
-        confidence: 0,
-        source: 'none',
-        action: 'leave-uncategorized',
-        evidence: ['No confident signal found'],
-        alternatives: []
-      };
-    }
-
-    const winner = ranked[0];
-    const second = ranked[1];
-    const margin = second ? winner.score - second.score : winner.score;
-
-    let confidence = winner.score;
-    if (margin < 0.08) confidence = this._clamp(confidence - 0.08, 0, 1);
-    if (margin < 0.04) confidence = this._clamp(confidence - 0.06, 0, 1);
-
-    let action = 'leave-uncategorized';
-    if (mode === 'new-entry') {
-      if (confidence >= this.autoApplyThreshold) action = 'auto-categorize';
-      else if (confidence >= this.suggestThreshold) action = 'suggest';
-    } else {
-      if (confidence >= this.moveThreshold) action = 'propose-change';
-      else if (confidence >= this.suggestThreshold) action = 'review-suggestion';
-    }
-
-    return {
-      category: winner.category,
-      confidence: this._round(confidence),
-      source: winner.sources.join(', '),
-      action,
-      evidence: winner.evidence,
-      alternatives: ranked.slice(1, 4).map(x => ({ category: x.category, confidence: x.score }))
-    };
-  }
-
-  private _normalizeEntry(entry: VaultItemData) {
-    const hostname = this._normalizeHostname(entry.domain || entry.url || entry.website || '');
-    const appName = this._normalizeText(entry.appName || entry.name || entry.title || '');
-    const title = this._normalizeText(entry.title || '');
-    const username = this._normalizeText(entry.username || '');
-    const notes = this._normalizeText(entry.notes || '');
-    const metadata = this._normalizeText(entry.metadata || '');
-
-    const contextText = [hostname, appName, title, username, notes, metadata]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-
-    const tokens = this._tokenize(contextText);
-
-    return {
-      raw: entry,
-      hostname,
-      appName,
-      title,
-      username,
-      notes,
-      metadata,
-      contextText,
-      tokens
-    };
-  }
-
-  private _normalizeHostname(input: string) {
-    if (!input) return '';
-    try {
-      const parsed = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`);
-      return parsed.hostname.toLowerCase().replace(/^www\./, '');
-    } catch {
-      return String(input).trim().toLowerCase().replace(/^www\./, '');
-    }
-  }
-
-  private _normalizeText(value: any) {
-    return String(value || '')
-      .normalize('NFKC')
-      .replace(/[_-]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  private _tokenize(text: string) {
-    return text
-      .toLowerCase()
-      .split(/[^\p{L}\p{N}]+/u)
-      .map(x => x.trim())
-      .filter(x => x && !this.blacklistTokens.has(x));
-  }
-
-  private _rootDomain(hostname: string) {
-    const parts = (hostname || '').split('.').filter(Boolean);
-    if (parts.length <= 2) return hostname;
-    return parts.slice(-2).join('.');
-  }
-
   private _clusterKey(item: VaultItemData) {
-    const hostname = this._normalizeHostname(item.domain || item.url || '');
-    const root = this._rootDomain(hostname);
-    const title = this._normalizeText(item.title || item.appName || '');
-    const tokens = this._tokenize(`${root} ${title}`).slice(0, 3).sort();
-    return `${root}:${tokens.join('|')}`;
+    const title = (item.title || item.appName || '').toLowerCase();
+    const domain = (item.domain || item.url || '').toLowerCase();
+    const cleanDomain = domain.replace(/^www\./, '').split('.')[0] || '';
+    const cleanTitle = title.split(/[^\p{L}\p{N}]+/u)[0] || '';
+    return `${cleanDomain}:${cleanTitle}`;
   }
 
   private _titleCase(input: string) {
@@ -673,14 +902,6 @@ class SmartCategorizerService {
       .filter(Boolean)
       .map(x => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase())
       .join(' ');
-  }
-
-  private _clamp(value: number, min: number, max: number) {
-    return Math.min(max, Math.max(min, value));
-  }
-
-  private _round(value: number) {
-    return Math.round(value * 100) / 100;
   }
 }
 

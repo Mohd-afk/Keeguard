@@ -8,13 +8,15 @@ import com.mohdj.securevault.autofill.parser.ParsedForm
 class SaveInfoBuilder {
 
     fun build(parsedForm: ParsedForm): SaveInfo? {
-        val requiredIds = mutableListOf<AutofillId>()
-        parsedForm.usernameField?.let { requiredIds.add(it.autofillId) }
-        parsedForm.passwordField?.let { requiredIds.add(it.autofillId) }
+        val identityField = parsedForm.usernameField ?: parsedForm.emailField
+        val passwordField = parsedForm.passwordField ?: parsedForm.newPasswordField
+            ?: return null  // Cannot save without a password or new password field
 
-        // Need at least a password field to build SaveInfo
-        if (parsedForm.passwordField == null) return null
-        if (requiredIds.isEmpty()) return null
+        val requiredIds = mutableListOf<AutofillId>()
+        requiredIds.add(passwordField.autofillId)
+        
+        val optionalIds = mutableListOf<AutofillId>()
+        identityField?.let { optionalIds.add(it.autofillId) }
 
         val saveType = when (parsedForm.formType) {
             FormType.LOGIN -> SaveInfo.SAVE_DATA_TYPE_USERNAME or SaveInfo.SAVE_DATA_TYPE_PASSWORD
@@ -24,7 +26,12 @@ class SaveInfoBuilder {
             else -> return null
         }
 
-        return SaveInfo.Builder(saveType, requiredIds.toTypedArray())
+        val builder = SaveInfo.Builder(saveType, requiredIds.toTypedArray())
+        if (optionalIds.isNotEmpty()) {
+            builder.setOptionalIds(optionalIds.toTypedArray())
+        }
+        
+        return builder
             .setFlags(SaveInfo.FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE)
             .build()
     }

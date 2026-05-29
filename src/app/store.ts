@@ -1256,35 +1256,35 @@ export function subscribeToCustomCategories(callback: (categories: CustomCategor
 export const DEFAULT_CATEGORIES: CustomCategory[] = [
   // Passwords Group
   { id: 'cat_passwords', name: 'Passwords', icon: 'KeyRound', color: '#3b82f6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: null, sortOrder: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_email', name: 'Email', icon: 'Mail', color: '#10b981', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_banking', name: 'Banking', icon: 'Globe', color: '#f59e0b', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 2, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_social', name: 'Social Media', icon: 'Heart', color: '#ec4899', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 3, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_gaming', name: 'Gaming', icon: 'Gamepad2', color: '#8b5cf6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 4, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_email', name: 'Email', icon: 'Mail', color: '#10b981', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_banking', name: 'Banking', icon: 'Globe', color: '#f59e0b', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 2, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_social', name: 'Social Media', icon: 'Heart', color: '#ec4899', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 3, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_gaming', name: 'Gaming', icon: 'Gamepad2', color: '#8b5cf6', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_passwords', sortOrder: 4, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 
   // Identity Group
-  { id: 'cat_identity', name: 'Identity', icon: 'Fingerprint', color: '#3b82f6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: null, sortOrder: 5, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_passport', name: 'Passport', icon: 'Globe', color: '#06b6d4', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 6, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_driver', name: 'Driver License', icon: 'IdCard', color: '#10b981', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 7, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_aadhaar', name: 'Aadhaar', icon: 'Fingerprint', color: '#f59e0b', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 8, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_employee', name: 'Employee ID', icon: 'Briefcase', color: '#3b82f6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 9, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_identity', name: 'Identity', icon: 'Fingerprint', color: '#3b82f6', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: null, sortOrder: 5, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_passport', name: 'Passport', icon: 'Globe', color: '#06b6d4', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 6, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_driver', name: 'Driver License', icon: 'IdCard', color: '#10b981', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 7, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_aadhaar', name: 'Aadhaar', icon: 'Fingerprint', color: '#f59e0b', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 8, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_employee', name: 'Employee ID', icon: 'Briefcase', color: '#3b82f6', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_identity', sortOrder: 9, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 
   // Finance Group
-  { id: 'cat_finance', name: 'Finance', icon: 'CreditCard', color: '#f59e0b', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: null, sortOrder: 10, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_credit', name: 'Credit Cards', icon: 'CreditCard', color: '#ec4899', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_finance', sortOrder: 11, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_debit', name: 'Debit Cards', icon: 'CreditCard', color: '#06b6d4', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_finance', sortOrder: 12, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_crypto', name: 'Crypto Wallets', icon: 'Wallet', color: '#8b5cf6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_finance', sortOrder: 13, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_finance', name: 'Finance', icon: 'CreditCard', color: '#f59e0b', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: null, sortOrder: 10, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_credit', name: 'Credit Cards', icon: 'CreditCard', color: '#ec4899', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_finance', sortOrder: 11, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_debit', name: 'Debit Cards', icon: 'CreditCard', color: '#06b6d4', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_finance', sortOrder: 12, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_crypto', name: 'Crypto Wallets', icon: 'Wallet', color: '#8b5cf6', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_finance', sortOrder: 13, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 
   // Work Group
-  { id: 'cat_work', name: 'Work', icon: 'Briefcase', color: '#8b5cf6', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: null, sortOrder: 14, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_vpn', name: 'VPN', icon: 'Shield', color: '#6366f1', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_work', sortOrder: 15, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_server', name: 'Server Credentials', icon: 'Server', color: '#10b981', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_work', sortOrder: 16, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_api', name: 'API Keys', icon: 'Code', color: '#ec4899', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_work', sortOrder: 17, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_work', name: 'Work', icon: 'Briefcase', color: '#8b5cf6', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: null, sortOrder: 14, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_vpn', name: 'VPN', icon: 'Shield', color: '#6366f1', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_work', sortOrder: 15, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_server', name: 'Server Credentials', icon: 'Server', color: '#10b981', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_work', sortOrder: 16, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_api', name: 'API Keys', icon: 'Code', color: '#ec4899', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_work', sortOrder: 17, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 
   // Personal Group
-  { id: 'cat_personal', name: 'Personal', icon: 'User', color: '#ec4899', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: null, sortOrder: 18, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_wifi', name: 'Wi-Fi Passwords', icon: 'Wifi', color: '#06b6d4', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_personal', sortOrder: 19, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_notes', name: 'Notes', icon: 'FileText', color: '#10b981', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_personal', sortOrder: 20, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'cat_subs', name: 'Subscriptions', icon: 'Tv', color: '#f59e0b', isDefault: true, isHidden: false, isPinned: false, parentCategoryId: 'cat_personal', sortOrder: 21, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  { id: 'cat_personal', name: 'Personal', icon: 'User', color: '#ec4899', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: null, sortOrder: 18, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_wifi', name: 'Wi-Fi Passwords', icon: 'Wifi', color: '#06b6d4', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_personal', sortOrder: 19, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_notes', name: 'Notes', icon: 'FileText', color: '#10b981', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_personal', sortOrder: 20, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat_subs', name: 'Subscriptions', icon: 'Tv', color: '#f59e0b', isDefault: true, isHidden: true, isPinned: false, parentCategoryId: 'cat_personal', sortOrder: 21, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 ];
 
 function sortCustomCategoriesList(list: CustomCategory[]): CustomCategory[] {

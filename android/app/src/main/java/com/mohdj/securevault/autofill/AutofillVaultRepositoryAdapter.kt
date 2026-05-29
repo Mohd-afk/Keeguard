@@ -12,15 +12,50 @@ import com.mohdj.securevault.vault.VaultRepository
  * Bridges the new autofill module's [AutofillVaultRepository] interface with the
  * existing SQLCipher-backed [VaultRepository] / [VaultItemEntity] layer.
  *
- * Vault lock state is delegated to [BiometricVaultUnlocker] which is the
- * single source of truth for the unlock session in the native layer.
+ * Provides targeted, SQL-indexed lookups to protect memory and scale.
  */
 class AutofillVaultRepositoryAdapter(
-    private val repo: VaultRepository
+    private val repo: VaultRepository,
+    private val domainMatcher: DomainMatcher
 ) : AutofillVaultRepository {
 
-    override suspend fun getAllDecryptedCredentials(): List<VaultCredential> {
-        return repo.getAllActive()
+    override suspend fun findMatchingCredentials(target: String): List<VaultCredential> {
+        val keywords = mutableSetOf<String>()
+        val trimmedTarget = target.trim()
+        
+        if (trimmedTarget.isNotEmpty()) {
+            keywords.add(trimmedTarget)
+            
+            // Normalize target domain if it has one
+            val normalized = domainMatcher.normalize(trimmedTarget)
+            if (!normalized.isNullOrBlank()) {
+                keywords.add(normalized)
+            }
+            
+            // If the target is an Android package, check mapped web domain
+            val mapped = domainMatcher.getAppMapping(trimmedTarget)
+            if (!mapped.isNullOrBlank()) {
+                keywords.add(mapped)
+                val normalizedMapped = domainMatcher.normalize(mapped)
+                if (!normalizedMapped.isNullOrBlank()) {
+                    keywords.add(normalizedMapped)
+                }
+            }
+        }
+
+        // Query database via SQL LIKE for each keyword
+        val matchedEntities = mutableSetOf<VaultItemEntity>()
+        for (kw in keywords) {
+            try {
+                val matches = repo.findByDomain(kw)
+                matchedEntities.addAll(matches)
+            } catch (e: Exception) {
+                SecureLogger.e("Database targeted query error for keyword: $kw", e)
+            }
+        }
+
+        // Map and return active items only
+        return matchedEntities
             .filter { it.deletedAt == null }
             .map { it.toVaultCredential() }
     }
@@ -30,15 +65,21 @@ class AutofillVaultRepositoryAdapter(
 
     /**
      * Saves a new credential into the local SQLCipher DB.
-     * This is called after the user confirms a save in the JS bottom sheet.
+     * Encodes multiple URIs as a JSON array string.
      */
     override suspend fun saveCredential(credential: VaultCredential) {
+        val urisJson = if (credential.uris.isNotEmpty()) {
+            credential.uris.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
+        } else {
+            ""
+        }
+        
         val entity = VaultItemEntity(
             id        = credential.id.ifBlank { java.util.UUID.randomUUID().toString() },
             title     = credential.title,
             username  = credential.username,
             password  = credential.password,
-            uris      = credential.uri?.let { "[\"$it\"]" } ?: "",
+            uris      = urisJson,
             type      = if (credential.packageName != null) "App" else "Website",
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis(),
@@ -47,11 +88,6 @@ class AutofillVaultRepositoryAdapter(
         repo.insert(entity)
     }
 
-    /**
-     * Updates the password for an existing credential by id.
-     * A full-table scan is used since [VaultDao] doesn't expose a direct
-     * update-by-id method. This is infrequent (only called on save "update" action).
-     */
     override suspend fun updateCredentialPassword(id: String, newPassword: String) {
         val all = repo.getAllActive()
         val existing = all.firstOrNull { it.id == id } ?: return
@@ -59,40 +95,51 @@ class AutofillVaultRepositoryAdapter(
             password  = newPassword,
             updatedAt = System.currentTimeMillis()
         )
-        repo.insert(updated) // REPLACE on conflict strategy handles the upsert
+        repo.insert(updated)
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
 
     /**
      * Parses the JSON array URI column (e.g. '["https://example.com"]')
-     * and returns the first URI entry, or null if empty / unparseable.
+     * into a list of individual URIs.
      */
-    private fun parseFirstUri(urisJson: String): String? {
+    private fun parseUriList(urisJson: String): List<String> {
         val trimmed = urisJson.trim()
+        if (trimmed.isEmpty()) return emptyList()
         if (trimmed.startsWith("[")) {
             return try {
                 trimmed
                     .removePrefix("[").removeSuffix("]")
                     .split(",")
-                    .firstOrNull()
-                    ?.trim()
-                    ?.removeSurrounding("\"")
-                    ?.takeIf { it.isNotBlank() }
-            } catch (e: Exception) { null }
+                    .map { it.trim().removeSurrounding("\"") }
+                    .filter { it.isNotBlank() }
+            } catch (e: Exception) {
+                emptyList()
+            }
         }
-        return if (trimmed.isNotBlank()) trimmed else null
+        return if (trimmed.isNotBlank()) listOf(trimmed) else emptyList()
     }
 
-    private fun VaultItemEntity.toVaultCredential() = VaultCredential(
-        id          = id,
-        title       = title,
-        username    = username,
-        password    = password,
-        uri         = parseFirstUri(uris),
-        packageName = null,
-        categoryId  = "",
-        lastUsedAt  = updatedAt,
-        faviconUrl  = null
-    )
+    private fun VaultItemEntity.toVaultCredential(): VaultCredential {
+        val parsedUris = parseUriList(uris)
+        
+        val parsedPackageName = if (type == "App") {
+            parsedUris.firstOrNull()?.removePrefix("androidapp://") ?: title
+        } else {
+            parsedUris.firstOrNull { it.startsWith("androidapp://") }?.removePrefix("androidapp://")
+        }
+
+        return VaultCredential(
+            id          = id,
+            title       = title,
+            username    = username,
+            password    = password,
+            uris        = parsedUris,
+            packageName = parsedPackageName,
+            categoryId  = "",
+            lastUsedAt  = updatedAt,
+            faviconUrl  = null
+        )
+    }
 }

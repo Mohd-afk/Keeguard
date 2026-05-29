@@ -22,6 +22,17 @@ export async function verifyMemberAccess(
     throw new Error('NOT_FOUND: Collection does not exist');
   }
 
+  // Verify access using the folder_shares collection
+  const shareSnap = await db.collection('folder_shares').doc(`${collectionId}_${userId}`).get();
+  if (!shareSnap.exists) {
+    throw new Error('PERMISSION_DENIED: User is not authorized for this folder');
+  }
+
+  const shareData = shareSnap.data()!;
+  if (shareData.status !== 'accepted') {
+    throw new Error('PERMISSION_DENIED: Share request has not been accepted');
+  }
+
   const memberSnap = await db
     .collection('collections')
     .doc(collectionId)
@@ -42,6 +53,13 @@ export async function verifyMemberAccess(
 
   if (requiredRoles.length > 0 && !requiredRoles.includes(userRole)) {
     throw new Error(`PERMISSION_DENIED: Required roles: [${requiredRoles.join(', ')}], user has role: ${userRole}`);
+  }
+
+  // Ensure collaborator roles mapped properly
+  if (requiredRoles.includes('owner') || requiredRoles.includes('manager') || requiredRoles.includes('editor')) {
+    if (shareData.role !== 'collaborator') {
+      throw new Error('PERMISSION_DENIED: Collaborator role required for write operations');
+    }
   }
 
   return userRole;
@@ -96,4 +114,44 @@ export async function canModifyMember(
   if (!hasHigherAuthority(actorRole, targetRole)) {
     throw new Error(`PERMISSION_DENIED: Cannot modify a member with equal or higher authority (${actorRole} vs ${targetRole})`);
   }
+}
+
+export type BackendCapability =
+  | 'viewItems'
+  | 'editItems'
+  | 'inviteUsers'
+  | 'revokeUsers'
+  | 'rotateKeys'
+  | 'deleteCollection'
+  | 'transferOwnership';
+
+const BACKEND_CAPABILITY_MATRIX: Record<CollectionRole, BackendCapability[]> = {
+  owner: ['viewItems', 'editItems', 'inviteUsers', 'revokeUsers', 'rotateKeys', 'deleteCollection', 'transferOwnership'],
+  manager: ['viewItems', 'editItems', 'inviteUsers', 'revokeUsers', 'rotateKeys'],
+  editor: ['viewItems', 'editItems'],
+  viewer: ['viewItems'],
+};
+
+/**
+ * Checks if a role has the required capability.
+ */
+export function hasCapability(role: CollectionRole, capability: BackendCapability): boolean {
+  const allowed = BACKEND_CAPABILITY_MATRIX[role];
+  return allowed ? allowed.includes(capability) : false;
+}
+
+/**
+ * Verifies if a user has the required capability within a collection.
+ * Throws a Permission Denied error if the check fails.
+ */
+export async function verifyMemberCapability(
+  collectionId: string,
+  userId: string,
+  capability: BackendCapability
+): Promise<CollectionRole> {
+  const role = await verifyMemberAccess(collectionId, userId, []);
+  if (!hasCapability(role, capability)) {
+    throw new Error(`PERMISSION_DENIED: User ${userId} lacks capability ${capability} (has role: ${role})`);
+  }
+  return role;
 }

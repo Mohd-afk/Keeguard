@@ -21,3 +21,14 @@ export async function searchUsers(queryText: string): Promise<UserSearchResult[]
   const response = await searchCallable({ query: queryText });
   return response.data.results;
 }
+
+export async function getConnections(): Promise<UserSearchResult[]> {
+  const functionsInstance = getFirebaseFunctions();
+  const connectionsCallable = httpsCallable<void, { connections: UserSearchResult[] }>(
+    functionsInstance,
+    'getConnections'
+  );
+
+  const response = await connectionsCallable();
+  return response.data.connections;
+}

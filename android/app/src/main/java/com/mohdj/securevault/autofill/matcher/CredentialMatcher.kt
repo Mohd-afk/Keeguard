@@ -10,14 +10,15 @@ class CredentialMatcher(
     constructor(vaultRepository: VaultRepository) : this(vaultRepository, DomainMatcher(null))
 
     suspend fun findMatches(parsedForm: ParsedForm): List<VaultCredential> {
-        // canonicalIdentifier could be webDomain or sourcePackage
         val target = parsedForm.canonicalIdentifier
-        val all = vaultRepository.getAllDecryptedCredentials()
+        val matches = vaultRepository.findMatchingCredentials(target)
 
-        return all
+        return matches
             .map { cred -> 
-                val lookupKey = cred.uri ?: cred.packageName
-                val confidence = domainMatcher.calculateConfidence(target, lookupKey)
+                val confidence = cred.uris.maxOfOrNull { uri ->
+                    domainMatcher.calculateConfidence(target, uri)
+                } ?: (cred.packageName?.let { domainMatcher.calculateConfidence(target, it) } ?: 0.0)
+                
                 cred to confidence
             }
             .filter { it.second > 0.0 }
@@ -29,10 +30,11 @@ class CredentialMatcher(
     }
 
     suspend fun findByUsernameAndDomain(username: String, id: String): VaultCredential? {
-        val all = vaultRepository.getAllDecryptedCredentials()
-        return all.firstOrNull { cred ->
+        val matches = vaultRepository.findMatchingCredentials(id)
+        return matches.firstOrNull { cred ->
             cred.username.equals(username, ignoreCase = true) &&
-            domainMatcher.calculateConfidence(id, cred.uri ?: cred.packageName) > 0.0
+            (cred.uris.any { domainMatcher.calculateConfidence(id, it) > 0.0 } ||
+             (cred.packageName?.let { domainMatcher.calculateConfidence(id, it) > 0.0 } ?: false))
         }
     }
 }

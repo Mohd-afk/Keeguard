@@ -3,13 +3,14 @@
 // Initializes the Admin SDK and exports all callables & triggers.
 // ─────────────────────────────────────────────────────────────────────────────
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onNewDeviceRegistered = exports.onMemberRemoved = exports.sendDeveloperNotification = exports.markNotificationRead = exports.commitItem = exports.createCollection = exports.removeMember = exports.updateMemberRole = exports.revokeInvite = exports.declineInvite = exports.acceptInvite = exports.createInvite = exports.searchUsers = void 0;
+exports.onNewDeviceRegistered = exports.onMemberRemoved = exports.sendDeveloperNotification = exports.respondToShareRequest = exports.markNotificationRead = exports.commitItem = exports.transferCollectionOwnership = exports.submitRotatedKeys = exports.createCollection = exports.removeMember = exports.updateMemberRole = exports.revokeInvite = exports.declineInvite = exports.acceptInvite = exports.createInvite = exports.getConnections = exports.searchUsers = void 0;
 const admin = require("firebase-admin");
 // Initialize Admin SDK
 admin.initializeApp();
 // Export routes & endpoints
 var users_1 = require("./routes/users");
 Object.defineProperty(exports, "searchUsers", { enumerable: true, get: function () { return users_1.searchUsers; } });
+Object.defineProperty(exports, "getConnections", { enumerable: true, get: function () { return users_1.getConnections; } });
 var invites_1 = require("./routes/invites");
 Object.defineProperty(exports, "createInvite", { enumerable: true, get: function () { return invites_1.createInvite; } });
 Object.defineProperty(exports, "acceptInvite", { enumerable: true, get: function () { return invites_1.acceptInvite; } });
@@ -20,10 +21,13 @@ Object.defineProperty(exports, "updateMemberRole", { enumerable: true, get: func
 Object.defineProperty(exports, "removeMember", { enumerable: true, get: function () { return members_1.removeMember; } });
 var collections_1 = require("./routes/collections");
 Object.defineProperty(exports, "createCollection", { enumerable: true, get: function () { return collections_1.createCollection; } });
+Object.defineProperty(exports, "submitRotatedKeys", { enumerable: true, get: function () { return collections_1.submitRotatedKeys; } });
+Object.defineProperty(exports, "transferCollectionOwnership", { enumerable: true, get: function () { return collections_1.transferCollectionOwnership; } });
 var items_1 = require("./routes/items");
 Object.defineProperty(exports, "commitItem", { enumerable: true, get: function () { return items_1.commitItem; } });
 var notifications_1 = require("./routes/notifications");
 Object.defineProperty(exports, "markNotificationRead", { enumerable: true, get: function () { return notifications_1.markNotificationRead; } });
+Object.defineProperty(exports, "respondToShareRequest", { enumerable: true, get: function () { return notifications_1.respondToShareRequest; } });
 var internalNotifications_1 = require("./routes/internalNotifications");
 Object.defineProperty(exports, "sendDeveloperNotification", { enumerable: true, get: function () { return internalNotifications_1.sendDeveloperNotification; } });
 // Export background database triggers

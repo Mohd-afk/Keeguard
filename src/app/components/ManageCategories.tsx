@@ -50,6 +50,7 @@ import {
   getVaultItems,
   addVaultChangeListener,
   updateVaultItem,
+  deleteVaultItem,
   type CustomCategory,
   type VaultItem
 } from '../store';
@@ -125,7 +126,7 @@ export default function ManageCategories() {
 
   // Deletion Modal / Confirm State
   const [deletingCategory, setDeletingCategory] = useState<CustomCategory | null>(null);
-  const [reassignOption, setReassignOption] = useState<'none' | 'reassign'>('none');
+  const [reassignOption, setReassignOption] = useState<'none' | 'reassign' | 'deleteItems'>('none');
   const [reassignTargetId, setReassignTargetId] = useState<string>('');
 
   // Smart Categorizer State
@@ -325,9 +326,17 @@ export default function ManageCategories() {
     if (!deletingCategory) return;
 
     try {
-      const reassignId = reassignOption === 'reassign' ? reassignTargetId : undefined;
-      await deleteCustomCategory(deletingCategory.id, reassignId);
-      toast.success('Category deleted successfully');
+      if (reassignOption === 'deleteItems') {
+        const itemsToDelete = items.filter(item => item.categoryId === deletingCategory.id);
+        for (const item of itemsToDelete) {
+          await deleteVaultItem(item.id);
+        }
+        await deleteCustomCategory(deletingCategory.id, undefined);
+      } else {
+        const reassignId = reassignOption === 'reassign' ? reassignTargetId : undefined;
+        await deleteCustomCategory(deletingCategory.id, reassignId);
+      }
+      toast.success('Category and data updated successfully');
       setDeletingCategory(null);
     } catch (e) {
       toast.error('Failed to delete category');
@@ -336,20 +345,30 @@ export default function ManageCategories() {
 
   // Move category sortOrder
   const handleMove = async (index: number, direction: 'up' | 'down') => {
-    const flatList = hierarchicalCategories.map(h => h.category);
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === flatList.length - 1) return;
-
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    const targetIds = [...flatList.map(c => c.id)];
+    const targetCat = hierarchicalCategories[index].category;
+    const parentId = targetCat.parentCategoryId;
     
-    // Swap IDs
-    const temp = targetIds[index];
-    targetIds[index] = targetIds[newIndex];
-    targetIds[newIndex] = temp;
-
+    // Get all siblings (same parent level)
+    const siblings = categories
+      .filter(c => c.parentCategoryId === parentId)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      
+    const siblingIndex = siblings.findIndex(c => c.id === targetCat.id);
+    if (siblingIndex === -1) return;
+    
+    if (direction === 'up' && siblingIndex === 0) return;
+    if (direction === 'down' && siblingIndex === siblings.length - 1) return;
+    
+    const swapWithSibling = siblings[direction === 'up' ? siblingIndex - 1 : siblingIndex + 1];
+    
     try {
-      await reorderCustomCategories(targetIds);
+      const currentOrder = targetCat.sortOrder ?? 0;
+      const swapOrder = swapWithSibling.sortOrder ?? 0;
+      
+      await updateCustomCategory(targetCat.id, { sortOrder: swapOrder });
+      await updateCustomCategory(swapWithSibling.id, { sortOrder: currentOrder });
+      
+      toast.success('Category reordered');
     } catch (e) {
       toast.error('Failed to reorder categories');
     }
@@ -555,6 +574,14 @@ export default function ManageCategories() {
                 const IconComp = CategoryIconMap[cat.icon || 'Folder'] || Folder;
                 const itemCount = categoryStats[cat.id] || 0;
 
+                const parentId = cat.parentCategoryId;
+                const siblings = categories
+                  .filter(c => c.parentCategoryId === parentId)
+                  .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+                const siblingIdx = siblings.findIndex(c => c.id === cat.id);
+                const isFirstSibling = siblingIdx === 0;
+                const isLastSibling = siblingIdx === siblings.length - 1;
+
                 return (
                   <div
                     key={cat.id}
@@ -615,7 +642,7 @@ export default function ManageCategories() {
                             {/* Reorder Up */}
                             <button
                               onClick={() => handleMove(idx, 'up')}
-                              disabled={idx === 0}
+                              disabled={isFirstSibling}
                               className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all"
                               title="Move Up"
                             >
@@ -625,7 +652,7 @@ export default function ManageCategories() {
                             {/* Reorder Down */}
                             <button
                               onClick={() => handleMove(idx, 'down')}
-                              disabled={idx === hierarchicalCategories.length - 1}
+                              disabled={isLastSibling}
                               className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all"
                               title="Move Down"
                             >
@@ -798,7 +825,7 @@ export default function ManageCategories() {
             </div>
 
             <p className="text-gray-300 text-xs leading-relaxed">
-              Before deleting this category, you can choose to move all of its items to another category, or let them remain uncategorized.
+              Before deleting this category, you can choose to move all of its items to another category, remain them uncategorized, or delete them along with the category.
             </p>
 
             <div className="space-y-3 pt-1">
@@ -843,14 +870,29 @@ export default function ManageCategories() {
                       {categories
                         .filter((c) => c.id !== deletingCategory.id)
                         .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
+                           <option key={c.id} value={c.id}>
+                             {c.name}
+                           </option>
                         ))}
                     </select>
                   )}
                 </label>
               )}
+
+              {/* Option 3: Delete Category and all items */}
+              <label className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl cursor-pointer hover:bg-red-500/15 transition-all">
+                <input
+                  type="radio"
+                  name="deleteOption"
+                  checked={reassignOption === 'deleteItems'}
+                  onChange={() => setReassignOption('deleteItems')}
+                  className="accent-red-500 w-4 h-4 shrink-0"
+                />
+                <div>
+                  <span className="text-red-400 text-xs font-semibold">Delete category and all its passwords</span>
+                  <p className="text-red-500/70 text-[10px] mt-0.5">Moves all category items to recycle bin automatically.</p>
+                </div>
+              </label>
             </div>
 
             {/* Confirmation Controls */}
@@ -936,44 +978,160 @@ export default function ManageCategories() {
                     </div>
                   )}
 
-                  {smartPlan.itemProposals.filter(p => p.changeType !== 'none').length > 0 && (
-                    <div className="space-y-2">
-                      <h4 className="text-white text-sm font-semibold mb-2">Item Adjustments</h4>
-                      {smartPlan.itemProposals.filter(p => p.changeType !== 'none').map((prop, idx) => (
-                        <div key={`item-${idx}`} className="flex items-center justify-between p-3 bg-[#0a0a14]/40 border border-white/5 rounded-xl">
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={prop.approved}
-                              onChange={() => {
-                                const newPlan = { ...smartPlan };
-                                const realIdx = newPlan.itemProposals.findIndex(p => p.itemId === prop.itemId);
-                                if (realIdx > -1) {
-                                  newPlan.itemProposals[realIdx].approved = !newPlan.itemProposals[realIdx].approved;
-                                  setSmartPlan(newPlan);
-                                }
-                              }}
-                              className="w-4 h-4 rounded border-gray-600 bg-transparent accent-cyan-500 cursor-pointer"
-                            />
-                            <div className="min-w-0">
-                              <p className="text-white text-sm font-medium truncate">{prop.title}</p>
-                              <p className="text-gray-500 text-[10px] truncate">{prop.reason}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="flex flex-col items-end">
-                              <span className="text-cyan-400 text-[10px] font-semibold px-2 py-0.5 bg-cyan-500/10 rounded-md truncate max-w-[100px]">
-                                {prop.proposedCategory}
-                              </span>
-                              <span className="text-gray-500 text-[9px] mt-0.5">
-                                {(prop.confidence * 100).toFixed(0)}%
-                              </span>
-                            </div>
-                          </div>
+                  {/* Auto-Apply Items Section */}
+                  {(() => {
+                    const autoApplyItems = smartPlan.itemProposals.filter(p => p.changeType !== 'none' && !p.needsReview && p.confidence >= 0.7);
+                    if (autoApplyItems.length === 0) return null;
+                    return (
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-white text-sm font-semibold">Auto-Apply Suggestions</h4>
+                          <span className="text-[10px] text-emerald-400 font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10">High Confidence</span>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        {autoApplyItems.map((prop, idx) => (
+                          <div key={`auto-${idx}`} className="flex items-center justify-between p-3 bg-[#0a0a14]/40 border border-white/5 rounded-xl">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={prop.approved}
+                                onChange={() => {
+                                  const newPlan = { ...smartPlan };
+                                  const realIdx = newPlan.itemProposals.findIndex(p => p.itemId === prop.itemId);
+                                  if (realIdx > -1) {
+                                    newPlan.itemProposals[realIdx].approved = !newPlan.itemProposals[realIdx].approved;
+                                    setSmartPlan(newPlan);
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-gray-600 bg-transparent accent-cyan-500 cursor-pointer"
+                              />
+                              <div className="min-w-0">
+                                <p className="text-white text-sm font-medium truncate">{prop.title}</p>
+                                <p className="text-gray-400 text-[10px] truncate">{prop.reason}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                              <div className="flex flex-col items-end">
+                                <span className="text-emerald-400 text-[10px] font-semibold px-2 py-0.5 bg-emerald-500/10 rounded-md truncate max-w-[120px]">
+                                  {prop.proposedCategory}
+                                </span>
+                                <span className="text-gray-500 text-[9px] mt-0.5">
+                                  {(prop.confidence * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Review Queue / Low Confidence Section */}
+                  {(() => {
+                    const reviewItems = smartPlan.itemProposals.filter(p => p.changeType !== 'none' && (p.needsReview || p.confidence < 0.7));
+                    if (reviewItems.length === 0) return null;
+                    return (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-white text-sm font-semibold flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-amber-400" />
+                            Needs Review Queue
+                          </h4>
+                          <span className="text-[10px] text-amber-400 font-semibold px-2 py-0.5 rounded-full bg-amber-500/10">Low Confidence / Vague</span>
+                        </div>
+                        {reviewItems.map((prop, idx) => {
+                          // Assemble candidates: proposed (if not Uncategorized) + alternatives
+                          const candidates: { category: string; confidence: number }[] = [];
+                          if (prop.proposedCategory && prop.proposedCategory !== 'Uncategorized') {
+                            candidates.push({ category: prop.proposedCategory, confidence: prop.confidence });
+                          }
+                          if (prop.alternatives) {
+                            prop.alternatives.forEach(alt => {
+                              if (!candidates.some(c => c.category === alt.category)) {
+                                candidates.push({ category: alt.category, confidence: alt.confidence });
+                              }
+                            });
+                          }
+                          // Ensure we have fallback candidates if empty
+                          const defaults = ['Banking & Finance', 'Social Media', 'Work & Productivity', 'Email & Communication'];
+                          defaults.forEach(def => {
+                            if (candidates.length < 3 && !candidates.some(c => c.category === def)) {
+                              candidates.push({ category: def, confidence: 0.1 });
+                            }
+                          });
+
+                          return (
+                            <div key={`review-${idx}`} className="bg-amber-950/10 border border-amber-500/20 rounded-2xl p-4 space-y-3 shadow-lg relative overflow-hidden">
+                              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-500/5 to-transparent pointer-events-none" />
+                              
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                    <span className="text-white text-sm font-bold truncate">{prop.title}</span>
+                                    {prop.username && (
+                                      <span className="text-gray-400 text-xs truncate max-w-[120px] bg-white/5 px-2 py-0.5 rounded-md">
+                                        @{prop.username}
+                                      </span>
+                                    )}
+                                    <span className="text-amber-300/90 text-[9px] font-bold uppercase tracking-wider bg-amber-500/20 px-2 py-0.5 rounded-full">
+                                      Needs Review
+                                    </span>
+                                  </div>
+                                  <p className="text-gray-300 text-xs leading-relaxed">
+                                    {prop.evidence && prop.evidence.length > 0 ? prop.evidence.join(', ') : 'Vague or missing URL/metadata signals.'}
+                                  </p>
+                                </div>
+                                <span className="text-[10px] text-gray-500 bg-white/5 px-2 py-1 rounded-lg select-none">
+                                  Score: {(prop.confidence * 100).toFixed(0)}%
+                                </span>
+                              </div>
+
+                              {/* Candidate pills */}
+                              <div className="space-y-1.5 pt-1">
+                                <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider block">One-Tap Quick Classify & Retrain AI:</span>
+                                <div className="flex flex-wrap gap-2 pt-0.5">
+                                  {candidates.slice(0, 3).map((alt) => {
+                                    const isChosen = prop.approved && prop.proposedCategory === alt.category;
+                                    return (
+                                      <button
+                                        key={alt.category}
+                                        type="button"
+                                        onClick={() => {
+                                          const newPlan = { ...smartPlan };
+                                          const realIdx = newPlan.itemProposals.findIndex(p => p.itemId === prop.itemId);
+                                          if (realIdx > -1) {
+                                            newPlan.itemProposals[realIdx].proposedCategory = alt.category;
+                                            newPlan.itemProposals[realIdx].confidence = alt.confidence;
+                                            newPlan.itemProposals[realIdx].approved = true;
+                                            newPlan.itemProposals[realIdx].needsReview = false;
+                                            newPlan.itemProposals[realIdx].reason = `Manually reviewed: assigned ${alt.category}`;
+                                            setSmartPlan(newPlan);
+                                          }
+                                          // Retrain learned store instantly
+                                          SmartCategorizer.learnFromUserDecision({
+                                            domain: prop.domain || prop.title,
+                                            chosenCategory: alt.category
+                                          });
+                                          toast.success(`Classified as "${alt.category}" & trained smart model!`);
+                                        }}
+                                        className={`text-[10px] font-semibold rounded-full px-3 py-1.5 transition-all flex items-center gap-1 active:scale-95 border cursor-pointer ${
+                                          isChosen
+                                            ? 'bg-cyan-500 text-black border-cyan-400 font-bold shadow-md shadow-cyan-500/20'
+                                            : 'bg-[#16213e] hover:bg-cyan-950/40 hover:text-cyan-300 border-gray-700 text-gray-300 hover:border-cyan-500/50'
+                                        }`}
+                                      >
+                                        <span>{alt.category}</span>
+                                        <span className="opacity-70">({(alt.confidence * 100).toFixed(0)}%)</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
             </div>

@@ -22,7 +22,7 @@ function checkAuth(context: functions.https.CallableContext) {
 
 export const createInvite = functions.https.onCall(async (data, context) => {
   const actorUserId = checkAuth(context);
-  const { collectionId, targetUsername, role, message } = data;
+  const { collectionId, targetUsername, role, message, recipientEnvelope } = data;
 
   if (!collectionId || !targetUsername || !role) {
     throw new functions.https.HttpsError(
@@ -37,7 +37,8 @@ export const createInvite = functions.https.onCall(async (data, context) => {
       actorUserId,
       targetUsername,
       role,
-      message || null
+      message || null,
+      recipientEnvelope
     );
     return { success: true, inviteId };
   } catch (err: any) {

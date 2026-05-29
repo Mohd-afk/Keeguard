@@ -60,6 +60,8 @@ export interface CollectionItem {
   updated_by_user_id: string;
   created_at: any;
   updated_at: any;
+  vault_item_id?: string;
+  owner_user_id?: string;
 }
 
 export interface CollectionKeyEnvelope {

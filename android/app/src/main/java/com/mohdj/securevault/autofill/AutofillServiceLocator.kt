@@ -35,8 +35,9 @@ class AutofillServiceLocator private constructor(
                     if (instance == null) {
                         val appCtx = context.applicationContext
                         val dbRepo = com.mohdj.securevault.vault.VaultRepository(appCtx)
-                        val vaultAdapter = AutofillVaultRepositoryAdapter(dbRepo)
-                        val categoryAdapter = AutofillCategoryRepositoryAdapter()
+                        val domainMatcher = DomainMatcher(appCtx)
+                        val vaultAdapter = AutofillVaultRepositoryAdapter(dbRepo, domainMatcher)
+                        val categoryAdapter = AutofillCategoryRepositoryAdapter(appCtx)
                         initialize(appCtx, vaultAdapter, categoryAdapter)
                     }
                 }

@@ -239,10 +239,10 @@ export function PasswordGenerator() {
   const activeTypes = [opts.useLower, opts.useUpper, opts.useDigits, opts.useSymbols].filter(Boolean).length;
 
   return (
-    <div className="min-h-screen max-h-screen overflow-hidden flex flex-col relative">
+    <div className="min-h-screen max-h-screen overflow-hidden flex flex-col relative animate-page">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_0px)]">
-        <div className="flex items-center justify-between px-4 py-3">
+      <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
+        <div className="flex items-center justify-between px-4 py-3 h-14">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}

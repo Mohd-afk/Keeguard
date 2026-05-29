@@ -8,12 +8,12 @@ import * as admin from 'firebase-admin';
 admin.initializeApp();
 
 // Export routes & endpoints
-export { searchUsers } from './routes/users';
+export { searchUsers, getConnections } from './routes/users';
 export { createInvite, acceptInvite, declineInvite, revokeInvite } from './routes/invites';
 export { updateMemberRole, removeMember } from './routes/members';
-export { createCollection } from './routes/collections';
+export { createCollection, submitRotatedKeys, transferCollectionOwnership } from './routes/collections';
 export { commitItem } from './routes/items';
-export { markNotificationRead } from './routes/notifications';
+export { markNotificationRead, respondToShareRequest } from './routes/notifications';
 export { sendDeveloperNotification } from './routes/internalNotifications';
 
 // Export background database triggers

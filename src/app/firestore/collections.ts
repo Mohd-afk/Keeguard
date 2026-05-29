@@ -94,6 +94,8 @@ export interface CollectionItem {
   updated_at: any;
   // Attached key envelope (fetched separately)
   wrapped_item_key?: string;
+  vault_item_id?: string;
+  owner_user_id?: string;
 }
 
 export interface CollectionKeyEnvelope {

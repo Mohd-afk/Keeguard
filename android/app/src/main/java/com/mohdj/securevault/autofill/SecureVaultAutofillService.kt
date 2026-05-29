@@ -1,40 +1,42 @@
 package com.mohdj.securevault.autofill
 
-import android.app.PendingIntent
 import android.app.assist.AssistStructure
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.CancellationSignal
 import android.service.autofill.AutofillService
-import android.service.autofill.Dataset
 import android.service.autofill.FillCallback
 import android.service.autofill.FillContext
 import android.service.autofill.FillRequest
 import android.service.autofill.FillResponse
 import android.service.autofill.SaveCallback
 import android.service.autofill.SaveRequest
-import android.util.Log
-import android.view.autofill.AutofillValue
-import android.widget.RemoteViews
+import android.widget.inline.InlinePresentationSpec
+import com.mohdj.securevault.autofill.builder.FillResponseBuilder
 import com.mohdj.securevault.autofill.builder.SaveInfoBuilder
 import com.mohdj.securevault.autofill.parser.FormType
 import com.mohdj.securevault.autofill.parser.ParsedForm
+import com.mohdj.securevault.autofill.suggestion.InlineSuggestionHealthTracker
 import com.mohdj.securevault.security.BiometricVaultUnlocker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-private const val TAG = "KeeguardAutofill"
-
 class SecureVaultAutofillService : AutofillService() {
 
     private lateinit var domainMatcher: DomainMatcher
+    private lateinit var inlineHealthTracker: InlineSuggestionHealthTracker
+    private lateinit var responseBuilder: FillResponseBuilder
 
     override fun onCreate() {
         super.onCreate()
+        SecureLogger.init(applicationContext)
         domainMatcher = DomainMatcher(applicationContext)
+        inlineHealthTracker = InlineSuggestionHealthTracker(applicationContext)
+        responseBuilder = FillResponseBuilder(applicationContext)
         AutofillServiceLocator.initializeIfNeeded(applicationContext)
-        Log.i(TAG, "Service created")
+        SecureLogger.i("Service created")
     }
 
     override fun onFillRequest(
@@ -43,20 +45,20 @@ class SecureVaultAutofillService : AutofillService() {
         callback: FillCallback
     ) {
         val fillContext: FillContext = request.fillContexts.lastOrNull() ?: run {
-            Log.e(TAG, "AUTOFILL_SUPPRESSED_REASON=no_fill_context")
+            SecureLogger.e("AUTOFILL_SUPPRESSED_REASON=no_fill_context")
             callback.onSuccess(null)
             return
         }
 
         val structure: AssistStructure = fillContext.structure
         val rawPackageName = structure.activityComponent?.packageName ?: ""
-        Log.i(TAG, "AUTOFILL_REQUEST_RECEIVED package=$rawPackageName")
+        SecureLogger.i("AUTOFILL_REQUEST_RECEIVED package=$rawPackageName")
 
         val locator = AutofillServiceLocator.getInstance(applicationContext)
 
         // ── 1. Check Package Blocklist ───────────────────────────────────────
         if (locator.exclusionGuard.shouldSkip(structure)) {
-            Log.i(TAG, "AUTOFILL_SUPPRESSED_REASON=package_excluded package=$rawPackageName")
+            SecureLogger.i("AUTOFILL_SUPPRESSED_REASON=package_excluded package=$rawPackageName")
             callback.onSuccess(null)
             return
         }
@@ -64,13 +66,14 @@ class SecureVaultAutofillService : AutofillService() {
         // ── 2. Parse the view hierarchy ──────────────────────────────────────
         val parsedForm = locator.structureParser.parse(structure)
         val hasUsername = parsedForm.usernameField != null
+        val hasEmail = parsedForm.emailField != null
         val hasPassword = parsedForm.passwordField != null
         val hasNewPassword = parsedForm.newPasswordField != null
 
-        Log.i(TAG, "AUTOFILL_PARSED_FORM formType=${parsedForm.formType} hasUser=$hasUsername hasPass=$hasPassword hasNewPass=$hasNewPassword webDomain=${parsedForm.webDomain}")
+        SecureLogger.i("AUTOFILL_PARSED_FORM formType=${parsedForm.formType} hasUser=$hasUsername hasEmail=$hasEmail hasPass=$hasPassword hasNewPass=$hasNewPassword webDomain=${parsedForm.webDomain}")
 
-        if (!hasUsername && !hasPassword && !hasNewPassword) {
-            Log.d(TAG, "AUTOFILL_SUPPRESSED_REASON=no_relevant_fields package=$rawPackageName")
+        if (!hasUsername && !hasEmail && !hasPassword && !hasNewPassword) {
+            SecureLogger.d("AUTOFILL_SUPPRESSED_REASON=no_relevant_fields package=$rawPackageName")
             callback.onSuccess(null)
             return
         }
@@ -87,7 +90,7 @@ class SecureVaultAutofillService : AutofillService() {
             rawIdentity = rawPackageName
             identityType = "package"
         } else {
-            Log.e(TAG, "AUTOFILL_SUPPRESSED_REASON=no_identity")
+            SecureLogger.e("AUTOFILL_SUPPRESSED_REASON=no_identity")
             callback.onSuccess(null)
             return
         }
@@ -97,29 +100,30 @@ class SecureVaultAutofillService : AutofillService() {
             else  -> domainMatcher.getAppMapping(rawPackageName) ?: rawPackageName
         }
 
-        Log.i(TAG, "AUTOFILL_IDENTITY_RESOLVED type=$identityType raw=$rawIdentity normalized=$normalizedIdentity")
+        SecureLogger.i("AUTOFILL_IDENTITY_RESOLVED type=$identityType raw=$rawIdentity normalized=$normalizedIdentity")
 
         // ── 4. Multi-step login guard (Web only) ─────────────────────────────
         val isWebContext = (identityType == "web")
         var cachedUsername: String? = null
 
-        if (hasUsername && !hasPassword) {
+        val currentUsernameField = parsedForm.usernameField ?: parsedForm.emailField
+        if (currentUsernameField != null && !hasPassword && !hasNewPassword) {
             if (isWebContext) {
-                val usernameText = parsedForm.usernameField?.currentValue?.textValue?.toString() ?: ""
+                val usernameText = currentUsernameField.currentValue?.textValue?.toString() ?: ""
                 if (usernameText.isNotEmpty()) {
                     LoginSessionCache.put(normalizedIdentity, rawPackageName, usernameText)
-                    Log.d(TAG, "LoginSessionCache: stored username context for $normalizedIdentity")
+                    SecureLogger.d("LoginSessionCache: stored username context")
                 }
             }
-        } else if (hasPassword && !hasUsername) {
+        } else if ((hasPassword || hasNewPassword) && currentUsernameField == null) {
             if (isWebContext) {
                 cachedUsername = LoginSessionCache.get(normalizedIdentity, rawPackageName)
                 if (cachedUsername == null) {
-                    Log.w(TAG, "AUTOFILL_SUPPRESSED_REASON=naked_password_web_no_cache identity=$normalizedIdentity")
+                    SecureLogger.w("AUTOFILL_SUPPRESSED_REASON=naked_password_web_no_cache identity=$normalizedIdentity")
                     callback.onSuccess(null)
                     return
                 }
-                Log.i(TAG, "LoginSessionCache: restored username context for $normalizedIdentity")
+                SecureLogger.i("LoginSessionCache: restored username context")
             }
         }
 
@@ -127,7 +131,7 @@ class SecureVaultAutofillService : AutofillService() {
         val prefs = applicationContext.getSharedPreferences("SecureVaultSettings", Context.MODE_PRIVATE)
         val blocklist = prefs.getStringSet("autofillBlocklist", emptySet()) ?: emptySet()
         if (blocklist.contains(normalizedIdentity)) {
-            Log.i(TAG, "AUTOFILL_SUPPRESSED_REASON=blocked_domain identity=$normalizedIdentity")
+            SecureLogger.i("AUTOFILL_SUPPRESSED_REASON=blocked_domain identity=$normalizedIdentity")
             callback.onSuccess(null)
             return
         }
@@ -136,7 +140,7 @@ class SecureVaultAutofillService : AutofillService() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 if (!locator.credentialMatcher.vaultRepository.isVaultUnlocked()) {
-                    Log.i(TAG, "AUTOFILL_VAULT_LOCKED: returning authentication intent identity=$normalizedIdentity")
+                    SecureLogger.i("AUTOFILL_VAULT_LOCKED: returning authentication intent identity=$normalizedIdentity")
 
                     val unlockIntent = Intent(
                         this@SecureVaultAutofillService,
@@ -149,47 +153,28 @@ class SecureVaultAutofillService : AutofillService() {
                         putExtra("RAW_IDENTITY", rawIdentity)
                         putExtra("IDENTITY_TYPE", identityType)
 
-                        val uIds = listOfNotNull(parsedForm.usernameField?.autofillId)
+                        val uIds = listOfNotNull(parsedForm.usernameField?.autofillId, parsedForm.emailField?.autofillId)
                         val pIds = listOfNotNull(parsedForm.passwordField?.autofillId, parsedForm.newPasswordField?.autofillId)
                         putParcelableArrayListExtra("USERNAME_IDS", ArrayList(uIds))
                         putParcelableArrayListExtra("PASSWORD_IDS", ArrayList(pIds))
                     }
 
-                    val pendingIntent = PendingIntent.getActivity(
-                        this@SecureVaultAutofillService,
-                        normalizedIdentity.hashCode(),
-                        unlockIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    )
-
-                    val presentation = RemoteViews(packageName, android.R.layout.simple_list_item_1)
-                    presentation.setTextViewText(android.R.id.text1, "\uD83D\uDD10 Unlock SecureVault")
-
-                    val lockedDatasetBuilder = Dataset.Builder()
-                    lockedDatasetBuilder.setAuthentication(pendingIntent.intentSender)
-
-                    parsedForm.usernameField?.autofillId?.let { lockedDatasetBuilder.setValue(it, null, presentation) }
-                    parsedForm.passwordField?.autofillId?.let { lockedDatasetBuilder.setValue(it, null, presentation) }
-                    parsedForm.newPasswordField?.autofillId?.let { lockedDatasetBuilder.setValue(it, null, presentation) }
-
-                    val response = FillResponse.Builder()
-                        .addDataset(lockedDatasetBuilder.build())
-                        .build()
-
+                    val code = PendingIntentRequestCodeGenerator.getNext()
+                    val response = responseBuilder.buildLockedResponse(parsedForm, unlockIntent, code)
                     callback.onSuccess(response)
                     return@launch
                 }
 
                 // ── 7. Vault unlocked: find matching credentials ─────────────
                 val matchingCreds = locator.credentialMatcher.findMatches(parsedForm)
-                Log.i(TAG, "AUTOFILL_MATCH_COUNT identity=$normalizedIdentity count=${matchingCreds.size}")
+                SecureLogger.i("AUTOFILL_MATCH_COUNT identity=$normalizedIdentity count=${matchingCreds.size}")
+
+                val saveInfo = SaveInfoBuilder().build(parsedForm)
 
                 if (matchingCreds.isEmpty()) {
-                    Log.i(TAG, "AUTOFILL_SUPPRESSED_REASON=no_matching_credentials identity=$normalizedIdentity")
-                    val saveInfo = SaveInfoBuilder().build(parsedForm)
-                    val responseBuilder = FillResponse.Builder()
-                    if (saveInfo != null) responseBuilder.setSaveInfo(saveInfo)
-                    callback.onSuccess(responseBuilder.build())
+                    SecureLogger.i("AUTOFILL_SUPPRESSED_REASON=no_matching_credentials identity=$normalizedIdentity")
+                    val response = responseBuilder.buildSaveOnlyResponse(saveInfo)
+                    callback.onSuccess(response)
                     return@launch
                 }
 
@@ -201,59 +186,39 @@ class SecureVaultAutofillService : AutofillService() {
                     matchingCreds
                 }
 
-                val responseBuilder = FillResponse.Builder()
-                var datasetCount = 0
-
-                for (cred in filteredCreds) {
-                    val datasetBuilder = Dataset.Builder()
-                    val presentation = RemoteViews(packageName, android.R.layout.simple_list_item_1)
-                    presentation.setTextViewText(
-                        android.R.id.text1,
-                        cred.username.ifEmpty { cred.title }.ifEmpty { "SecureVault" }
-                    )
-
-                    var datasetUsable = false
-
-                    parsedForm.usernameField?.autofillId?.let { id ->
-                        datasetBuilder.setValue(id, AutofillValue.forText(cred.username), presentation)
-                        datasetUsable = true
-                    }
-
-                    parsedForm.passwordField?.autofillId?.let { id ->
-                        datasetBuilder.setValue(id, AutofillValue.forText(cred.password), presentation)
-                        datasetUsable = true
-                    }
-
-                    parsedForm.newPasswordField?.autofillId?.let { id ->
-                        datasetBuilder.setValue(id, AutofillValue.forText(cred.password), presentation)
-                        datasetUsable = true
-                    }
-
-                    if (datasetUsable) {
-                        responseBuilder.addDataset(datasetBuilder.build())
-                        datasetCount++
-                    }
+                // Inline suggestions detection
+                var inlineSpecs: List<InlinePresentationSpec>? = null
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    inlineSpecs = request.inlineSuggestionsRequest?.inlinePresentationSpecs
                 }
 
-                // Add SaveInfo for capturing new / updated logins
-                val saveInfo = SaveInfoBuilder().build(parsedForm)
-                if (saveInfo != null) responseBuilder.setSaveInfo(saveInfo)
+                val activeIme = inlineHealthTracker.getActiveImePackage()
+                val isInlineAllowed = !AutofillCapabilityMatrix.isSamsungQuirkDevice() && 
+                                     inlineHealthTracker.isInlineSupported(activeIme)
 
-                Log.i(TAG, "AUTOFILL_FILL_RESPONSE_SENT identity=$normalizedIdentity datasetCount=$datasetCount")
-                callback.onSuccess(responseBuilder.build())
+                val fillResponse = responseBuilder.buildFilledResponse(
+                    parsedForm = parsedForm,
+                    credentials = filteredCreds,
+                    saveInfo = saveInfo,
+                    inlineSpecs = inlineSpecs,
+                    isInlineAllowed = isInlineAllowed
+                )
+
+                SecureLogger.i("AUTOFILL_FILL_RESPONSE_SENT identity=$normalizedIdentity")
+                callback.onSuccess(fillResponse)
 
             } catch (e: Exception) {
-                Log.e(TAG, "AUTOFILL_EXCEPTION message=${e.message}", e)
+                SecureLogger.e("AUTOFILL_EXCEPTION message=${e.message}", e)
                 callback.onFailure("autofill_exception")
             }
         }
     }
 
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
-        Log.i(TAG, "AUTOFILL_SAVE_REQUEST_RECEIVED")
+        SecureLogger.i("AUTOFILL_SAVE_REQUEST_RECEIVED")
 
         val fillContext = request.fillContexts.lastOrNull() ?: run {
-            Log.e(TAG, "AUTOFILL_SAVE: context is null")
+            SecureLogger.e("AUTOFILL_SAVE: context is null")
             callback.onFailure("save_no_context")
             return
         }
@@ -271,7 +236,7 @@ class SecureVaultAutofillService : AutofillService() {
             if (!cached.isNullOrBlank()) {
                 finalUsername = cached
                 LoginSessionCache.clear(parsedForm.canonicalIdentifier, rawPackageName)
-                Log.d(TAG, "AUTOFILL_SAVE: restored username from session cache")
+                SecureLogger.d("AUTOFILL_SAVE: restored username from session cache")
             }
         }
 
@@ -279,10 +244,10 @@ class SecureVaultAutofillService : AutofillService() {
             try {
                 val result = locator.saveRequestHandler.evaluate(parsedForm, finalUsername, extractedPassword)
                 locator.saveRequestHandler.launchSaveUI(result, parsedForm)
-                Log.i(TAG, "AUTOFILL_SAVE_EVALUATED: result=$result")
+                SecureLogger.i("AUTOFILL_SAVE_EVALUATED: result=$result")
                 callback.onSuccess()
             } catch (e: Exception) {
-                Log.e(TAG, "AUTOFILL_SAVE: exception message=${e.message}", e)
+                SecureLogger.e("AUTOFILL_SAVE: exception message=${e.message}", e)
                 callback.onFailure("save_exception")
             }
         }

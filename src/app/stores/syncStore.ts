@@ -77,10 +77,17 @@ onAuthChange(async (user) => {
     const vaultKey = getSessionCryptoKey();
     if (vaultKey) {
       try {
-        await ensureDeviceKeyPair(vaultKey);
+        const pubKeyB64 = await ensureDeviceKeyPair(vaultKey);
         log.info('Device ECDH keys verified');
+        
+        // Publish public profile (username, display name, public key)
+        const { getUsernameForUid, publishPublicProfile } = await import('../firestore');
+        const username = await getUsernameForUid(user.uid);
+        if (username) {
+          await publishPublicProfile(user.uid, username, user.displayName, pubKeyB64);
+        }
       } catch (err) {
-        log.error('Failed to ensure device keys', err);
+        log.error('Failed to ensure device keys / publish public profile', err);
       }
     }
 
@@ -335,7 +342,9 @@ export async function commitSharedItem(
   title: string,
   plaintext: string,
   itemType: 'login' | 'card' | 'note' | 'identity' | 'wifi' | 'other' = 'login',
-  baseRevision = 0
+  baseRevision = 0,
+  vaultItemId?: string,
+  ownerUserId?: string
 ): Promise<{ success: boolean; conflict?: boolean }> {
   log.info('Committing item to shared collection', { itemId, collectionId, baseRevision });
 
@@ -364,6 +373,8 @@ export async function commitSharedItem(
     itemKeyVersion: 1,
     wrappedItemKey: envelope.wrapped_item_key,
     isDelete: false,
+    vaultItemId,
+    ownerUserId,
   };
 
   // Offline handler
@@ -528,4 +539,115 @@ async function flushOfflineQueue() {
       }
     }
   }
+}
+
+/**
+ * Zero-knowledge key rotation on member removal/revocation.
+ */
+export async function rotateCollectionKey(collectionId: string, removedUserId: string): Promise<void> {
+  log.info('Starting zero-knowledge key rotation', { collectionId, removedUserId });
+  const vaultKey = getSessionCryptoKey();
+  if (!vaultKey) throw new Error('Vault is locked. Cannot perform crypto operations.');
+
+  // 1. Get current keys
+  const oldCollectionKey = _collectionKeys.get(collectionId);
+  if (!oldCollectionKey) throw new Error('Old collection key not cached. Cannot rotate.');
+
+  const myPrivateKey = await loadDevicePrivateKey(vaultKey);
+  if (!myPrivateKey) throw new Error('Could not load device private key.');
+
+  // 2. Generate new CollectionKey (CKv2)
+  const { generateCollectionKey, wrapCollectionKey, rewrapItemKey, getDevicePublicKeyB64 } = await import('../crypto/collectionCrypto');
+  const newCollectionKey = await generateCollectionKey();
+
+  // 3. Fetch remaining members list from accessStore (excluding removedUserId)
+  const { getActiveCollectionMembers } = await import('./accessStore');
+  const members = getActiveCollectionMembers().filter(
+    (m) => m.user_id !== removedUserId && m.status === 'active'
+  );
+
+  const db = getFirebaseDb();
+  const { doc, getDoc } = await import('firebase/firestore');
+
+  // 4. For each active member, fetch their public ECDH key and wrap CKv2
+  const envelopes: Array<{ recipientId: string; wrappedKey: string; senderPublicKeyB64: string }> = [];
+  const myPubKeyB64 = await getDevicePublicKeyB64();
+  if (!myPubKeyB64) throw new Error('Device public key not found');
+
+  // Add envelope for self
+  const selfWrappedKey = await wrapCollectionKey(newCollectionKey, myPrivateKey, myPubKeyB64);
+  const currentUser = getCurrentUser();
+  if (currentUser) {
+    envelopes.push({
+      recipientId: currentUser.uid,
+      wrappedKey: selfWrappedKey,
+      senderPublicKeyB64: myPubKeyB64,
+    });
+  }
+
+  for (const member of members) {
+    // Skip self as we already handled it above
+    if (currentUser && member.user_id === currentUser.uid) continue;
+
+    try {
+      const profileSnap = await getDoc(doc(db, 'userProfiles', member.user_id));
+      if (profileSnap.exists()) {
+        const pData = profileSnap.data()!;
+        const memberPubKeyB64 = pData.public_key;
+        if (memberPubKeyB64) {
+          const wrappedKey = await wrapCollectionKey(newCollectionKey, myPrivateKey, memberPubKeyB64);
+          envelopes.push({
+            recipientId: member.user_id,
+            wrappedKey,
+            senderPublicKeyB64: myPubKeyB64,
+          });
+        }
+      }
+    } catch (e) {
+      log.error('Failed to generate envelope for member', { userId: member.user_id, e });
+    }
+  }
+
+  // 5. Decrypt all current items and re-wrap their item keys with CKv2
+  const { getDocFromServer, collection } = await import('firebase/firestore');
+  const itemsSnap = await getDocFromServer(doc(db, 'collections', collectionId));
+  const currentKeyVersion = itemsSnap.exists() ? (itemsSnap.data()!.current_key_version || 1) : 1;
+  const nextKeyVersion = currentKeyVersion + 1;
+
+  // Read items directly from Firestore items subcollection
+  const itemsQuerySnap = await import('firebase/firestore').then(f => f.getDocs(collection(db, 'collections', collectionId, 'items')));
+  const items: Array<{ itemId: string; wrappedItemKey: string }> = [];
+
+  for (const itemDoc of itemsQuerySnap.docs) {
+    const itemData = itemDoc.data();
+    if (itemData.deleted_at) continue;
+
+    const wrappedItemKey = itemData.wrapped_item_key;
+    if (wrappedItemKey) {
+      try {
+        const rewrapped = await rewrapItemKey(wrappedItemKey, oldCollectionKey, newCollectionKey);
+        items.push({
+          itemId: itemDoc.id,
+          wrappedItemKey: rewrapped,
+        });
+      } catch (err) {
+        log.error('Failed to re-wrap item key', { itemId: itemDoc.id, err });
+      }
+    }
+  }
+
+  // 6. Submit envelopes and re-wrapped keys to submitRotatedKeys callable
+  const { submitRotatedKeys } = await import('../api/collections');
+  await submitRotatedKeys({
+    collectionId,
+    newKeyVersion: nextKeyVersion,
+    envelopes,
+    items,
+  });
+
+  // 7. Update local state
+  _collectionKeys.set(collectionId, newCollectionKey);
+  const { evictCollectionKey } = await import('../crypto/collectionCrypto');
+  evictCollectionKey(collectionId);
+  log.info('Key rotation completed successfully', { collectionId, nextKeyVersion });
 }

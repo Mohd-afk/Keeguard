@@ -11,9 +11,11 @@ import { LicensePage } from './components/legal/LicensePage';
 import { SecurityDashboard } from './components/SecurityDashboard';
 import { PasswordGenerator } from './components/PasswordGenerator';
 import ManageCategories from './components/ManageCategories';
+import { PendingRequests } from './components/PendingRequests';
 import { CollectionListPage } from './pages/collections/CollectionListPage';
 import { CollectionDetailPage } from './pages/collections/CollectionDetailPage';
 import { CollectionAccessPage } from './pages/collections/CollectionAccessPage';
+import { ShareCategoryPage } from './pages/sharing/ShareCategoryPage';
 
 export const router = createBrowserRouter([
   {
@@ -29,6 +31,8 @@ export const router = createBrowserRouter([
       { path: 'security', Component: SecurityDashboard },
       { path: 'generator', Component: PasswordGenerator },
       { path: 'categories', Component: ManageCategories },
+      { path: 'pending-requests', Component: PendingRequests },
+      { path: 'share', Component: ShareCategoryPage },
       // Shared collection pages
       { path: 'collections', Component: CollectionListPage },
       { path: 'collections/:id', Component: CollectionDetailPage },

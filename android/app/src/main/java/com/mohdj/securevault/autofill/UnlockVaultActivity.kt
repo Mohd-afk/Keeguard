@@ -1,23 +1,12 @@
 package com.mohdj.securevault.autofill
 
-// ─── Change Log (v3.2.2) ──────────────────────────────────────────────────────
-// RC1: Removed the incorrect AES-GCM decrypt block (lines 97-117 in previous version)
-//      that was:
-//        (a) Using unwrappedDEK AFTER it was already zeroed with fill(0) at line 61,
-//            causing a double-scrub bug where the SecretKey was derived from all zeros.
-//        (b) Trying to AES/GCM decrypt a PLAINTEXT password string stored by SQLCipher.
-//      The biometric unwrap flow is kept intact: we still decode the biometric cipher
-//      and store the DEK in BiometricVaultUnlocker for future autofill-session use.
-//      However, item.password is now read directly (plaintext in SQLCipher DB).
-// ─────────────────────────────────────────────────────────────────────────────
-
 import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.service.autofill.Dataset
 import android.service.autofill.FillResponse
-import android.util.Log
+import android.view.WindowManager
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillManager
 import android.view.autofill.AutofillValue
@@ -27,15 +16,12 @@ import androidx.annotation.RequiresApi
 import androidx.fragment.app.FragmentActivity
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
-import com.mohdj.securevault.autofill.DomainMatcher
+import com.mohdj.securevault.R
 import com.mohdj.securevault.security.BiometricKeyManager
 import com.mohdj.securevault.security.BiometricVaultUnlocker
-import com.mohdj.securevault.vault.VaultRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-
-private const val TAG = "UnlockVaultActivity"
 
 class UnlockVaultActivity : FragmentActivity() {
 
@@ -43,10 +29,19 @@ class UnlockVaultActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        domain = intent.getStringExtra("DOMAIN") ?: ""
-        Log.i(TAG, "Activity created for domain=$domain")
+        
+        // Anti-overlay and screen secure hardening
+        if (AutofillCapabilityMatrix.supportsHideOverlayWindows()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                window.setHideOverlayWindows(true)
+            }
+        }
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
 
-        // Activity is transparent — immediately show the biometric prompt
+        domain = intent.getStringExtra("DOMAIN") ?: ""
+        SecureLogger.i("UnlockVaultActivity: Created for domain=$domain")
+
+        // Immediately show the biometric prompt
         showBiometricPrompt()
     }
 
@@ -71,7 +66,7 @@ class UnlockVaultActivity : FragmentActivity() {
 
                     val cryptoObject = result.cryptoObject
                     if (cryptoObject?.cipher == null) {
-                        Log.e(TAG, "CryptoObject is null on biometric success — cannot unwrap DEK")
+                        SecureLogger.e("UnlockVaultActivity: CryptoObject is null on biometric success — cannot unwrap DEK")
                         TelemetryLogger.logEvent(
                             applicationContext,
                             TelemetryLogger.EventType.BIOMETRIC_FAILURE,
@@ -83,18 +78,13 @@ class UnlockVaultActivity : FragmentActivity() {
                     }
 
                     try {
-                        // Unwrap the DEK using the biometric-authenticated cipher.
-                        // Purpose: marks vault as "unlocked" in BiometricVaultUnlocker so
-                        // subsequent onFillRequests skip the authentication step within the
-                        // session timeout window.
                         val unwrappedDEK = BiometricKeyManager.unwrapDEK(
                             applicationContext, cryptoObject.cipher!!
                         )
                         BiometricVaultUnlocker.setUnlockedDek(unwrappedDEK)
-                        // Scrub local copy — DEK is now owned by BiometricVaultUnlocker
-                        unwrappedDEK.fill(0)
+                        unwrappedDEK.fill(0) // scrub key bytes
 
-                        Log.i(TAG, "Vault session unlocked via biometric for domain=$domain")
+                        SecureLogger.i("UnlockVaultActivity: Vault session unlocked via biometric for domain=$domain")
                         TelemetryLogger.logEvent(
                             applicationContext,
                             TelemetryLogger.EventType.BIOMETRIC_SUCCESS,
@@ -106,13 +96,13 @@ class UnlockVaultActivity : FragmentActivity() {
                             try {
                                 buildAndReturnFillResponse()
                             } catch (e: Exception) {
-                                Log.e(TAG, "Error building fill response after unlock", e)
+                                SecureLogger.e("UnlockVaultActivity: Error building fill response after unlock", e)
                                 runOnUiThread { finish() }
                             }
                         }
 
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to unwrap DEK from biometric cipher", e)
+                        SecureLogger.e("UnlockVaultActivity: Failed to unwrap DEK from biometric cipher", e)
                         TelemetryLogger.logEvent(
                             applicationContext,
                             TelemetryLogger.EventType.BIOMETRIC_FAILURE,
@@ -127,7 +117,7 @@ class UnlockVaultActivity : FragmentActivity() {
                     errorCode: Int, errString: CharSequence
                 ) {
                     super.onAuthenticationError(errorCode, errString)
-                    Log.e(TAG, "Biometric error code=$errorCode")
+                    SecureLogger.e("UnlockVaultActivity: Biometric error code=$errorCode")
                     TelemetryLogger.logEvent(
                         applicationContext,
                         TelemetryLogger.EventType.BIOMETRIC_FAILURE,
@@ -139,8 +129,7 @@ class UnlockVaultActivity : FragmentActivity() {
 
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
-                    // Attempt mismatch — the prompt stays visible; do NOT finish yet.
-                    Log.w(TAG, "Biometric attempt failed (mismatch), prompt still active")
+                    SecureLogger.w("UnlockVaultActivity: Biometric attempt failed (mismatch)")
                 }
             }
         )
@@ -153,7 +142,7 @@ class UnlockVaultActivity : FragmentActivity() {
             .build()
 
         try {
-            if (Build.VERSION_CODES.N <= Build.VERSION.SDK_INT) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val cipher = BiometricKeyManager.getDecryptionCipher(this)
                 biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
             } else {
@@ -163,8 +152,7 @@ class UnlockVaultActivity : FragmentActivity() {
                 finishWithCancel()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize biometric cipher — key may have been invalidated", e)
-            // This happens when the user adds/removes fingerprints after enabling biometric unlock
+            SecureLogger.e("UnlockVaultActivity: Failed to initialize biometric cipher — key may have been invalidated", e)
             Toast.makeText(
                 this,
                 "Re-enable biometric unlock in Keeguard (fingerprints changed)",
@@ -174,55 +162,18 @@ class UnlockVaultActivity : FragmentActivity() {
         }
     }
 
-    /**
-     * Queries the native SQLCipher vault for credentials matching [domain] and
-     * builds an AutofillManager fill response to return to the requesting app.
-     *
-     * RC1: item.password contains the PLAINTEXT credential stored in the SQLCipher-
-     * protected DB. No additional AES decryption is performed here — that was removed
-     * because it applied the wrong key (biometric DEK) to plaintext data, causing
-     * every fill attempt to silently fail with an empty password.
-     */
     private suspend fun buildAndReturnFillResponse() {
-        val repository = VaultRepository(applicationContext)
-        val domainMatcher = DomainMatcher(applicationContext)
+        val locator = AutofillServiceLocator.getInstance(applicationContext)
+        val repository = locator.credentialMatcher.vaultRepository
 
-        // ── Three-tier credential lookup ────────────────────────────────────────
-        // Tier 1: SQL LIKE scan by normalised domain (fast path)
-        var matches = repository.findByDomain(domain)
-        Log.i(TAG, "Tier-1 SQL LIKE: domain=$domain count=${matches.size}")
-
-        // Tier 2: Try raw webDomain directly (in case subdomain != normalised root)
-        if (matches.isEmpty()) {
-            val rawDomain = intent.getStringExtra("RAW_IDENTITY") ?: domain
-            if (rawDomain != domain) {
-                matches = repository.findByDomain(rawDomain)
-                Log.i(TAG, "Tier-2 raw domain: rawDomain=$rawDomain count=${matches.size}")
-            }
-        }
-
-        // Tier 3: Full in-memory scan — load all items and match by confidence
-        if (matches.isEmpty()) {
-            Log.w(TAG, "Tier-3 full-scan: SQL returned 0 for domain=$domain — scanning all items")
-            val allItems = repository.getAllActive()
-            matches = allItems.filter { item ->
-                val uris = parseUriListFromJson(item.uris)
-                uris.any { uri -> domainMatcher.calculateConfidence(domain, uri) >= 0.8 }
-            }
-            Log.i(TAG, "Tier-3 full-scan: totalItems=${allItems.size} matched=${matches.size}")
-        }
+        // Targeted lookup replaces all in-memory full scanning and redundant tier checks!
+        val matches = repository.findMatchingCredentials(domain)
+        SecureLogger.i("UnlockVaultActivity: Targeted DB search for domain=$domain found ${matches.size} items")
 
         if (matches.isEmpty()) {
-            // Diagnostic: show item count so we can tell if DB is empty vs domain mismatch
-            val totalInDb = repository.getAllActive().size
-            val msg = if (totalInDb == 0) {
-                "Autofill DB is empty. Open Keeguard and unlock it to sync your vault."
-            } else {
-                "No match for $domain ($totalInDb items in vault)"
-            }
-            Log.w(TAG, "No matches found: domain=$domain totalInDb=$totalInDb")
+            SecureLogger.w("UnlockVaultActivity: No matching credentials in database for $domain")
             runOnUiThread {
-                Toast.makeText(this@UnlockVaultActivity, msg, Toast.LENGTH_LONG).show()
+                Toast.makeText(this@UnlockVaultActivity, "No credentials matching $domain found.", Toast.LENGTH_LONG).show()
                 setResult(Activity.RESULT_CANCELED)
                 finishAndRemoveTask()
             }
@@ -233,7 +184,7 @@ class UnlockVaultActivity : FragmentActivity() {
         val pIds = intent.getParcelableArrayListExtra<AutofillId>("PASSWORD_IDS")
 
         if (uIds == null && pIds == null) {
-            Log.e(TAG, "AutofillIds are missing from intent!")
+            SecureLogger.e("UnlockVaultActivity: AutofillIds are missing from intent!")
             runOnUiThread {
                 Toast.makeText(this@UnlockVaultActivity, "Autofill error: missing field IDs", Toast.LENGTH_SHORT).show()
                 setResult(Activity.RESULT_CANCELED)
@@ -245,12 +196,12 @@ class UnlockVaultActivity : FragmentActivity() {
         val responseBuilder = FillResponse.Builder()
         var datasetCount = 0
 
-        for (item in matches.sortedByDescending { it.updatedAt }) {
+        for (cred in matches.sortedByDescending { it.lastUsedAt }) {
             val datasetBuilder = Dataset.Builder()
-            val presentation = RemoteViews(packageName, android.R.layout.simple_list_item_1)
+            val presentation = RemoteViews(packageName, R.layout.autofill_dataset)
             presentation.setTextViewText(
-                android.R.id.text1,
-                item.username.ifEmpty { item.title }.ifEmpty { "Keeguard" }
+                R.id.text1,
+                cred.username.ifEmpty { cred.title }.ifEmpty { "Keeguard" }
             )
 
             var datasetUsable = false
@@ -258,24 +209,18 @@ class UnlockVaultActivity : FragmentActivity() {
             // Fill username fields
             if (uIds != null) {
                 for (id in uIds) {
-                    datasetBuilder.setValue(id, AutofillValue.forText(item.username), presentation)
+                    datasetBuilder.setValue(id, AutofillValue.forText(cred.username), presentation)
                     datasetUsable = true
                 }
             }
 
-            // RC1 FIX: item.password is the PLAINTEXT password stored in the SQLCipher DB.
-            // The previous version incorrectly attempted AES/GCM decrypt using the biometric
-            // DEK (a different key), which always threw an exception and silently fell through
-            // to an empty fill. That decrypt block does not exist in this version.
-            val passwordToFill = item.password
+            // Fill password fields
+            val passwordToFill = cred.password
             if (passwordToFill.isNotEmpty() && pIds != null) {
                 for (id in pIds) {
                     datasetBuilder.setValue(id, AutofillValue.forText(passwordToFill), presentation)
                     datasetUsable = true
                 }
-            } else if (passwordToFill.isEmpty()) {
-                Log.w(TAG, "Empty password for itemId=${item.id} after unlock " +
-                        "— user should re-sync (open Keeguard while vault is unlocked)")
             }
 
             if (datasetUsable) {
@@ -285,7 +230,7 @@ class UnlockVaultActivity : FragmentActivity() {
         }
 
         if (datasetCount == 0) {
-            Log.w(TAG, "No usable datasets could be built for domain=$domain")
+            SecureLogger.w("UnlockVaultActivity: No usable datasets could be built")
             runOnUiThread {
                 Toast.makeText(this@UnlockVaultActivity, "No usable fields found for $domain", Toast.LENGTH_SHORT).show()
                 setResult(Activity.RESULT_CANCELED)
@@ -298,52 +243,16 @@ class UnlockVaultActivity : FragmentActivity() {
             putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, responseBuilder.build())
         }
 
-        Log.i(TAG, "Returning fill response to autofill framework: " +
-                "domain=$domain datasetCount=$datasetCount")
+        SecureLogger.i("UnlockVaultActivity: Returning authentication results with $datasetCount datasets.")
 
         runOnUiThread {
             setResult(Activity.RESULT_OK, resultIntent)
-            // IMPORTANT: Use finish() here, NOT finishAndRemoveTask().
-            //
-            // The Android Autofill Framework reads EXTRA_AUTHENTICATION_RESULT from
-            // the activity result AFTER the activity finishes. If we call
-            // finishAndRemoveTask(), the OS removes the entire task immediately,
-            // and the framework never receives the fill response — causing the
-            // user to have to tap the field again manually.
-            //
-            // finish() returns control to the framework which then auto-presents
-            // the credential datasets inline in the target app (the desired behaviour).
-            //
-            // The task will be cleaned up naturally by the OS since it has
-            // taskAffinity="" and excludeFromRecents=true in the manifest.
             finish()
         }
     }
 
     private fun finishWithCancel() {
         setResult(RESULT_CANCELED)
-        // On cancel we DO want to remove the task to avoid a ghost overlay
-        // appearing in recent apps when the user dismisses the biometric prompt.
         finishAndRemoveTask()
-    }
-
-    /**
-     * Parses the uris JSON array column (e.g. '["https://id.dreamapply.com"]')
-     * into individual URL strings for in-memory domain matching.
-     */
-    private fun parseUriListFromJson(urisJson: String): List<String> {
-        val trimmed = urisJson.trim()
-        if (trimmed.startsWith("[")) {
-            try {
-                return trimmed
-                    .removePrefix("[").removeSuffix("]")
-                    .split(",")
-                    .map { it.trim().removeSurrounding("\"") }
-                    .filter { it.isNotBlank() }
-            } catch (e: Exception) {
-                Log.w(TAG, "parseUriListFromJson failed, raw=${trimmed.take(80)}")
-            }
-        }
-        return if (trimmed.isNotBlank()) listOf(trimmed) else emptyList()
     }
 }

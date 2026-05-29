@@ -292,3 +292,20 @@ export async function saveUserEmailToProfile(uid: string, email: string): Promis
     log.info('Saving user email to top-level user document', { uid });
     await setDoc(doc(getFirebaseDb(), 'users', uid), { email, updatedAt: serverTimestamp() }, { merge: true });
 }
+
+export async function publishPublicProfile(
+    uid: string,
+    username: string,
+    displayName: string | null,
+    publicKeyB64: string
+): Promise<void> {
+    log.info('Publishing public profile with ECDH key', { uid, username });
+    const profileRef = doc(getFirebaseDb(), 'userProfiles', uid);
+    await setDoc(profileRef, {
+        username,
+        display_name: displayName || username,
+        public_key: publicKeyB64,
+        updated_at: serverTimestamp(),
+    }, { merge: true });
+    log.info('Public profile published successfully');
+}

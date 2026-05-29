@@ -46,6 +46,10 @@ export interface CreateInviteParams {
   targetUsername: string;
   role: Exclude<CollectionRole, 'owner'>;
   message?: string;
+  recipientEnvelope?: {
+    wrappedKey: string;
+    senderPublicKeyB64: string;
+  };
 }
 
 export async function createInvite(params: CreateInviteParams): Promise<string> {
@@ -71,4 +75,30 @@ export async function revokeInvite(collectionId: string, inviteId: string): Prom
   const fns = getFirebaseFunctions();
   const callable = httpsCallable<{ collectionId: string; inviteId: string }, void>(fns, 'revokeInvite');
   await callable({ collectionId, inviteId });
+}
+
+export interface SubmitRotatedKeysParams {
+  collectionId: string;
+  newKeyVersion: number;
+  envelopes: Array<{
+    recipientId: string;
+    wrappedKey: string;
+    senderPublicKeyB64: string;
+  }>;
+  items: Array<{
+    itemId: string;
+    wrappedItemKey: string;
+  }>;
+}
+
+export async function submitRotatedKeys(params: SubmitRotatedKeysParams): Promise<void> {
+  const fns = getFirebaseFunctions();
+  const callable = httpsCallable<SubmitRotatedKeysParams, void>(fns, 'submitRotatedKeys');
+  await callable(params);
+}
+
+export async function transferOwnership(collectionId: string, targetUserId: string): Promise<void> {
+  const fns = getFirebaseFunctions();
+  const callable = httpsCallable<{ collectionId: string; targetUserId: string }, void>(fns, 'transferCollectionOwnership');
+  await callable({ collectionId, targetUserId });
 }

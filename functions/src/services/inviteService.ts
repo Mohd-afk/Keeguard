@@ -18,7 +18,8 @@ export async function createCollectionInvite(
   actorUserId: string,
   targetUsername: string,
   role: Exclude<CollectionRole, 'owner'>,
-  message: string | null
+  message: string | null,
+  recipientEnvelope?: { wrappedKey: string; senderPublicKeyB64: string }
 ): Promise<string> {
   const db = admin.firestore();
 
@@ -93,7 +94,7 @@ export async function createCollectionInvite(
   const invitesColl = db.collection('collections').doc(collectionId).collection('invites');
   const inviteDoc = invitesColl.doc();
   const now = admin.firestore.FieldValue.serverTimestamp();
-  const expiresAt = new Date(Date.now() + 48 * 3600 * 1000); // 48 hour expiry
+  const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000); // 7 day expiry
 
   const invitePayload: Omit<CollectionInvite, 'id'> = {
     collection_id: collectionId,
@@ -108,6 +109,35 @@ export async function createCollectionInvite(
   };
 
   await inviteDoc.set(invitePayload);
+
+  // Write key envelope for recipient if provided
+  if (recipientEnvelope) {
+    const envelopeRef = db
+      .collection('collections')
+      .doc(collectionId)
+      .collection('keyEnvelopes')
+      .doc(invitedUserId);
+    
+    await envelopeRef.set({
+      collection_id: collectionId,
+      collection_key_version: 1,
+      recipient_type: 'user',
+      recipient_id: invitedUserId,
+      wrapped_collection_key: recipientEnvelope.wrappedKey,
+      sender_public_key_b64: recipientEnvelope.senderPublicKeyB64,
+      created_at: now,
+    });
+  }
+
+  // Write to folder_shares collection
+  const shareRole = (role === 'viewer') ? 'viewer' : 'collaborator';
+  await db.collection('folder_shares').doc(`${collectionId}_${invitedUserId}`).set({
+    folder_id: collectionId,
+    user_id: invitedUserId,
+    role: shareRole,
+    status: 'pending',
+    updated_at: now,
+  });
 
   // 9. Dispatch in-app notification
   await sendNotification(invitedUserId, {
@@ -218,6 +248,12 @@ export async function declineCollectionInvite(
     responded_at: admin.firestore.FieldValue.serverTimestamp(),
   });
 
+  // Update folder_shares pivot collection
+  await db.collection('folder_shares').doc(`${collectionId}_${actorUserId}`).update({
+    status: 'declined',
+    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
   // Write cooldown block
   const cooldownId = `${inviteData.invited_by_user_id}_${collectionId}_${inviteData.invited_user_id}`;
   await db.collection('cooldowns').doc(cooldownId).set({
@@ -309,6 +345,13 @@ export async function acceptCollectionInvite(
       joined_at: admin.firestore.FieldValue.serverTimestamp(),
       added_by_user_id: inviteData.invited_by_user_id,
       created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // 4. Update folder_shares pivot collection
+    const folderShareRef = db.collection('folder_shares').doc(`${collectionId}_${actorUserId}`);
+    transaction.update(folderShareRef, {
+      status: 'accepted',
       updated_at: admin.firestore.FieldValue.serverTimestamp(),
     });
   });

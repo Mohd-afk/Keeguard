@@ -19,6 +19,10 @@ export interface AutofillBridgePlugin {
     credentialId?: string;
   }): Promise<void>;
   dismissSavePrompt(): Promise<void>;
+  recordCategoryOverride(opts: {
+    domain: string;
+    categoryId: string;
+  }): Promise<void>;
   addListener(
     event: 'autofillSaveRequest',
     handler: (data: AutofillSaveEvent) => void
