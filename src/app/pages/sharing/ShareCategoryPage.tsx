@@ -412,28 +412,8 @@ export function ShareCategoryPage() {
             </div>
           </div>
         )}
-
-        {/* Empty state if no collection ID */}
-        {!collectionId && (
-          <div className="py-16 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-14 h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-gray-500">
-              <UserPlus className="w-7 h-7" />
-            </div>
-            <div className="max-w-[240px]">
-              <p className="text-white font-semibold text-sm">No Vault Selected</p>
-              <p className="text-gray-500 text-xs mt-1 leading-relaxed">
-                Navigate to a shared vault and tap the share icon to invite collaborators.
-              </p>
-            </div>
-            <button
-              onClick={() => navigate('/collections')}
-              className="py-2 px-5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold rounded-xl transition-all hover:bg-cyan-500/15 active:scale-95"
-            >
-              View Shared Vaults
-            </button>
-          </div>
-        )}
       </div>
+
 
       {/* Permission Bottom Sheet */}
       {showPermissionSheet && selectedUser && (

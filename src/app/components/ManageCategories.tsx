@@ -1238,12 +1238,13 @@ export default function ManageCategories() {
                     setIsApplyingSmart(true);
                     let applyCount = 0;
                     try {
-                      // 1. Create approved new categories
+                      // 1. Create approved new categories and keep track of them (avoid stale state bugs)
+                      const createdCats = [];
                       for (const catProp of smartPlan.newCategoryProposals) {
                         if (catProp.approved) {
                            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#6366f1', '#f97316', '#ef4444', '#64748b'];
                            const randomColor = colors[Math.floor(Math.random() * colors.length)];
-                           await addCustomCategory({
+                           const newCat = await addCustomCategory({
                              name: catProp.categoryName,
                              icon: 'Folder',
                              color: randomColor,
@@ -1251,19 +1252,20 @@ export default function ManageCategories() {
                              isHidden: false,
                              isPinned: false,
                              parentCategoryId: null,
-                             sortOrder: categories.length,
+                             sortOrder: categories.length + createdCats.length,
                            });
+                           createdCats.push(newCat);
                         }
                       }
 
-                      // Use the categories already in state (they were just updated above via addCategory calls)
-                      const updatedCategories: typeof categories = categories;
+                      // Combine existing categories with the newly created ones
+                      const allCategories = [...categories, ...createdCats];
 
                       // 2. Apply item changes
                       for (const prop of smartPlan.itemProposals) {
                         if (prop.approved && prop.changeType !== 'none') {
                            // Find target category ID
-                           const targetCat = updatedCategories.find(c => c.name.toLowerCase() === prop.proposedCategory.toLowerCase());
+                           const targetCat = allCategories.find(c => c.name.toLowerCase() === prop.proposedCategory.toLowerCase());
                            if (targetCat && prop.itemId) {
                               await updateVaultItem(prop.itemId, { categoryId: targetCat.id });
                               applyCount++;
@@ -1273,6 +1275,7 @@ export default function ManageCategories() {
                       toast.success(`Applied ${applyCount} item organizations!`);
                       setShowSmartModal(false);
                     } catch (e) {
+                      console.error("Failed to apply smart organization:", e);
                       toast.error("Failed to apply all organizations");
                     } finally {
                       setIsApplyingSmart(false);
