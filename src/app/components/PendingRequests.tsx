@@ -3,7 +3,7 @@ import { useNavigate, useOutletContext } from 'react-router';
 import { ArrowLeft, Smartphone, MoreVertical, ArrowUpRight, FolderHeart, ShieldAlert, Loader2, CheckSquare, UserCheck, XCircle, Bell, Activity } from 'lucide-react';
 import { addNotificationsListener, markAsRead } from '../stores/notificationsStore';
 import { type AppNotification } from '../firestore/notifications';
-import { respondToShareRequest } from '../api/notifications';
+import { acceptInvite, declineInvite } from '../api/collections';
 import { InviteDetailSheet } from './notifications/InviteDetailSheet';
 import { BottomNav } from './BottomNav';
 import { toast } from 'sonner';
@@ -99,9 +99,17 @@ export function PendingRequests() {
   };
 
   const handleAcceptInvite = async (invite: AppNotification) => {
+    const collectionId = invite.metadata?.collection_id;
+    const inviteId = invite.metadata?.invite_id;
+    if (!collectionId || !inviteId) {
+      toast.error('Missing invitation details. Cannot accept.');
+      return;
+    }
     setLoadingInviteId({ id: invite.id, action: 'accept' });
     try {
-      await respondToShareRequest(invite.id, true);
+      await acceptInvite(collectionId, inviteId);
+      // Mark the notification as read after accepting
+      try { await markAsRead(invite.id); } catch (_) {}
       toast.success('Invitation accepted!', {
         description: `You now have access to "${invite.metadata?.collection_name || 'the shared vault'}".`,
         duration: 4000,
@@ -114,9 +122,16 @@ export function PendingRequests() {
   };
 
   const handleDeclineInvite = async (invite: AppNotification) => {
+    const collectionId = invite.metadata?.collection_id;
+    const inviteId = invite.metadata?.invite_id;
+    if (!collectionId || !inviteId) {
+      toast.error('Missing invitation details. Cannot decline.');
+      return;
+    }
     setLoadingInviteId({ id: invite.id, action: 'decline' });
     try {
-      await respondToShareRequest(invite.id, false);
+      await declineInvite(collectionId, inviteId);
+      try { await markAsRead(invite.id); } catch (_) {}
       toast.info('Invitation declined');
     } catch (err: any) {
       toast.error(err.message || 'Failed to decline invitation');

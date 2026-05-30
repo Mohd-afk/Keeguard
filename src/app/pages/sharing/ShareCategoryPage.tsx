@@ -202,7 +202,8 @@ export function ShareCategoryPage() {
         {
           wrappedKey,
           senderPublicKeyB64: myPubKeyB64,
-        }
+        },
+        finalCollectionId  // Explicit collection ID — needed for freshly-migrated collections
       );
       
       toast.success(`Invite sent to @${targetUser.username}!`);

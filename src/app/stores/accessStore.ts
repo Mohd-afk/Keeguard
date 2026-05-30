@@ -127,14 +127,18 @@ export async function searchProfiles(queryText: string): Promise<UserSearchResul
 
 /**
  * Send an invite to another user.
+ * @param collectionId - Optional override for the active collection ID.
+ *   Needed when inviting to a freshly-migrated collection whose ID
+ *   hasn't yet propagated to _activeCollectionId.
  */
 export async function sendInvite(
   targetUsername: string,
   role: Exclude<CollectionRole, 'owner'>,
   message?: string,
-  recipientEnvelope?: { wrappedKey: string; senderPublicKeyB64: string }
+  recipientEnvelope?: { wrappedKey: string; senderPublicKeyB64: string },
+  collectionId?: string
 ): Promise<string> {
-  const cid = _activeCollectionId;
+  const cid = collectionId ?? _activeCollectionId;
   if (!cid) throw new Error('No active collection selected');
 
   log.info('Sending invite to user', { targetUsername, role, cid });
@@ -149,6 +153,7 @@ export async function sendInvite(
   log.info('Invite sent successfully', { inviteId });
   return inviteId;
 }
+
 
 /**
  * Revoke an existing pending invite.
