@@ -156,8 +156,14 @@ export function Settings() {
         setCheckingUpdates(true);
         try {
             const result = await forceCheckForUpdate();
-            if (result === 'latest' || result === 'not_supported') {
-                toast.success('Your app is up to date!', { position: 'bottom-center' });
+            if (result === 'not_supported') {
+                // Web platform — updates are handled by Vercel on every git push
+                toast.success('Web app is always up to date via Vercel!', {
+                    description: 'Push to git to deploy new web changes.',
+                    position: 'bottom-center',
+                });
+            } else if (result === 'latest') {
+                toast.success('Already on the latest version!', { position: 'bottom-center' });
             } else if (result === 'downloaded') {
                 // Re-read the live bundle version after a successful download staging
                 if (Capacitor.isNativePlatform()) {
@@ -1533,9 +1539,19 @@ export function Settings() {
                                 <span className="text-gray-500 text-xs">Version</span>
                                 <span className="text-gray-300 text-xs font-medium">
                                     {packageJson.version}
-                                    {activeOtaVersion && activeOtaVersion !== '0.0.0' && (
-                                        <span className="text-cyan-400 font-semibold ml-1.5 bg-cyan-500/10 px-1.5 py-0.5 rounded text-[10px]">
-                                            OTA: {activeOtaVersion}
+                                    {Capacitor.isNativePlatform() ? (
+                                        activeOtaVersion && activeOtaVersion !== '0.0.0' ? (
+                                            <span className="text-cyan-400 font-semibold ml-1.5 bg-cyan-500/10 px-1.5 py-0.5 rounded text-[10px]">
+                                                OTA: {activeOtaVersion}
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-500 font-normal ml-1.5 bg-white/5 px-1.5 py-0.5 rounded text-[10px]">
+                                                builtin
+                                            </span>
+                                        )
+                                    ) : (
+                                        <span className="text-green-400 font-semibold ml-1.5 bg-green-500/10 px-1.5 py-0.5 rounded text-[10px]">
+                                            web
                                         </span>
                                     )}
                                 </span>

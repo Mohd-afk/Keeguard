@@ -45,10 +45,18 @@ const tempZipName = `${appId}_${version}.zip`;
 const tempZipPath = join(ROOT, tempZipName);
 
 // ─── 3. Bundle using Capgo CLI ───────────────────────────────────────
-// Skip if the bundle for this exact version already exists (idempotent).
+// Hard error if the bundle already exists — NEVER silently reuse a stale zip.
+// If you need to rebuild, delete the zip first: rm ota-updates/bundles/<version>.zip
 if (existsSync(zipPath)) {
-  console.log(`⚠️  Bundle ota-updates/bundles/${version}.zip already exists. Skipping re-bundle.`);
-  console.log(`   (Delete it manually if you need to rebuild the bundle for this version.)\n`);
+  console.error(
+    `\n❌ ERROR: Bundle ota-updates/bundles/${version}.zip ALREADY EXISTS!\n` +
+    `\n   This guard exists to prevent accidentally repackaging stale code.` +
+    `\n   If you intentionally want to rebuild this version, run:\n` +
+    `\n     rm ota-updates/bundles/${version}.zip\n` +
+    `\n   Then re-run: npm run release\n` +
+    `\n   OR bump the version in package.json to a new number.\n`
+  );
+  process.exit(1);
 } else {
   console.log(`📦 Zipping dist/ using @capgo/cli...`);
 
