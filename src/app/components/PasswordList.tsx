@@ -620,7 +620,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               <h1 className="text-white text-xl font-semibold">Safe</h1>
             </div>
             <div className="flex items-center gap-2">
-              <BellIcon onClick={() => setNotificationDrawerOpen(true)} />
+              <BellIcon onClick={() => navigate('/pending-requests')} />
               {/* Avatar */}
               <div
                 className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center ml-1"

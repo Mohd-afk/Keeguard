@@ -143,13 +143,22 @@ export function CollectionListPage() {
           <h1 className="text-white text-lg font-bold">Shared Vaults</h1>
         </div>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="p-2 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 rounded-xl transition-all border border-cyan-500/20 active:scale-95 flex items-center gap-1.5 text-xs font-bold"
-        >
-          <Plus className="w-4 h-4" />
-          New Vault
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/share')}
+            className="p-2 bg-white/5 text-gray-300 hover:bg-white/10 rounded-xl transition-all border border-white/10 active:scale-95 flex items-center gap-1.5 text-xs font-bold"
+          >
+            <Share2 className="w-4 h-4" />
+            Share Folder
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="p-2 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 rounded-xl transition-all border border-cyan-500/20 active:scale-95 flex items-center gap-1.5 text-xs font-bold"
+          >
+            <Plus className="w-4 h-4" />
+            New Blank
+          </button>
+        </div>
       </div>
 
       {/* Main List Area */}
@@ -166,16 +175,25 @@ export function CollectionListPage() {
             <div className="max-w-[260px] space-y-2">
               <h3 className="text-white font-bold text-base">Shared Collections</h3>
               <p className="text-gray-500 text-xs leading-relaxed">
-                Create a shared zero-knowledge folder to share passwords securely in real-time with other users.
+                Create a blank shared folder, or share an existing personal folder securely with zero-knowledge encryption.
               </p>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="py-2.5 px-5 bg-cyan-500 hover:bg-cyan-600 text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-98 flex items-center gap-2 border border-cyan-400/20"
-            >
-              <FolderPlus className="w-4 h-4" />
-              Create Shared Collection
-            </button>
+            <div className="flex flex-col w-full gap-3 mt-2 max-w-[240px]">
+              <button
+                onClick={() => navigate('/share')}
+                className="py-2.5 px-5 bg-cyan-500 hover:bg-cyan-600 text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-98 flex items-center justify-center gap-2 border border-cyan-400/20"
+              >
+                <Share2 className="w-4 h-4" />
+                Share Existing Folder
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="py-2.5 px-5 bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold rounded-xl transition-all active:scale-98 flex items-center justify-center gap-2 border border-white/10"
+              >
+                <Plus className="w-4 h-4" />
+                Create Blank Vault
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-3">

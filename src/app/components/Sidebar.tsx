@@ -393,18 +393,7 @@ export function Sidebar({
             </div>
           </div>
 
-          {/* Notifications Panel */}
-          <div className="px-2 mb-1">
-            <SidebarRow
-              icon={<Bell className="w-5 h-5 text-cyan-400" />}
-              label="Notifications"
-              active={false}
-              onClick={() => {
-                onClose();
-                navigate('/pending-requests');
-              }}
-            />
-          </div>
+
 
             {/* Custom Categories */}
             <div className="px-2 space-y-0.5">

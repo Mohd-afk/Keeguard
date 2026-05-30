@@ -133,58 +133,59 @@ export function PendingRequests() {
         <div className="flex items-center gap-3 px-4 py-3 h-14">
           <button
             onClick={() => navigate('/')}
-            className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
             aria-label="Go back to Home"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
+          <span className="text-white font-semibold text-base">Notifications</span>
         </div>
       </div>
 
       {/* Main Scroll Content Area */}
-      <div className="flex-1 overflow-y-auto px-6 pt-4 pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_96px)]">
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_96px)]">
         
-        {/* Main Title Row with associated red circular badge */}
-        <div className="flex items-center gap-3.5 mb-8">
-          <h1 className="text-white text-3xl font-extrabold tracking-tight">Notifications</h1>
+        {/* Main Title Row with associated premium circular badge */}
+        <div className="flex items-center gap-3 mb-6 px-1">
+          <h1 className="text-white text-2xl font-bold tracking-tight">Notifications</h1>
           {unreadCount > 0 && (
-            <span className="bg-red-500 text-white text-xs font-black min-w-6 h-6 px-1.5 rounded-full flex items-center justify-center animate-in zoom-in duration-200">
-              {unreadCount}
+            <span className="bg-cyan-500 text-[#1a1a2e] text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center justify-center animate-in zoom-in duration-200">
+              {unreadCount} new
             </span>
           )}
         </div>
 
         {/* Section Labels: COMPLETE SETUP with dark badge */}
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-gray-400 text-xs font-bold uppercase tracking-widest pl-0.5">
+        <div className="flex items-center justify-between mb-3.5 px-1.5">
+          <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">
             Complete Setup
           </span>
           {totalPendingCount > 0 && (
-            <span className="bg-[#2a3348] text-gray-300 text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-              {totalPendingCount}
+            <span className="bg-white/5 text-gray-400 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+              {totalPendingCount} pending
             </span>
           )}
         </div>
 
         {/* Actionable Notification cards stack */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           
-          {/* 1. Replicated Card Pattern from image_0.png (Mock Interactive fallback) */}
+          {/* 1. Replicated Card Pattern (Mock Interactive fallback) */}
           {showMockCard && (
-            <div className="group relative bg-[#16213e] border border-white/5 rounded-3xl p-5 flex flex-col gap-4 shadow-xl transition-all duration-300 hover:bg-[#16213e]/90 hover:border-white/10">
+            <div className="group relative bg-[#16213e] border border-white/5 rounded-2xl p-4.5 flex flex-col gap-3.5 shadow-lg transition-all duration-300 hover:border-cyan-500/20">
               
-              <div className="flex gap-4">
-                {/* Left: Subtly rounded Smartphone outline container */}
-                <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 text-cyan-400 group-hover:scale-105 transition-transform duration-200">
-                  <Smartphone className="w-6 h-6" />
+              <div className="flex gap-3.5">
+                {/* Left: Smartphone outline container */}
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 text-cyan-400 transition-transform duration-200 group-hover:scale-105">
+                  <Smartphone className="w-5 h-5" />
                 </div>
 
                 {/* Middle: Bold title & descriptive text */}
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-white text-sm font-bold tracking-tight pr-5">
+                  <h3 className="text-white text-xs font-bold tracking-tight pr-5">
                     Grant notifications access
                   </h3>
-                  <p className="text-gray-400 text-xs mt-1.5 leading-relaxed">
+                  <p className="text-gray-400 text-[11px] mt-1 leading-relaxed">
                     Never miss an important payment update ever again.
                   </p>
                 </div>
@@ -193,7 +194,7 @@ export function PendingRequests() {
                 <div className="relative shrink-0">
                   <button
                     onClick={() => setShowMenuId(showMenuId === 'mock' ? null : 'mock')}
-                    className="p-1.5 rounded-xl hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
+                    className="p-1 rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
                   >
                     <MoreVertical className="w-4 h-4" />
                   </button>
@@ -212,18 +213,18 @@ export function PendingRequests() {
               </div>
 
               {/* Bottom action button */}
-              <div className="pl-16">
+              <div className="pl-[54px]">
                 <button
                   onClick={handleGrantMockAccess}
                   disabled={loadingMock}
-                  className="inline-flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors text-sm font-semibold tracking-wide active:scale-[0.98]"
+                  className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 transition-colors text-xs font-bold active:scale-[0.98]"
                 >
                   {loadingMock ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
                   ) : (
                     <>
                       <span>Grant Access</span>
-                      <ArrowUpRight className="w-4 h-4" />
+                      <ArrowUpRight className="w-3.5 h-3.5" />
                     </>
                   )}
                 </button>
@@ -240,7 +241,6 @@ export function PendingRequests() {
             const inviterName = invite.metadata?.inviter_display_name || invite.metadata?.inviter_username || 'Someone';
             const folderName = invite.metadata?.collection_name || 'Shared Vault';
             
-            // Determine role: Viewer vs Collaborator
             let roleDisplay = 'Collaborator';
             if (invite.metadata?.role === 'viewer' || invite.body.toLowerCase().includes('viewer')) {
               roleDisplay = 'Viewer';
@@ -249,20 +249,20 @@ export function PendingRequests() {
             return (
               <div
                 key={invite.id}
-                className="group relative bg-[#16213e] border border-white/5 rounded-3xl p-5 flex flex-col gap-4 shadow-xl transition-all duration-300 hover:bg-[#16213e]/90 hover:border-white/10"
+                className="group relative bg-[#16213e] border border-white/5 rounded-2xl p-4.5 flex flex-col gap-3.5 shadow-lg transition-all duration-300 hover:border-cyan-500/20"
               >
-                <div className="flex gap-4">
+                <div className="flex gap-3.5">
                   {/* Left: Avatar initial */}
-                  <div className="w-12 h-12 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 text-cyan-400 text-sm font-bold uppercase transition-all duration-200 group-hover:scale-105">
+                  <div className="w-10 h-10 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 text-cyan-400 text-xs font-bold uppercase transition-transform duration-200 group-hover:scale-105">
                     {inviterName[0]}
                   </div>
 
-                  {/* Middle: Invite Header and description formatted exactly as requested */}
+                  {/* Middle: Invite Header and details */}
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-white text-sm font-bold tracking-tight pr-5">
+                    <h3 className="text-white text-xs font-bold tracking-tight pr-5">
                       {inviterName} wants to share a folder
                     </h3>
-                    <div className="text-gray-400 text-xs mt-1.5 flex items-center gap-1.5 flex-wrap">
+                    <div className="text-gray-400 text-[11px] mt-1.5 flex items-center gap-1.5 flex-wrap">
                       <span>Folder: <span className="text-white font-semibold">{folderName}</span></span>
                       <span>•</span>
                       <span className="flex items-center gap-1">
@@ -278,7 +278,7 @@ export function PendingRequests() {
                   <div className="relative shrink-0">
                     <button
                       onClick={() => setShowMenuId(showMenuId === invite.id ? null : invite.id)}
-                      className="p-1.5 rounded-xl hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
+                      className="p-1 rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
                     >
                       <MoreVertical className="w-4 h-4" />
                     </button>
@@ -314,14 +314,14 @@ export function PendingRequests() {
                 </div>
 
                 {/* Bottom: Inline Accept / Decline action row */}
-                <div className="pl-16 flex items-center gap-3">
+                <div className="pl-[54px] flex items-center gap-2.5">
                   <button
                     onClick={() => handleDeclineInvite(invite)}
                     disabled={isAnyLoading}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 px-4 py-2 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50"
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 px-3 py-1.5 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50"
                   >
                     {isLoadingDecline ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-3 h-3 animate-spin" />
                     ) : (
                       <XCircle className="w-3.5 h-3.5" />
                     )}
@@ -330,10 +330,10 @@ export function PendingRequests() {
                   <button
                     onClick={() => handleAcceptInvite(invite)}
                     disabled={isAnyLoading}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/15 border border-cyan-500/20 px-4 py-2 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 shadow-[0_0_15px_rgba(6,182,212,0.1)] hover:shadow-[0_0_20px_rgba(6,182,212,0.25)]"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/15 border border-cyan-500/20 px-3 py-1.5 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 shadow-[0_0_15px_rgba(6,182,212,0.05)]"
                   >
                     {isLoadingAccept ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-3 h-3 animate-spin" />
                     ) : (
                       <UserCheck className="w-3.5 h-3.5" />
                     )}
@@ -346,9 +346,9 @@ export function PendingRequests() {
 
           {/* Empty State placeholder */}
           {totalPendingCount === 0 && (
-            <div className="py-8 text-center text-gray-500 border border-dashed border-white/5 rounded-3xl bg-[#16213e]/20 px-6">
-              <CheckSquare className="w-8 h-8 mx-auto mb-2 text-cyan-400/30" />
-              <h3 className="text-white font-semibold text-sm">All setups complete!</h3>
+            <div className="py-7 text-center text-gray-500 border border-dashed border-white/5 rounded-2xl bg-[#16213e]/20 px-6">
+              <CheckSquare className="w-6 h-6 mx-auto mb-2 text-cyan-400/20" />
+              <h3 className="text-white font-medium text-xs">All setups complete!</h3>
             </div>
           )}
         </div>
@@ -356,35 +356,35 @@ export function PendingRequests() {
         {/* Section Labels: RECENT ACTIVITY */}
         {otherNotifications.length > 0 && (
           <>
-            <div className="flex items-center gap-2 mb-4 mt-8">
-              <span className="text-gray-400 text-xs font-bold uppercase tracking-widest pl-0.5">
+            <div className="flex items-center justify-between mb-3.5 mt-7 px-1.5">
+              <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">
                 Recent Activity
               </span>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {otherNotifications.map((notification) => {
                 const isUnread = notification.status === 'unread';
                 return (
                   <div
                     key={notification.id}
-                    className={`group relative bg-[#16213e] border ${isUnread ? 'border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.05)]' : 'border-white/5'} rounded-3xl p-5 flex flex-col gap-4 shadow-xl transition-all duration-300 hover:bg-[#16213e]/90 hover:border-white/10`}
+                    className={`group relative bg-[#16213e] border ${isUnread ? 'border-cyan-500/20' : 'border-white/5'} rounded-2xl p-4 flex flex-col gap-3.5 shadow-lg transition-all duration-300 hover:border-cyan-500/20`}
                   >
-                    <div className="flex gap-4 items-center">
-                      <div className={`w-12 h-12 rounded-2xl ${isUnread ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 'bg-white/5 text-gray-400 border-white/10'} border flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105`}>
-                        <Activity className="w-6 h-6" />
+                    <div className="flex gap-3.5 items-center">
+                      <div className={`w-10 h-10 rounded-xl ${isUnread ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 'bg-white/5 text-gray-400 border-white/10'} border flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105`}>
+                        <Activity className="w-5 h-5" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className={`text-sm font-bold tracking-tight pr-5 ${isUnread ? 'text-white' : 'text-gray-300'}`}>
+                        <h3 className={`text-xs font-bold leading-normal pr-5 ${isUnread ? 'text-white font-semibold' : 'text-gray-300'}`}>
                           {notification.body}
                         </h3>
-                        <p className="text-gray-500 text-xs mt-1 leading-relaxed">
+                        <p className="text-gray-500 text-[10px] mt-1 leading-relaxed">
                           {new Date(notification.created_at?.toDate ? notification.created_at.toDate() : notification.created_at).toLocaleString()}
                         </p>
                       </div>
                       <div className="relative shrink-0">
                         <button
                           onClick={() => setShowMenuId(showMenuId === notification.id ? null : notification.id)}
-                          className="p-1.5 rounded-xl hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
+                          className="p-1 rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>

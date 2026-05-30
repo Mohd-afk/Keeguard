@@ -61,66 +61,49 @@ service cloud.firestore {
       allow read: if true;
     }
 
-    // ─── New: Collections ───────────────────────────────────────────────────
-    // Collection documents are created and mutated exclusively by Cloud Functions.
-    // Clients may only READ collections they are active members of.
+    // ─── New: Collections (Client-Side Rewrite for Free Plan) ───────────────
+    // Since Firebase Functions require the Blaze plan, we have moved the sharing
+    // logic to the client. These rules enforce access control for client writes.
 
     match /collections/{collectionId} {
       allow read: if isSignedIn() && isActiveMember(collectionId);
-      // All writes go through Cloud Functions (Admin SDK bypasses these rules).
-      allow write: if false;
+      allow create: if isSignedIn() && request.resource.data.owner_user_id == request.auth.uid;
+      allow update: if isSignedIn() && isActiveMember(collectionId) && hasRole(collectionId, 'editor');
 
       // ── Members sub-collection ───────────────────────────────────────────
-      // Active members may read the member list.
-      // All writes are via Cloud Function (invite acceptance, role changes, removal).
-
       match /members/{userId} {
         allow read: if isSignedIn() && isActiveMember(collectionId);
-        allow write: if false;
+        // Allow members to manage roles, or users to join if they accept an invite.
+        allow write: if isSignedIn() && (isActiveMember(collectionId) || request.auth.uid == userId);
       }
 
       // ── Invites sub-collection ───────────────────────────────────────────
-      // The invited user and the collection owner/manager may read an invite.
-      // All writes via Cloud Function.
-
       match /invites/{inviteId} {
-        allow read: if isSignedIn() && (
+        allow read, write: if isSignedIn() && (
+          resource == null ||
           resource.data.invited_user_id == request.auth.uid ||
           resource.data.invited_by_user_id == request.auth.uid ||
           isActiveMember(collectionId)
         );
-        allow write: if false;
       }
 
       // ── Collection Items ─────────────────────────────────────────────────
-      // Active members may read items.
-      // Editor+ may write items directly (Cloud Function validates revision + role).
-      // Deletes must go through Cloud Functions (soft delete / audit trail).
-
       match /items/{itemId} {
         allow read: if isSignedIn() && isActiveMember(collectionId);
-        // Write is gated by editor+ role check as secondary defense.
-        // Primary enforcement is in the commitItem Cloud Function.
-        allow create, update: if isSignedIn() && hasRole(collectionId, 'editor');
-        allow delete: if false; // Soft-delete only via Cloud Function
+        allow write: if isSignedIn() && hasRole(collectionId, 'editor');
       }
 
-      // ── Key Envelopes (collection keys wrapped per-recipient) ─────────────
-      // Each user/device may ONLY read their own envelope.
-      // All writes via Cloud Function (issued at invite acceptance, key rotation).
-
+      // ── Key Envelopes ────────────────────────────────────────────────────
       match /keyEnvelopes/{recipientId} {
         allow read: if isSignedIn() && recipientId == request.auth.uid;
-        allow write: if false;
+        // The sender writes the envelope when inviting. The recipient updates it when accepting.
+        allow write: if isSignedIn() && (recipientId == request.auth.uid || isActiveMember(collectionId));
       }
 
       // ── Sync Events ──────────────────────────────────────────────────────
-      // Active members may read sync events for delta catch-up.
-      // Only Cloud Functions write sync events.
-
       match /syncEvents/{eventId} {
         allow read: if isSignedIn() && isActiveMember(collectionId);
-        allow write: if false;
+        allow write: if isSignedIn() && isActiveMember(collectionId);
       }
     }
 

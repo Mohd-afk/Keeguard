@@ -42,8 +42,13 @@ export function ShareCategoryPage() {
   const [searchParams] = useSearchParams();
   const { user } = useOutletContext<OutletContext>();
 
-  const collectionId = searchParams.get('collectionId') || '';
-  const collectionName = searchParams.get('name') || 'Shared Vault';
+  // Folder selection state (GDrive style wizard)
+  const initialFolderId = searchParams.get('collectionId');
+  const initialFolderName = searchParams.get('name');
+  
+  const [selectedFolder, setSelectedFolder] = useState<{ id: string; name: string; type: 'category' | 'collection' } | null>(
+    initialFolderId ? { id: initialFolderId, name: initialFolderName || 'Shared Vault', type: 'collection' } : null
+  );
 
   // Invite form state
   const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
@@ -58,6 +63,16 @@ export function ShareCategoryPage() {
   // Connections state
   const [connections, setConnections] = useState<UserSearchResult[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(true);
+
+  // Categories state
+  const [customCategories, setCustomCategories] = useState<any[]>([]);
+
+  useEffect(() => {
+    // We import from store since it's defined there in this codebase
+    import('../../store').then((m) => {
+      m.subscribeToCustomCategories(setCustomCategories);
+    });
+  }, []);
 
   // Fetch connections
   useEffect(() => {
@@ -76,9 +91,9 @@ export function ShareCategoryPage() {
 
   // Subscribe to collection members for "Connections" section
   useEffect(() => {
-    if (!collectionId) return;
+    if (!selectedFolder || selectedFolder.type !== 'collection') return;
 
-    setActiveCollectionId(collectionId);
+    setActiveCollectionId(selectedFolder.id);
     const unsub = addAccessChangeListener(() => {
       setMembers(getActiveCollectionMembers());
     });
@@ -87,7 +102,7 @@ export function ShareCategoryPage() {
       setActiveCollectionId(null);
       unsub();
     };
-  }, [collectionId]);
+  }, [selectedFolder]);
 
   // When a user is selected from search, open the permission sheet
   const handleUserSelect = (u: UserSearchResult | null) => {
@@ -104,8 +119,8 @@ export function ShareCategoryPage() {
       toast.error('Please select a user to invite');
       return;
     }
-    if (!collectionId) {
-      toast.error('No collection selected. Please go back and try again.');
+    if (!selectedFolder) {
+      toast.error('No folder selected. Please go back and try again.');
       return;
     }
 
@@ -116,9 +131,9 @@ export function ShareCategoryPage() {
     setSelectedUser(null);
     setInviteMessage('');
 
-    toast.success(`Invite sent to @${targetUser.username}`, {
-      description: `They will receive a ${selectedRole === 'editor' ? 'Collaborator' : selectedRole} role invitation.`,
-      duration: 4000,
+    toast.success(`Share sequence started for @${targetUser.username}`, {
+      description: `Migrating folder and securing keys...`,
+      duration: 3000,
     });
 
     try {
@@ -135,18 +150,42 @@ export function ShareCategoryPage() {
         throw new Error('Recipient has no public ECDH key registered.');
       }
 
-      // 2. Fetch collection key from syncStore
-      const { getCollectionKey } = await import('../../stores/syncStore');
-      const collectionKey = getCollectionKey(collectionId);
-      if (!collectionKey) {
-        throw new Error('Vault is locked or collection key is not available in memory. Please unlock and sync first.');
-      }
-
-      // 3. Load device private key to sign/derive ECDH secret
+      // 2. Load device private key to sign/derive ECDH secret
       const { getSessionCryptoKey } = await import('../../store');
-      const { loadDevicePrivateKey, wrapCollectionKey, getDevicePublicKeyB64 } = await import('../../crypto/collectionCrypto');
+      const { loadDevicePrivateKey, wrapCollectionKey, getDevicePublicKeyB64, generateCollectionKey, ensureDeviceKeyPair } = await import('../../crypto/collectionCrypto');
       const vaultKey = getSessionCryptoKey();
       if (!vaultKey) throw new Error('Vault session is locked.');
+      
+      let finalCollectionId = selectedFolder.id;
+      let collectionKey: CryptoKey;
+
+      if (selectedFolder.type === 'category') {
+          // Migration flow!
+          collectionKey = await generateCollectionKey();
+          const myPubKeyB64 = await ensureDeviceKeyPair(vaultKey);
+          const privKey = await loadDevicePrivateKey(vaultKey);
+          if (!privKey) throw new Error('Could not load device private key');
+          const selfWrappedKey = await wrapCollectionKey(collectionKey, privKey, myPubKeyB64);
+          
+          const { migrateCategoryToCollection } = await import('../../api/collections');
+          finalCollectionId = await migrateCategoryToCollection(
+             selectedFolder.id, 
+             selectedFolder.name, 
+             { wrappedKey: selfWrappedKey, senderPublicKeyB64: myPubKeyB64 }
+          );
+          
+          const { setCollectionKey } = await import('../../stores/syncStore');
+          setCollectionKey(finalCollectionId, collectionKey);
+          
+          toast.success(`Category "${selectedFolder.name}" migrated to a Shared Vault!`);
+      } else {
+          // Normal flow
+          const { getCollectionKey } = await import('../../stores/syncStore');
+          const key = getCollectionKey(finalCollectionId);
+          if (!key) throw new Error('Vault is locked or collection key is not available in memory.');
+          collectionKey = key;
+      }
+
       const privKey = await loadDevicePrivateKey(vaultKey);
       if (!privKey) throw new Error('Failed to load local device signing private key.');
       
@@ -165,6 +204,13 @@ export function ShareCategoryPage() {
           senderPublicKeyB64: myPubKeyB64,
         }
       );
+      
+      toast.success(`Invite sent to @${targetUser.username}!`);
+      
+      // If we just migrated it, update the URL so we stay on the collection page
+      if (selectedFolder.type === 'category') {
+         setSelectedFolder({ id: finalCollectionId, name: selectedFolder.name, type: 'collection' });
+      }
     } catch (err: any) {
       console.error('Failed to send invite:', err);
       toast.error(`Failed to send invite: ${err.message || 'Unknown error'}`, {
@@ -179,6 +225,43 @@ export function ShareCategoryPage() {
   // Active members excluding self — shown as "Recent Connections"
   const otherMembers = members.filter((m) => m.user_id !== user.uid && m.status === 'active');
 
+  if (!selectedFolder) {
+    return (
+      <div className="min-h-screen bg-[#1a1a2e] flex flex-col animate-page select-none">
+        <div className="sticky top-0 z-20 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)] px-4 py-3 flex items-center gap-3">
+          <button onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-white font-bold text-lg">Select Folder to Share</h1>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+           {customCategories.length === 0 ? (
+             <div className="text-center py-10 text-gray-500 text-sm">You have no custom folders to share.</div>
+           ) : (
+             customCategories.map((cat: any) => (
+               <button
+                 key={cat.id}
+                 onClick={() => setSelectedFolder({ id: cat.id, name: cat.name, type: 'category' })}
+                 className="w-full flex items-center justify-between p-4 bg-[#16213e] hover:bg-[#16213e]/70 border border-white/5 hover:border-cyan-500/50 rounded-2xl text-left transition-all active:scale-[0.98] group"
+               >
+                 <div className="flex items-center gap-4">
+                   <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/20 group-hover:bg-cyan-500/20 transition-colors">
+                     <FolderHeart className="w-5 h-5" />
+                   </div>
+                   <div>
+                     <h3 className="text-white text-sm font-bold group-hover:text-cyan-400 transition-colors">{cat.name}</h3>
+                     <p className="text-gray-500 text-[10px] mt-0.5">Personal Category</p>
+                   </div>
+                 </div>
+                 <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
+               </button>
+             ))
+           )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#1a1a2e] flex flex-col animate-page select-none">
 
@@ -186,7 +269,10 @@ export function ShareCategoryPage() {
       <div className="sticky top-0 z-20 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center gap-3 px-4 py-3 h-14">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => {
+                if (!initialFolderId) setSelectedFolder(null); // Go back to folder select
+                else navigate(-1);
+            }}
             className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
             aria-label="Go back"
           >
@@ -198,7 +284,7 @@ export function ShareCategoryPage() {
             </div>
             <div className="min-w-0">
               <h1 className="text-white font-bold text-sm truncate">Share Vault</h1>
-              <p className="text-gray-500 text-[10px] truncate leading-none mt-0.5">{collectionName}</p>
+              <p className="text-gray-500 text-[10px] truncate leading-none mt-0.5">{selectedFolder.name}</p>
             </div>
           </div>
         </div>
@@ -221,13 +307,15 @@ export function ShareCategoryPage() {
             <FolderHeart className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-white font-bold text-sm truncate">{collectionName}</p>
+            <p className="text-white font-bold text-sm truncate">{selectedFolder.name}</p>
             <p className="text-gray-500 text-[10px] mt-0.5 leading-none">
               Secure zero-knowledge shared folder
             </p>
           </div>
           <button
-            onClick={() => navigate(`/collections/${collectionId}`)}
+            onClick={() => {
+                if (selectedFolder.type === 'collection') navigate(`/collections/${selectedFolder.id}`);
+            }}
             className="p-1.5 rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
             title="View vault"
           >

@@ -330,6 +330,8 @@ export function subscribeToMyCollections(
     callback(ids);
   }, (err) => {
     log.error('User collections snapshot error', { userId, err });
+    // If the index is missing, it fails. We should stop the loading spinner by returning an empty array.
+    callback([]);
   });
 }
 
