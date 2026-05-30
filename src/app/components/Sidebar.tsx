@@ -20,6 +20,7 @@ import {
   Plus,
   FolderHeart,
   ChevronDown,
+  Bell,
 } from 'lucide-react';
 import type { VaultItem } from '../store';
 import type { User } from 'firebase/auth';
@@ -392,11 +393,11 @@ export function Sidebar({
             </div>
           </div>
 
-          {/* Pending Requests */}
+          {/* Notifications Panel */}
           <div className="px-2 mb-1">
             <SidebarRow
-              icon={<Shield className="w-5 h-5 text-cyan-400" />}
-              label="Pending Requests"
+              icon={<Bell className="w-5 h-5 text-cyan-400" />}
+              label="Notifications"
               active={false}
               onClick={() => {
                 onClose();

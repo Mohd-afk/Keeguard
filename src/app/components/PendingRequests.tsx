@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
-import { ArrowLeft, Smartphone, MoreVertical, ArrowUpRight, FolderHeart, ShieldAlert, Loader2, CheckSquare, UserCheck, XCircle } from 'lucide-react';
+import { ArrowLeft, Smartphone, MoreVertical, ArrowUpRight, FolderHeart, ShieldAlert, Loader2, CheckSquare, UserCheck, XCircle, Bell, Activity } from 'lucide-react';
 import { addNotificationsListener, markAsRead } from '../stores/notificationsStore';
 import { type AppNotification } from '../firestore/notifications';
 import { respondToShareRequest } from '../api/notifications';
@@ -72,9 +72,13 @@ export function PendingRequests() {
   const realInvites = aggregatedNotifications.filter(
     (n) => n.status === 'pending' && n.type_category === 'collaboration'
   );
+  const otherNotifications = aggregatedNotifications.filter(
+    (n) => !(n.status === 'pending' && n.type_category === 'collaboration')
+  );
 
   // Total actionable pending requests count
   const totalPendingCount = realInvites.length + (showMockCard ? 1 : 0);
+  const unreadCount = aggregatedNotifications.filter((n) => n.status === 'unread' || n.status === 'pending').length + (showMockCard ? 1 : 0);
 
   const handleGrantMockAccess = () => {
     setLoadingMock(true);
@@ -142,10 +146,10 @@ export function PendingRequests() {
         
         {/* Main Title Row with associated red circular badge */}
         <div className="flex items-center gap-3.5 mb-8">
-          <h1 className="text-white text-3xl font-extrabold tracking-tight">Pending Requests</h1>
-          {totalPendingCount > 0 && (
+          <h1 className="text-white text-3xl font-extrabold tracking-tight">Notifications</h1>
+          {unreadCount > 0 && (
             <span className="bg-red-500 text-white text-xs font-black min-w-6 h-6 px-1.5 rounded-full flex items-center justify-center animate-in zoom-in duration-200">
-              {totalPendingCount}
+              {unreadCount}
             </span>
           )}
         </div>
@@ -342,13 +346,79 @@ export function PendingRequests() {
 
           {/* Empty State placeholder */}
           {totalPendingCount === 0 && (
-            <div className="py-20 text-center text-gray-500 border border-dashed border-white/5 rounded-3xl bg-[#16213e]/20 px-6">
-              <CheckSquare className="w-12 h-12 mx-auto mb-3 text-cyan-400/40" />
+            <div className="py-8 text-center text-gray-500 border border-dashed border-white/5 rounded-3xl bg-[#16213e]/20 px-6">
+              <CheckSquare className="w-8 h-8 mx-auto mb-2 text-cyan-400/30" />
               <h3 className="text-white font-semibold text-sm">All setups complete!</h3>
-              <p className="text-gray-500 text-xs mt-1">No further setups or pending requests are waiting.</p>
             </div>
           )}
         </div>
+
+        {/* Section Labels: RECENT ACTIVITY */}
+        {otherNotifications.length > 0 && (
+          <>
+            <div className="flex items-center gap-2 mb-4 mt-8">
+              <span className="text-gray-400 text-xs font-bold uppercase tracking-widest pl-0.5">
+                Recent Activity
+              </span>
+            </div>
+            <div className="space-y-4">
+              {otherNotifications.map((notification) => {
+                const isUnread = notification.status === 'unread';
+                return (
+                  <div
+                    key={notification.id}
+                    className={`group relative bg-[#16213e] border ${isUnread ? 'border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.05)]' : 'border-white/5'} rounded-3xl p-5 flex flex-col gap-4 shadow-xl transition-all duration-300 hover:bg-[#16213e]/90 hover:border-white/10`}
+                  >
+                    <div className="flex gap-4 items-center">
+                      <div className={`w-12 h-12 rounded-2xl ${isUnread ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 'bg-white/5 text-gray-400 border-white/10'} border flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105`}>
+                        <Activity className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className={`text-sm font-bold tracking-tight pr-5 ${isUnread ? 'text-white' : 'text-gray-300'}`}>
+                          {notification.body}
+                        </h3>
+                        <p className="text-gray-500 text-xs mt-1 leading-relaxed">
+                          {new Date(notification.created_at?.toDate ? notification.created_at.toDate() : notification.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="relative shrink-0">
+                        <button
+                          onClick={() => setShowMenuId(showMenuId === notification.id ? null : notification.id)}
+                          className="p-1.5 rounded-xl hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                        {showMenuId === notification.id && (
+                          <div className="absolute right-0 mt-1 w-32 bg-[#1a1a2e] border border-white/10 rounded-xl shadow-2xl py-1 z-30 animate-in fade-in slide-in-from-top-1 duration-150">
+                            {isUnread && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await markAsRead(notification.id);
+                                    setShowMenuId(null);
+                                  } catch (e) {}
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs text-cyan-400 hover:bg-white/5 transition-colors font-medium"
+                              >
+                                Mark as Read
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setShowMenuId(null)}
+                              className="w-full text-left px-3 py-2 text-xs text-gray-400 hover:bg-white/5 transition-colors font-medium"
+                            >
+                              Close
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* standard bottom nav overlay */}

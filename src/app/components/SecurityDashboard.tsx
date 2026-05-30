@@ -189,7 +189,7 @@ function DetailListScreen({
 }) {
   const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-[#1a1a2e] flex flex-col">
+    <div className="h-screen max-h-screen bg-[#1a1a2e] flex flex-col overflow-hidden">
       <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center gap-3 px-4 py-3 pb-4">
           <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-white/5 text-gray-400">
@@ -372,7 +372,7 @@ export function SecurityDashboard() {
   // ── Checking state ───────────────────────────────────────────────────
   if (dashState === 'checking') {
     return (
-      <div className="min-h-screen bg-[#1a1a2e] flex flex-col animate-page">
+      <div className="h-screen max-h-screen bg-[#1a1a2e] flex flex-col animate-page overflow-hidden">
         <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
           <div className="flex items-center justify-between px-4 py-3 h-14">
             <div className="flex items-center gap-3">
@@ -446,7 +446,7 @@ export function SecurityDashboard() {
   const display2FA = analysis?.twoFaMissing.length ?? twoFaMissing.length;
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] flex flex-col animate-page">
+    <div className="h-screen max-h-screen bg-[#1a1a2e] flex flex-col animate-page overflow-hidden">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">
         <div className="flex items-center justify-between px-4 py-3 h-14">
