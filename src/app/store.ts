@@ -218,6 +218,30 @@ export function getUserEmail(): string {
 
 // ── Master Password Setup & Verification ─────────────────────────────
 
+/**
+ * Helper to ensure device keypair exists and publish public profile to Firestore.
+ * Fired as a background task on successful vault unlock or vault setup.
+ */
+async function publishProfileOnUnlock(uid: string, key: CryptoKey): Promise<void> {
+  try {
+    const { ensureDeviceKeyPair } = await import('./crypto/collectionCrypto');
+    const { getUsernameForUid, publishPublicProfile } = await import('./firestore');
+    
+    log.info('[PROFILE] Running publish profile task on unlock...', { uid });
+    const pubKeyB64 = await ensureDeviceKeyPair(key);
+    const username = await getUsernameForUid(uid);
+    if (username) {
+      const currentUser = getCurrentUser();
+      await publishPublicProfile(uid, username, currentUser?.displayName || null, pubKeyB64);
+      log.info('[PROFILE] Public profile successfully verified and published!');
+    } else {
+      log.warn('[PROFILE] No username found for user, skipping public profile publishing.');
+    }
+  } catch (err) {
+    log.error('[PROFILE] Failed to publish public profile on unlock:', err);
+  }
+}
+
 export async function setupInitialVault(password: string): Promise<void> {
   const email = getUserEmail();
   if (!email) throw new Error("No user email available for key derivation");
@@ -253,6 +277,10 @@ export async function setupInitialVault(password: string): Promise<void> {
   _sessionPassword = password;
   _cachedItems = [];
   log.info('Session hydrated after vault creation — vault is now considered unlocked', { uid });
+
+  if (uid && key) {
+    publishProfileOnUnlock(uid, key);
+  }
 }
 
 export async function verifyMasterPassword(password: string): Promise<boolean> {
@@ -517,6 +545,10 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
   loadCustomCategories().catch((e) => {
     log.error('Failed to load custom categories on unlock:', e);
   });
+
+  if (uid && key) {
+    publishProfileOnUnlock(uid, key);
+  }
 
   return _cachedItems || items;
 }
@@ -1195,6 +1227,9 @@ export async function unlockWithBiometric(): Promise<boolean> {
     });
     
     const uid = getUid();
+    if (uid && key) {
+      publishProfileOnUnlock(uid, key);
+    }
     if (uid) {
       startRealtimeSync(uid, '');
     }

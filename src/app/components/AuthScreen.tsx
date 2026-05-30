@@ -15,6 +15,8 @@ import {
     AtSign,
     Loader2,
     Download,
+    KeyRound,
+    LogOut,
 } from 'lucide-react';
 import {
     sendPasswordlessVerificationLink,
@@ -29,7 +31,7 @@ import { hasConfiguredVault, setupInitialVault, setSessionPassword, resetVault, 
 import { checkUsernameAvailable, claimUsername, checkEmailRegistered, registerEmail } from '../firestore';
 import { getCurrentUser } from '../auth';
 
-type AuthMode = 'signin' | 'signup' | 'forgot' | 'verify' | 'setup_master' | 'processing_link';
+type AuthMode = 'signin' | 'signup' | 'forgot' | 'verify' | 'setup_master' | 'processing_link' | 'enter_password';
 
 import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
 import { getRateLimitState, recordFailedAttempt, clearRateLimit, forceHardLockout } from '../utils/rateLimit';
@@ -119,7 +121,23 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         }
     }, [email, mode]);
 
-    // ── On Mount: Check Magic Link ────────────────────────────────────
+    // ── Check Session Storage for Forgot Password Request ─────────────
+    useEffect(() => {
+        if (sessionStorage.getItem('keeguard_auth_mode') === 'forgot') {
+            sessionStorage.removeItem('keeguard_auth_mode');
+            setMode('forgot');
+        }
+    }, []);
+
+    // ── Email Login Step 1 ────────────────────────────────────────────
+    const handleEmailNext = (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        if (!email) return;
+        setMode('enter_password');
+    };
+
+    // ── Email Login Step 2 ────────────────────────────────────────────
     useEffect(() => {
         const checkMagicLink = async () => {
             if (isVerificationLink(window.location.href)) {
@@ -649,6 +667,79 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         )
     }
 
+    // ── Enter Password Screen (Login Step 2) ─────────────────────────
+    if (mode === 'enter_password') {
+        return (
+            <div className="min-h-screen bg-[#1a1a2e] flex flex-col items-center justify-center px-6">
+                <div className="w-full max-w-sm flex flex-col items-center">
+                    {/* Logo */}
+                    <div className="mb-8 flex flex-col items-center">
+                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mb-4 shadow-lg shadow-cyan-500/20">
+                            <Shield className="w-10 h-10 text-white" />
+                        </div>
+                        <h1 className="text-white mb-1">Keeguard</h1>
+                        <p className="text-cyan-400 text-xs mt-0.5 mb-1">{email}</p>
+                        <p className="text-gray-400 text-sm">Enter your master password</p>
+                    </div>
+
+                    {/* Form */}
+                    <form onSubmit={handleLogin} className="w-full space-y-4">
+                        <div>
+                            <label className="text-gray-400 text-xs mb-1.5 block">Master Password</label>
+                            <div className="relative">
+                                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-500" />
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="Enter master password"
+                                    className="w-full bg-[#16213e] border border-gray-700 rounded-xl py-3 pl-10 pr-11 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                                    autoFocus
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                                >
+                                    {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                                </button>
+                            </div>
+                            <div className="flex justify-end mt-2">
+                                <button type="button" onClick={() => { setMode('forgot'); setError(''); setPassword(''); }} className="text-cyan-400 text-xs hover:underline pt-1">Forgot Master Password?</button>
+                            </div>
+                        </div>
+
+                        {error && error !== 'EMAIL_EXISTS' && (
+                            <p className="text-red-400 text-sm text-center my-2 bg-red-500/10 border border-red-500/20 py-2 rounded-lg">{error}</p>
+                        )}
+
+                        <button
+                            type="submit"
+                            disabled={loading || !password || lockoutSecs > 0}
+                            className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2"
+                        >
+                            {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
+                            {loading ? 'Unlocking...' : lockoutSecs > 0 ? `Try again in ${Math.ceil(lockoutSecs / 60) >= 1 && lockoutSecs >= 60 ? Math.ceil(lockoutSecs / 60) + 'm' : lockoutSecs + 's'}` : 'Unlock'}
+                        </button>
+                    </form>
+
+                    {/* Sign out */}
+                    <div className="mt-8 flex flex-col items-center gap-4">
+                        <button
+                            type="button"
+                            onClick={() => { setMode('signin'); setPassword(''); setError(''); }}
+                            className="flex items-center gap-2 text-gray-500 text-xs hover:text-gray-300 transition-colors"
+                        >
+                            <LogOut className="w-3.5 h-3.5" />
+                            Sign out and switch account
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     // ── Sign In / Request Link Screen ─────────────────────────────────────
     const isLogin = mode === 'signin';
     const isSignup = mode === 'signup';
@@ -668,7 +759,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                 </div>
 
                 {/* Form */}
-                <form onSubmit={isLogin ? handleLogin : handleRequestLink} className="w-full space-y-4">
+                <form onSubmit={isLogin ? handleEmailNext : handleRequestLink} className="w-full space-y-4">
                     {/* Email */}
                     <div>
                         <label className="text-gray-400 text-xs mb-1.5 block">Email Address</label>
@@ -685,34 +776,6 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                             />
                         </div>
                     </div>
-
-                    {/* Master Password - Only for Login */}
-                    {isLogin && (
-                        <div>
-                            <label className="text-gray-400 text-xs mb-1.5 block">Master Password</label>
-                            <div className="relative mb-2">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-500" />
-                                <input
-                                    type={showPassword ? 'text' : 'password'}
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="Enter your Master Password"
-                                    className="w-full bg-[#16213e] border border-gray-700 rounded-xl py-3 pl-10 pr-11 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors"
-                                    required
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
-                                >
-                                    {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
-                                </button>
-                            </div>
-                            <div className="flex justify-end">
-                                <button type="button" onClick={() => { setMode('forgot'); setError(''); setPassword(''); }} className="text-cyan-400 text-xs hover:underline pt-1">Forgot Master Password?</button>
-                            </div>
-                        </div>
-                    )}
 
                     {error && error !== 'EMAIL_EXISTS' && (
                         <p className="text-red-400 text-sm text-center my-2 bg-red-500/10 border border-red-500/20 py-2 rounded-lg">{error}</p>
@@ -734,7 +797,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     <div className="flex flex-col gap-3 mt-4">
                         <button
                             type="submit"
-                            disabled={loading || !email || (isLogin && !password) || lockoutSecs > 0 || (isSignup && !agreedToTerms)}
+                            disabled={loading || !email || lockoutSecs > 0 || (isSignup && !agreedToTerms)}
                             className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-3 rounded-xl disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2"
                         >
                             {loading ? (
@@ -744,7 +807,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                             ) : (
                                 <ArrowRight className="w-4 h-4" />
                             )}
-                            {loading ? 'Please wait...' : lockoutSecs > 0 ? `Try again in ${Math.ceil(lockoutSecs / 60) >= 1 && lockoutSecs >= 60 ? Math.ceil(lockoutSecs / 60) + 'm' : lockoutSecs + 's'}` : isLogin ? 'Open Vault' : isSignup ? 'Create Account' : 'Send Reset Link'}
+                            {loading ? 'Please wait...' : lockoutSecs > 0 ? `Try again in ${Math.ceil(lockoutSecs / 60) >= 1 && lockoutSecs >= 60 ? Math.ceil(lockoutSecs / 60) + 'm' : lockoutSecs + 's'}` : isLogin ? 'Enter Password' : isSignup ? 'Create Account' : 'Send Reset Link'}
                         </button>
                     </div>
                 </form>

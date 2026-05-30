@@ -58,6 +58,27 @@ export function CollectionListPage() {
     return unsubList;
   }, [user.uid]);
 
+  // Ensure device keys exist and publish public profile to userProfiles
+  useEffect(() => {
+    const checkAndPublishProfile = async () => {
+      const vaultKey = getSessionCryptoKey();
+      if (vaultKey && user) {
+        try {
+          const pubKeyB64 = await ensureDeviceKeyPair(vaultKey);
+          const { getUsernameForUid, publishPublicProfile } = await import('../../firestore');
+          const username = await getUsernameForUid(user.uid);
+          if (username) {
+            await publishPublicProfile(user.uid, username, user.displayName, pubKeyB64);
+            console.log('[COLLECTIONS_PAGE] Public profile verified and published.');
+          }
+        } catch (err) {
+          console.error('[COLLECTIONS_PAGE] Failed to verify/publish public profile:', err);
+        }
+      }
+    };
+    checkAndPublishProfile();
+  }, [user]);
+
   // Subscribe to details of each collection
   useEffect(() => {
     const unsubs: (() => void)[] = [];

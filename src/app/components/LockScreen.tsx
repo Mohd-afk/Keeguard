@@ -271,6 +271,21 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
                 {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
               </button>
             </div>
+            
+            {!isSetup && (
+              <div className="flex justify-end mt-2">
+                <button 
+                  type="button" 
+                  onClick={() => { 
+                    sessionStorage.setItem('keeguard_auth_mode', 'forgot');
+                    if (onSignOut) onSignOut(); 
+                  }} 
+                  className="text-cyan-400 text-xs hover:underline pt-1"
+                >
+                  Forgot Master Password?
+                </button>
+              </div>
+            )}
             </div>
             {isSetup && <PasswordStrengthIndicator password={password} />}
 
