@@ -17,7 +17,10 @@ exports.searchUsers = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
-    const queryText = (data.query || '').trim().toLowerCase();
+    let queryText = (data.query || '').trim().toLowerCase();
+    if (queryText.startsWith('@')) {
+        queryText = queryText.substring(1);
+    }
     if (queryText.length < 3) {
         throw new functions.https.HttpsError('invalid-argument', 'Query string must be at least 3 characters long.');
     }

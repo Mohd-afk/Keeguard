@@ -33,7 +33,8 @@ export function InviteByUsernameInput({ onSelectUser, selectedUser }: InviteByUs
 
   // Simple debounce logic
   useEffect(() => {
-    if (!query.trim()) {
+    const cleanedQuery = query.trim().replace(/^@/, '');
+    if (!cleanedQuery) {
       setResults([]);
       setSearching(false);
       return;
@@ -42,7 +43,12 @@ export function InviteByUsernameInput({ onSelectUser, selectedUser }: InviteByUs
     setSearching(true);
     const delayDebounce = setTimeout(async () => {
       try {
-        const matchingUsers = await searchProfiles(query);
+        if (cleanedQuery.length < 3) {
+          setResults([]);
+          setSearching(false);
+          return;
+        }
+        const matchingUsers = await searchProfiles(cleanedQuery);
         setResults(matchingUsers);
       } catch (err) {
         console.error('Failed to search users', err);

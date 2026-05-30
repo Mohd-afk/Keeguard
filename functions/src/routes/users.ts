@@ -21,7 +21,10 @@ export const searchUsers = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const queryText = (data.query || '').trim().toLowerCase();
+  let queryText = (data.query || '').trim().toLowerCase();
+  if (queryText.startsWith('@')) {
+    queryText = queryText.substring(1);
+  }
   if (queryText.length < 3) {
     throw new functions.https.HttpsError(
       'invalid-argument',
