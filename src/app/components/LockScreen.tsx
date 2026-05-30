@@ -12,9 +12,11 @@ import {
   getSettings,
   checkBiometricAvailability,
   unlockWithBiometric,
+  isBiometricEnabledNatively,
 } from '../store';
 import { isPasswordStrong, PasswordStrengthIndicator } from '../utils/password';
 import { useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -45,26 +47,51 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
         if (has) {
           setIsSetup(false);
 
+          const isMobile = Capacitor.getPlatform() === 'android';
+          if (isMobile) {
+            setBiometricAvailable(true); // Always make available for rendering on Android
+          }
+
           let bioAttemptedAndSucceeded = false;
           try {
             const settings = await getSettings();
-            if (settings.biometricEnabled) {
-              const res = await checkBiometricAvailability();
-              if (res.available) {
-                setBiometricAvailable(true);
-                try {
-                  const success = await unlockWithBiometric();
-                  if (success && !cancelled) {
-                    bioAttemptedAndSucceeded = true;
-                    onUnlock();
-                  }
-                } catch (e: any) {
-                  log.warn('LockScreen: Auto-prompt biometric cancelled or failed', e);
-                  if (!cancelled) {
-                    setShowBiometricButton(true);
-                    if (!String(e).includes('ERROR_10') && !String(e).includes('ERROR_13')) {
-                      setError('Biometric authentication failed. Please enter your master password.');
-                    }
+            const res = await checkBiometricAvailability();
+            
+            // Update availability based on hardware
+            if (res.available) {
+              setBiometricAvailable(true);
+            }
+
+            // Check if enabled (either JS setting or natively)
+            let isEnabled = settings.biometricEnabled;
+            if (isMobile) {
+              const nativeEnabled = await isBiometricEnabledNatively();
+              if (nativeEnabled && !settings.biometricEnabled) {
+                log.info('LockScreen: Auto-healing biometric settings to true');
+                const { saveSettings } = await import('../store');
+                await saveSettings({ ...settings, biometricEnabled: true });
+                isEnabled = true;
+              } else if (!nativeEnabled && settings.biometricEnabled) {
+                log.info('LockScreen: Auto-healing biometric settings to false');
+                const { saveSettings } = await import('../store');
+                await saveSettings({ ...settings, biometricEnabled: false });
+                isEnabled = false;
+              }
+            }
+
+            if (isEnabled && res.available) {
+              try {
+                const success = await unlockWithBiometric();
+                if (success && !cancelled) {
+                  bioAttemptedAndSucceeded = true;
+                  onUnlock();
+                }
+              } catch (e: any) {
+                log.warn('LockScreen: Auto-prompt biometric cancelled or failed', e);
+                if (!cancelled) {
+                  setShowBiometricButton(true);
+                  if (!String(e).includes('ERROR_10') && !String(e).includes('ERROR_13')) {
+                    setError('Biometric authentication failed. Please enter your master password.');
                   }
                 }
               }
@@ -124,7 +151,17 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
       }
     } catch (e: any) {
       log.warn('LockScreen: Manual biometric failed', e);
-      if (!String(e).includes('ERROR_10') && !String(e).includes('ERROR_13')) {
+      const errStr = String(e);
+      if (errStr.includes('ERROR_10') || errStr.includes('ERROR_13')) {
+        // User cancelled, do not display error text
+        return;
+      }
+      
+      if (errStr.includes('Biometric not enabled') || errStr.includes('No wrapped DEK found') || errStr.includes('KEY_INVALIDATED')) {
+        setError('Biometric unlock is not enabled. Please unlock with your master password first, then enable it in Settings.');
+      } else if (errStr.includes('ERROR_11') || errStr.includes('None enrolled')) {
+        setError('No biometrics enrolled on this device. Please set up fingerprint or face unlock in your system settings.');
+      } else {
         setError('Biometric authentication failed. Please enter your master password.');
       }
     }
@@ -265,7 +302,7 @@ export function LockScreen({ onUnlock, userEmail, onSignOut }: LockScreenProps) 
             {loading ? 'Unlocking...' : isSetup ? 'Create Vault' : 'Unlock'}
           </button>
 
-          {!isSetup && showBiometricButton && (
+          {!isSetup && (biometricAvailable || Capacitor.getPlatform() === 'android') && (
             <button
               type="button"
               onClick={handleBiometricUnlock}

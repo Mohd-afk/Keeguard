@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, ChevronRight, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare, Tag, Plus, ArrowUp, ArrowDown, Palette, RefreshCw, AlignJustify } from 'lucide-react';
 import packageJson from '../../../package.json';
-import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability, isAutofillEnabled } from '../store';
+import { getSettings, saveSettings, changeMasterPassword, bulkAddVaultItems, exportVaultItemsAsCsv, type AppSettings, type ItemType, verifyMasterPassword, resetVault, enableBiometricUnlock, disableBiometricUnlock, checkBiometricAvailability, isAutofillEnabled, isBiometricEnabledNatively } from '../store';
 import { signOut, sendPasswordlessVerificationLink } from '../auth';
 import { getUsernameForUid, checkUsernameAvailable, changeUsername } from '../firestore';
 import { subscribeToDevices, revokeDevice, revokeAllOtherDevices, type DeviceSession, getLocalDeviceId } from '../services/deviceSession';
@@ -183,17 +183,35 @@ export function Settings() {
 
     // ── Biometric Unlock State ───────────────────────────────────────
     const [biometricAvailable, setBiometricAvailable] = useState(false);
+    const [biometricHardwareSupported, setBiometricHardwareSupported] = useState(false);
     const [biometricReason, setBiometricReason] = useState<string | undefined>();
     const [showBiometricSetup, setShowBiometricSetup] = useState(false);
     const [biometricSetupPassword, setBiometricSetupPassword] = useState('');
     const [enablingBiometric, setEnablingBiometric] = useState(false);
 
     useEffect(() => {
-        checkBiometricAvailability().then(res => {
-            setBiometricAvailable(res.available);
+        checkBiometricAvailability().then(async (res) => {
+            const isMobile = Capacitor.getPlatform() === 'android';
+            setBiometricAvailable(res.available || isMobile);
+            setBiometricHardwareSupported(res.available);
             setBiometricReason(res.reason);
+
+            if (isMobile) {
+                try {
+                    const nativeEnabled = await isBiometricEnabledNatively();
+                    if (nativeEnabled && !settings.biometricEnabled) {
+                        console.info('Settings: Syncing biometricEnabled setting with native state (enabling)');
+                        updateSetting('biometricEnabled', true);
+                    } else if (!nativeEnabled && settings.biometricEnabled) {
+                        console.info('Settings: Syncing biometricEnabled setting with native state (disabling)');
+                        updateSetting('biometricEnabled', false);
+                    }
+                } catch (err) {
+                    console.warn('Failed to sync native biometric settings', err);
+                }
+            }
         });
-    }, []);
+    }, [settings.biometricEnabled]);
 
     // ── Autofill Status ──────────────────────────────────────────────
     const [autofillEnabled, setAutofillEnabled] = useState(false);
@@ -831,15 +849,17 @@ export function Settings() {
                                                     Last unlocked: {new Date(settings.lastBiometricUnlock).toLocaleDateString()}
                                                 </span>
                                             )}
-                                            {!biometricAvailable && biometricReason && (
-                                                <span className="text-red-400 text-[10px]">{biometricReason}</span>
+                                            {!biometricHardwareSupported && biometricReason && (
+                                                <span className="text-amber-400 text-[10px]">
+                                                    {biometricReason === 'None enrolled' ? 'Please register fingerprint in phone settings' : biometricReason}
+                                                </span>
                                             )}
                                         </div>
                                     </div>
                                     <button
                                         onClick={handleToggleBiometric}
-                                        disabled={!biometricAvailable}
-                                        className={`w-11 h-6 rounded-full relative transition-colors duration-200 pointer-events-auto ${settings.biometricEnabled ? 'bg-cyan-500' : 'bg-gray-600'} ${!biometricAvailable && 'opacity-50 cursor-not-allowed'}`}
+                                        disabled={!biometricHardwareSupported}
+                                        className={`w-11 h-6 rounded-full relative transition-colors duration-200 pointer-events-auto ${settings.biometricEnabled ? 'bg-cyan-500' : 'bg-gray-600'} ${!biometricHardwareSupported && 'opacity-50 cursor-not-allowed'}`}
                                     >
                                         <div className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ${settings.biometricEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                                     </button>

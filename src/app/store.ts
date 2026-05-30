@@ -1153,6 +1153,17 @@ export async function checkBiometricAvailability(): Promise<{ available: boolean
   return BiometricBridge.isBiometricAvailable();
 }
 
+export async function isBiometricEnabledNatively(): Promise<boolean> {
+  if (Capacitor.getPlatform() !== 'android') return false;
+  try {
+    const res = await BiometricBridge.isBiometricEnabled();
+    return res.enabled;
+  } catch (e) {
+    log.warn('Failed to check native biometric enabled status', e);
+    return false;
+  }
+}
+
 export async function unlockWithBiometric(): Promise<boolean> {
   try {
     const email = getUserEmail();
