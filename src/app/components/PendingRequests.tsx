@@ -122,7 +122,7 @@ export function PendingRequests() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] flex flex-col animate-page select-none">
+    <div className="h-screen max-h-screen bg-[#1a1a2e] flex flex-col animate-page overflow-hidden select-none">
       
       {/* Sticky Premium Header Row */}
       <div className="sticky top-0 z-20 bg-[#1a1a2e]/95 backdrop-blur-sm border-b border-white/5 pt-[max(env(safe-area-inset-top),_12px)]">

@@ -697,7 +697,7 @@ class SmartCategorizerService {
     };
   }
 
-  async planVaultOrganization(vaultItems: VaultItemData[], options: { includeCategorized?: boolean; includeUncategorized?: boolean; createNewCategories?: boolean; categoriesArray?: {id: string, name: string}[] } = {}): Promise<OrganizationPlan> {
+  async planVaultOrganization(vaultItems: VaultItemData[], options: { includeCategorized?: boolean; includeUncategorized?: boolean; createNewCategories?: boolean; categoriesArray?: {id: string, name: string}[]; onProgress?: (current: number, total: number, label: string) => void } = {}): Promise<OrganizationPlan> {
     const includeCategorized = options.includeCategorized ?? true;
     const includeUncategorized = options.includeUncategorized ?? true;
     const createNewCategories = options.createNewCategories ?? this.allowNewCategories;
@@ -711,15 +711,32 @@ class SmartCategorizerService {
     const proposals: ItemProposal[] = [];
     const clusterBuckets = new Map<string, any[]>();
 
-    for (const item of vaultItems) {
+    // Pre-filter items to process so we can report accurate totals
+    const itemsToProcess = vaultItems.filter(item => {
+      let currentCategoryName = 'Uncategorized';
+      if (item.categoryId && options.categoriesArray) {
+        const found = options.categoriesArray.find(c => c.id === item.categoryId);
+        if (found) currentCategoryName = found.name;
+      }
+      const isUncategorized = currentCategoryName === 'Uncategorized';
+      return !(!includeUncategorized && isUncategorized) && !(!includeCategorized && !isUncategorized);
+    });
+
+    const total = itemsToProcess.length;
+
+    for (let i = 0; i < itemsToProcess.length; i++) {
+      const item = itemsToProcess[i];
       let currentCategoryName = 'Uncategorized';
       if (item.categoryId && options.categoriesArray) {
         const found = options.categoriesArray.find(c => c.id === item.categoryId);
         if (found) currentCategoryName = found.name;
       }
 
-      const isUncategorized = currentCategoryName === 'Uncategorized';
-      if ((!includeUncategorized && isUncategorized) || (!includeCategorized && !isUncategorized)) continue;
+      const label = item.title || item.appName || item.domain || item.username || 'Unknown item';
+      if (options.onProgress) options.onProgress(i + 1, total, label);
+
+      // Yield to UI thread between items so progress updates render
+      await new Promise<void>(r => setTimeout(r, 0));
 
       const result = await this.categorizeEntry(item, { mode: 'organize-existing' });
       const proposal = this._buildItemProposal(item, result, currentCategoryName);
@@ -884,7 +901,7 @@ class SmartCategorizerService {
           this.callbacks.delete(id);
           resolve(null);
         }
-      }, 3500);
+      }, 800);
     });
   }
 

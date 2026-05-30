@@ -98,7 +98,89 @@ const AVAILABLE_COLORS = [
   '#64748b', // Slate Gray
 ];
 
+const SMART_LOADING_MESSAGES = [
+  { icon: '🔍', text: 'Scanning vault metadata...' },
+  { icon: '🧠', text: 'Extracting domain signals...' },
+  { icon: '⚡', text: 'Running multi-signal scoring engine...' },
+  { icon: '🏷️', text: 'Matching against category rules...' },
+  { icon: '🔗', text: 'Detecting duplicate clusters...' },
+  { icon: '📊', text: 'Calculating confidence scores...' },
+  { icon: '✨', text: 'Generating smart proposals...' },
+  { icon: '🎯', text: 'Finalizing organization plan...' },
+];
+
+function SmartOrganizerLoadingUI({ progress }: { progress: { current: number; total: number; label: string } | null }) {
+  const [msgIdx, setMsgIdx] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMsgIdx(prev => (prev + 1) % SMART_LOADING_MESSAGES.length);
+    }, 1400);
+    return () => clearInterval(interval);
+  }, []);
+
+  const progressPct = progress && progress.total > 0
+    ? Math.round((progress.current / progress.total) * 100)
+    : null;
+
+  const msg = SMART_LOADING_MESSAGES[msgIdx];
+
+  return (
+    <div className="flex flex-col items-center justify-center py-10 px-4 gap-6">
+      {/* Animated icon ring */}
+      <div className="relative w-20 h-20 flex items-center justify-center">
+        <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20" />
+        <div
+          className="absolute inset-0 rounded-full border-2 border-t-cyan-400 border-r-transparent border-b-transparent border-l-transparent animate-spin"
+          style={{ animationDuration: '1.2s' }}
+        />
+        <div
+          className="absolute inset-2 rounded-full border border-teal-500/30 border-t-teal-300 border-r-transparent border-b-transparent border-l-transparent animate-spin"
+          style={{ animationDuration: '2s', animationDirection: 'reverse' }}
+        />
+        <span className="text-2xl" style={{ animation: 'none' }}>{msg.icon}</span>
+      </div>
+
+      {/* Cycling status message */}
+      <div className="text-center space-y-1">
+        <p className="text-cyan-300 text-sm font-semibold transition-all duration-500">{msg.text}</p>
+        <p className="text-gray-500 text-xs">AI-powered multi-signal analysis</p>
+      </div>
+
+      {/* Progress bar (when we have item-level data) */}
+      {progress && progress.total > 0 ? (
+        <div className="w-full max-w-xs space-y-2">
+          <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-cyan-500 to-teal-400 rounded-full transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-gray-500 text-[10px] truncate max-w-[180px]">
+              {progress.label}
+            </p>
+            <p className="text-cyan-400 text-[10px] font-bold shrink-0 ml-2">
+              {progress.current}/{progress.total}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="w-full max-w-xs">
+          <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-cyan-500 to-teal-400 rounded-full animate-pulse"
+              style={{ width: '60%', animation: 'indeterminate 1.5s ease-in-out infinite' }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ManageCategories() {
+
   const navigate = useNavigate();
   const { setSidebarOpen, user } = useOutletContext<{
     setSidebarOpen: (o: boolean) => void;
@@ -134,6 +216,7 @@ export default function ManageCategories() {
   const [smartPlan, setSmartPlan] = useState<OrganizationPlan | null>(null);
   const [isSmartLoading, setIsSmartLoading] = useState(false);
   const [isApplyingSmart, setIsApplyingSmart] = useState(false);
+  const [smartProgress, setSmartProgress] = useState<{ current: number; total: number; label: string } | null>(null);
 
   // Subscribe to changes
   useEffect(() => {
@@ -421,14 +504,22 @@ export default function ManageCategories() {
             <button
               onClick={async () => {
                 setIsSmartLoading(true);
+                setSmartPlan(null);
+                setSmartProgress(null);
                 setShowSmartModal(true);
                 try {
-                  const plan = await SmartCategorizer.planVaultOrganization(items, { categoriesArray: categories });
+                  const plan = await SmartCategorizer.planVaultOrganization(items, {
+                    categoriesArray: categories,
+                    onProgress: (current, total, label) => {
+                      setSmartProgress({ current, total, label });
+                    }
+                  });
                   setSmartPlan(plan);
                 } catch (e) {
                   toast.error("Failed to generate smart plan");
                 } finally {
                   setIsSmartLoading(false);
+                  setSmartProgress(null);
                 }
               }}
               className="flex-1 py-4 px-4 bg-gradient-to-r from-cyan-600/10 to-teal-600/10 hover:from-cyan-600/20 hover:to-teal-600/20 border border-cyan-500/20 hover:border-cyan-500/40 rounded-2xl flex items-center justify-center gap-2.5 text-cyan-300 hover:text-cyan-200 transition-all font-medium text-sm shadow-md shrink-0"
@@ -939,10 +1030,7 @@ export default function ManageCategories() {
 
             <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
               {isSmartLoading ? (
-                <div className="flex flex-col items-center justify-center py-10">
-                  <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mb-4" />
-                  <p className="text-cyan-300 text-sm animate-pulse">Analyzing vault structure...</p>
-                </div>
+                <SmartOrganizerLoadingUI progress={smartProgress} />
               ) : !smartPlan || (smartPlan.itemProposals.length === 0 && smartPlan.newCategoryProposals.length === 0) ? (
                 <div className="text-center py-10">
                   <p className="text-gray-400">Vault is optimally organized!</p>

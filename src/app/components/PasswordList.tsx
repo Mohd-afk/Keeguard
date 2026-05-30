@@ -569,7 +569,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] flex flex-col animate-page">
+    <div className="h-screen max-h-screen bg-[#1a1a2e] flex flex-col animate-page overflow-hidden">
       {/* ── Sort Modal ──────────────────────────────────────────────── */}
       <SortModal
         open={sortModalOpen}
