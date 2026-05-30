@@ -1,10 +1,21 @@
 // ─── Shared Collections API Client Wrapper ──────────────────────────────────
-// Frontend wrappers to invoke collection & invite management Cloud Functions.
+// Rewritten to use direct Firestore client-side writes because Cloud Functions
+// cannot be deployed on the free Spark plan.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { httpsCallable } from 'firebase/functions';
-import { getFirebaseFunctions } from '../firebase';
 import { CollectionRole } from '../firestore/collections';
+import { getFirebaseDb } from '../firebase';
+import { getAuth } from 'firebase/auth';
+import {
+  doc,
+  collection,
+  writeBatch,
+  serverTimestamp,
+  getDoc,
+  setDoc,
+  updateDoc,
+  Timestamp,
+} from 'firebase/firestore';
 
 export interface CreateCollectionParams {
   name: string;
@@ -14,10 +25,6 @@ export interface CreateCollectionParams {
     senderPublicKeyB64: string;
   };
 }
-
-import { getFirebaseDb } from '../firebase';
-import { getAuth } from 'firebase/auth';
-import { doc, collection, writeBatch, serverTimestamp } from 'firebase/firestore';
 
 export async function createCollection(params: CreateCollectionParams): Promise<string> {
   const auth = getAuth();
@@ -84,18 +91,19 @@ export async function updateMemberRole(
   targetUserId: string,
   newRole: CollectionRole
 ): Promise<void> {
-  const fns = getFirebaseFunctions();
-  const callable = httpsCallable<{ collectionId: string; targetUserId: string; newRole: CollectionRole }, void>(
-    fns,
-    'updateMemberRole'
-  );
-  await callable({ collectionId, targetUserId, newRole });
+  const auth = getAuth();
+  if (!auth.currentUser) throw new Error("Unauthenticated");
+  const db = getFirebaseDb();
+  const memberRef = doc(db, `collections/${collectionId}/members/${targetUserId}`);
+  await updateDoc(memberRef, { role: newRole, updated_at: serverTimestamp() });
 }
 
 export async function removeMember(collectionId: string, targetUserId: string): Promise<void> {
-  const fns = getFirebaseFunctions();
-  const callable = httpsCallable<{ collectionId: string; targetUserId: string }, void>(fns, 'removeMember');
-  await callable({ collectionId, targetUserId });
+  const auth = getAuth();
+  if (!auth.currentUser) throw new Error("Unauthenticated");
+  const db = getFirebaseDb();
+  const memberRef = doc(db, `collections/${collectionId}/members/${targetUserId}`);
+  await updateDoc(memberRef, { status: 'removed', updated_at: serverTimestamp() });
 }
 
 export interface CreateInviteParams {
@@ -110,28 +118,185 @@ export interface CreateInviteParams {
 }
 
 export async function createInvite(params: CreateInviteParams): Promise<string> {
-  const fns = getFirebaseFunctions();
-  const callable = httpsCallable<CreateInviteParams, { inviteId: string }>(fns, 'createInvite');
-  const res = await callable(params);
-  return res.data.inviteId;
+  const auth = getAuth();
+  if (!auth.currentUser) throw new Error("Unauthenticated");
+  const actorUserId = auth.currentUser.uid;
+  const db = getFirebaseDb();
+
+  // 1. Resolve targetUsername → UID via usernames collection
+  const cleanUsername = params.targetUsername.toLowerCase().replace(/^@/, '');
+  const usernameSnap = await getDoc(doc(db, 'usernames', cleanUsername));
+  if (!usernameSnap.exists()) {
+    throw new Error(`User @${params.targetUsername} not found`);
+  }
+  const recipientUid = usernameSnap.data().uid as string;
+  if (recipientUid === actorUserId) {
+    throw new Error("You cannot invite yourself");
+  }
+
+  // 2. Fetch collection name for notification
+  const collSnap = await getDoc(doc(db, 'collections', params.collectionId));
+  const collectionName: string = collSnap.exists() ? (collSnap.data().name as string) : 'Shared Vault';
+
+  // 3. Fetch inviter's public profile for display name
+  const inviterProfileSnap = await getDoc(doc(db, 'userProfiles', actorUserId));
+  const inviterUsername: string = inviterProfileSnap.exists()
+    ? (inviterProfileSnap.data().username as string)
+    : 'someone';
+  const inviterDisplayName: string = inviterProfileSnap.exists()
+    ? ((inviterProfileSnap.data().display_name || inviterProfileSnap.data().username) as string)
+    : 'A User';
+
+  // 4. Build invite + key envelope in a single batch
+  const now = serverTimestamp();
+  // 7-day expiry
+  const expiresAt = Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const inviteRef = doc(collection(db, `collections/${params.collectionId}/invites`));
+  const inviteId = inviteRef.id;
+
+  const batch = writeBatch(db);
+
+  batch.set(inviteRef, {
+    collection_id: params.collectionId,
+    invited_user_id: recipientUid,
+    invited_by_user_id: actorUserId,
+    role: params.role,
+    status: 'pending',
+    message: params.message || null,
+    expires_at: expiresAt,
+    created_at: now,
+    responded_at: null,
+    // Denormalized display fields (read by recipient UI)
+    collection_name: collectionName,
+    inviter_username: inviterUsername,
+    inviter_display_name: inviterDisplayName,
+    inviter_avatar_url: null,
+  });
+
+  // 5. Write recipient's ECDH key envelope
+  if (params.recipientEnvelope) {
+    const envelopeRef = doc(db, `collections/${params.collectionId}/keyEnvelopes/${recipientUid}`);
+    batch.set(envelopeRef, {
+      collection_id: params.collectionId,
+      collection_key_version: 1,
+      recipient_type: 'user',
+      recipient_id: recipientUid,
+      wrapped_collection_key: params.recipientEnvelope.wrappedKey,
+      sender_public_key_b64: params.recipientEnvelope.senderPublicKeyB64,
+      created_at: now,
+    });
+  }
+
+  await batch.commit();
+
+  // 6. Create an in-app notification for the recipient (best-effort)
+  //    Firestore rules allow this if type === 'invite_received' and sender_uid matches auth.uid
+  try {
+    const notifRef = doc(collection(db, `users/${recipientUid}/notifications`));
+    await setDoc(notifRef, {
+      user_id: recipientUid,
+      type: 'invite_received',
+      type_category: 'collaboration',
+      priority: 'high',
+      title: `${inviterDisplayName} invited you to a shared vault`,
+      body: params.message || `${inviterDisplayName} wants to share "${collectionName}" with you.`,
+      status: 'pending',
+      sender_uid: actorUserId,        // Used by security rule
+      created_at: now,
+      read_at: null,
+      metadata: {
+        collection_id: params.collectionId,
+        collection_name: collectionName,
+        invite_id: inviteId,
+        inviter_user_id: actorUserId,
+        inviter_username: inviterUsername,
+        inviter_display_name: inviterDisplayName,
+        inviter_avatar_url: null,
+        role: params.role,
+      },
+    });
+  } catch (notifErr) {
+    // Notification delivery is best-effort — invite was already created successfully
+    console.warn('[INVITE] Notification write failed (non-fatal):', notifErr);
+  }
+
+  return inviteId;
 }
 
 export async function acceptInvite(collectionId: string, inviteId: string): Promise<void> {
-  const fns = getFirebaseFunctions();
-  const callable = httpsCallable<{ collectionId: string; inviteId: string }, void>(fns, 'acceptInvite');
-  await callable({ collectionId, inviteId });
+  const auth = getAuth();
+  if (!auth.currentUser) throw new Error("Unauthenticated");
+  const actorUserId = auth.currentUser.uid;
+  const db = getFirebaseDb();
+
+  // 1. Fetch invite to validate and get role
+  const inviteRef = doc(db, `collections/${collectionId}/invites/${inviteId}`);
+  const inviteSnap = await getDoc(inviteRef);
+  if (!inviteSnap.exists()) throw new Error('Invite not found');
+  const inviteData = inviteSnap.data();
+  if (inviteData.invited_user_id !== actorUserId) {
+    throw new Error('This invite was not sent to you');
+  }
+  if (inviteData.status !== 'pending') {
+    throw new Error('This invite has already been responded to');
+  }
+
+  const now = serverTimestamp();
+  const batch = writeBatch(db);
+
+  // 2. Mark invite accepted
+  batch.update(inviteRef, {
+    status: 'accepted',
+    responded_at: now,
+  });
+
+  // 3. Add member doc (user can write their own member doc per Firestore rules)
+  const memberRef = doc(db, `collections/${collectionId}/members/${actorUserId}`);
+  batch.set(memberRef, {
+    collection_id: collectionId,
+    user_id: actorUserId,
+    role: inviteData.role,
+    status: 'active',
+    joined_at: now,
+    added_by_user_id: inviteData.invited_by_user_id,
+    created_at: now,
+    updated_at: now,
+  });
+
+  await batch.commit();
 }
 
 export async function declineInvite(collectionId: string, inviteId: string): Promise<void> {
-  const fns = getFirebaseFunctions();
-  const callable = httpsCallable<{ collectionId: string; inviteId: string }, void>(fns, 'declineInvite');
-  await callable({ collectionId, inviteId });
+  const auth = getAuth();
+  if (!auth.currentUser) throw new Error("Unauthenticated");
+  const actorUserId = auth.currentUser.uid;
+  const db = getFirebaseDb();
+
+  const inviteRef = doc(db, `collections/${collectionId}/invites/${inviteId}`);
+  const inviteSnap = await getDoc(inviteRef);
+  if (!inviteSnap.exists()) throw new Error('Invite not found');
+  const inviteData = inviteSnap.data();
+  if (inviteData.invited_user_id !== actorUserId) {
+    throw new Error('This invite was not sent to you');
+  }
+
+  await updateDoc(inviteRef, {
+    status: 'declined',
+    responded_at: serverTimestamp(),
+  });
 }
 
 export async function revokeInvite(collectionId: string, inviteId: string): Promise<void> {
-  const fns = getFirebaseFunctions();
-  const callable = httpsCallable<{ collectionId: string; inviteId: string }, void>(fns, 'revokeInvite');
-  await callable({ collectionId, inviteId });
+  const auth = getAuth();
+  if (!auth.currentUser) throw new Error("Unauthenticated");
+  const db = getFirebaseDb();
+
+  const inviteRef = doc(db, `collections/${collectionId}/invites/${inviteId}`);
+  await updateDoc(inviteRef, {
+    status: 'revoked',
+    responded_at: serverTimestamp(),
+  });
 }
 
 export interface SubmitRotatedKeysParams {
@@ -149,15 +314,55 @@ export interface SubmitRotatedKeysParams {
 }
 
 export async function submitRotatedKeys(params: SubmitRotatedKeysParams): Promise<void> {
-  const fns = getFirebaseFunctions();
-  const callable = httpsCallable<SubmitRotatedKeysParams, void>(fns, 'submitRotatedKeys');
-  await callable(params);
+  const auth = getAuth();
+  if (!auth.currentUser) throw new Error("Unauthenticated");
+  const db = getFirebaseDb();
+  const batch = writeBatch(db);
+
+  // Write new key envelopes for all recipients
+  for (const env of params.envelopes) {
+    const envelopeRef = doc(db, `collections/${params.collectionId}/keyEnvelopes/${env.recipientId}`);
+    batch.set(envelopeRef, {
+      collection_id: params.collectionId,
+      collection_key_version: params.newKeyVersion,
+      recipient_type: 'user',
+      recipient_id: env.recipientId,
+      wrapped_collection_key: env.wrappedKey,
+      sender_public_key_b64: env.senderPublicKeyB64,
+      created_at: serverTimestamp(),
+    });
+  }
+
+  // Bump collection's current_key_version
+  const collRef = doc(db, 'collections', params.collectionId);
+  batch.update(collRef, {
+    current_key_version: params.newKeyVersion,
+    updated_at: serverTimestamp(),
+  });
+
+  await batch.commit();
 }
 
 export async function transferOwnership(collectionId: string, targetUserId: string): Promise<void> {
-  const fns = getFirebaseFunctions();
-  const callable = httpsCallable<{ collectionId: string; targetUserId: string }, void>(fns, 'transferOwnership');
-  await callable({ collectionId, targetUserId });
+  const auth = getAuth();
+  if (!auth.currentUser) throw new Error("Unauthenticated");
+  const actorUserId = auth.currentUser.uid;
+  const db = getFirebaseDb();
+  const batch = writeBatch(db);
+
+  // Demote current owner to manager
+  const oldOwnerRef = doc(db, `collections/${collectionId}/members/${actorUserId}`);
+  batch.update(oldOwnerRef, { role: 'manager', updated_at: serverTimestamp() });
+
+  // Promote new owner
+  const newOwnerRef = doc(db, `collections/${collectionId}/members/${targetUserId}`);
+  batch.update(newOwnerRef, { role: 'owner', updated_at: serverTimestamp() });
+
+  // Update collection owner_user_id
+  const collRef = doc(db, 'collections', collectionId);
+  batch.update(collRef, { owner_user_id: targetUserId, updated_at: serverTimestamp() });
+
+  await batch.commit();
 }
 
 export async function migrateCategoryToCollection(categoryId: string, categoryName: string, ownerEnvelope: { wrappedKey: string; senderPublicKeyB64: string }): Promise<string> {
@@ -181,8 +386,6 @@ export async function migrateCategoryToCollection(categoryId: string, categoryNa
   const snap = await getDocs(q);
 
   // 3. Move them into the shared collection
-  // (In a real ZK architecture, we would need to unwrap the personal item keys and re-wrap them with the collection key. 
-  // For the UI flow prototype, we'll just move the references.)
   const batch = writeBatch(db);
   
   snap.docs.forEach((d) => {
@@ -199,9 +402,6 @@ export async function migrateCategoryToCollection(categoryId: string, categoryNa
     });
   });
 
-  // 4. Remove the custom category from userProfile
-  // For simplicity, we assume the userProfile update will be handled separately or ignored if empty.
-  
   await batch.commit();
   return collectionId;
 }

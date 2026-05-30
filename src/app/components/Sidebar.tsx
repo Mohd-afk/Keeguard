@@ -104,7 +104,7 @@ export function Sidebar({
 }: SidebarProps) {
   const navigate = useNavigate();
 
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   // ── Shared Vaults tree state ───────────────────────────────────────────────
   const [sharedVaultsOpen, setSharedVaultsOpen] = useState(false);
@@ -161,7 +161,7 @@ export function Sidebar({
 
   const toggleParent = (parentId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setCollapsedCategories((prev) => {
+    setExpandedCategories((prev) => {
       const next = new Set(prev);
       if (next.has(parentId)) {
         next.delete(parentId);
@@ -399,7 +399,7 @@ export function Sidebar({
             <div className="px-2 space-y-0.5">
               {hierarchicalCategories.map(({ parent, children }) => {
                 const ParentIcon = CategoryIconMap[parent.icon || 'Folder'] || Tag;
-              const isExpanded = !collapsedCategories.has(parent.id);
+              const isExpanded = expandedCategories.has(parent.id);
               const hasChildren = children.length > 0;
 
               return (

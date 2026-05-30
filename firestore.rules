@@ -113,11 +113,16 @@ service cloud.firestore {
 
     match /users/{userId}/notifications/{notificationId} {
       allow read: if isSignedIn() && isOwner(userId);
-      // Allow client to mark as read (is_read, read_at fields only).
+      // Allow owner to mark as read (status, is_read, read_at fields).
       allow update: if isSignedIn() && isOwner(userId)
         && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['is_read', 'read_at']);
-      allow create, delete: if false; // Cloud Function only
+            .hasOnly(['is_read', 'read_at', 'status']);
+      // Allow any signed-in user to create an invite notification for another user,
+      // as long as they identify themselves as the sender (no Cloud Functions on Spark plan).
+      allow create: if isSignedIn()
+        && request.resource.data.type == 'invite_received'
+        && request.resource.data.sender_uid == request.auth.uid;
+      allow delete: if false;
     }
 
     // ─── New: Audit Events ───────────────────────────────────────────────────
