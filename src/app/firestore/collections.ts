@@ -315,22 +315,22 @@ export function subscribeToMyCollections(
   userId: string,
   callback: (collectionIds: string[]) => void,
 ): Unsubscribe {
-  log.info('Subscribing to user collections membership', { userId });
+  log.info('Subscribing to user collections membership (via folder_shares)', { userId });
 
-  // Query all members sub-collections where user_id == userId and status == active
-  const cgQuery = query(
-    collectionGroup(getFirebaseDb(), 'members'),
+  // Query the top-level folder_shares collection where user_id == userId and status == accepted.
+  // This standard query does not require a complex collection group index to function.
+  const q = query(
+    collection(getFirebaseDb(), 'folder_shares'),
     where('user_id', '==', userId),
-    where('status', '==', 'active'),
+    where('status', '==', 'accepted')
   );
 
-  return onSnapshot(cgQuery, (snap) => {
-    const ids = snap.docs.map((d) => d.ref.parent.parent!.id);
-    log.debug('User collections updated', { userId, count: ids.length });
+  return onSnapshot(q, (snap) => {
+    const ids = snap.docs.map((d) => d.data().folder_id as string);
+    log.debug('User collections updated via folder_shares', { userId, count: ids.length });
     callback(ids);
   }, (err) => {
-    log.error('User collections snapshot error', { userId, err });
-    // If the index is missing, it fails. We should stop the loading spinner by returning an empty array.
+    log.error('User collections snapshot error via folder_shares', { userId, err });
     callback([]);
   });
 }

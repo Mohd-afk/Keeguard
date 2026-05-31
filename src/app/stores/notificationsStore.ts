@@ -37,12 +37,14 @@ export function initNotificationsStore(): void {
       _unsubscribeNotifications = subscribeToNotifications(user.uid, (notifs) => {
         _notifications = notifs;
 
-        // Unread Actionable alert count: High/Urgent OR Collaboration-category pending
+        // Unread Actionable alert count: MUST be pending status AND (High/Urgent OR Collaboration-category)
         _unreadActionableCount = notifs.filter((n) => {
           const isActionable =
-            n.priority === 'high' ||
-            n.priority === 'urgent' ||
-            (n.type_category === 'collaboration' && n.status === 'pending');
+            n.status === 'pending' && (
+              n.priority === 'high' ||
+              n.priority === 'urgent' ||
+              n.type_category === 'collaboration'
+            );
           return isActionable;
         }).length;
 
