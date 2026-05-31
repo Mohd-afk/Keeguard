@@ -179,10 +179,30 @@ export function ShareCategoryPage() {
           
           toast.success(`Category "${selectedFolder.name}" migrated to a Shared Vault!`);
       } else {
-          // Normal flow
+          // Normal flow — get key from syncStore cache
           const { getCollectionKey } = await import('../../stores/syncStore');
-          const key = getCollectionKey(finalCollectionId);
-          if (!key) throw new Error('Vault is locked or collection key is not available in memory.');
+          let key = getCollectionKey(finalCollectionId);
+          if (!key) {
+            // Key not in cache yet (sync listener hasn't fired) — fetch envelope from Firestore
+            const { getCollectionKeyEnvelope } = await import('../../firestore/collections');
+            const { unwrapCollectionKey } = await import('../../crypto/collectionCrypto');
+            const user = (await import('firebase/auth')).getAuth().currentUser;
+            if (!user) throw new Error('Not authenticated');
+            const privKey2 = await loadDevicePrivateKey(vaultKey);
+            if (!privKey2) throw new Error('Device private key not available');
+            const envelope = await getCollectionKeyEnvelope(finalCollectionId, user.uid);
+            if (!envelope) throw new Error('No key envelope found for this collection. Please re-open the vault.');
+            key = await unwrapCollectionKey(
+              envelope.wrapped_collection_key,
+              privKey2,
+              envelope.sender_public_key_b64,
+              finalCollectionId,
+              envelope.collection_key_version,
+            );
+            // Cache it for subsequent operations
+            const { setCollectionKey } = await import('../../stores/syncStore');
+            setCollectionKey(finalCollectionId, key);
+          }
           collectionKey = key;
       }
 

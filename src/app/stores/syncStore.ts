@@ -313,6 +313,16 @@ export function getCollectionKey(collectionId: string): CryptoKey | null {
   return _collectionKeys.get(collectionId) || null;
 }
 
+/**
+ * Directly register a collection key in memory.
+ * Used immediately after category migration or new collection creation
+ * so the key is available before the Firestore listener fires.
+ */
+export function setCollectionKey(collectionId: string, key: CryptoKey): void {
+  _collectionKeys.set(collectionId, key);
+  log.info('Collection key registered in store directly', { collectionId });
+}
+
 export function addSyncStoreListener(listener: () => void): () => void {
   _subscribers.add(listener);
   return () => {

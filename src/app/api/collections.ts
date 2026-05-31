@@ -188,6 +188,17 @@ export async function createInvite(params: CreateInviteParams): Promise<string> 
     });
   }
 
+  // 5.5 Write recipient's folder_shares pivot document (needed for other clients/mobile apps)
+  const shareRole = (params.role === 'viewer') ? 'viewer' : 'collaborator';
+  const folderShareRef = doc(db, `folder_shares/${params.collectionId}_${recipientUid}`);
+  batch.set(folderShareRef, {
+    folder_id: params.collectionId,
+    user_id: recipientUid,
+    role: shareRole,
+    status: 'pending',
+    updated_at: now,
+  });
+
   await batch.commit();
 
   // 6. Create an in-app notification for the recipient (best-effort)
@@ -264,6 +275,16 @@ export async function acceptInvite(collectionId: string, inviteId: string): Prom
     updated_at: now,
   });
 
+  // 4. Update folder_shares pivot collection (needed for other clients/mobile apps)
+  const folderShareRef = doc(db, `folder_shares/${collectionId}_${actorUserId}`);
+  batch.set(folderShareRef, {
+    folder_id: collectionId,
+    user_id: actorUserId,
+    role: inviteData.role === 'viewer' ? 'viewer' : 'collaborator',
+    status: 'accepted',
+    updated_at: now,
+  }, { merge: true });
+
   await batch.commit();
 }
 
@@ -285,6 +306,13 @@ export async function declineInvite(collectionId: string, inviteId: string): Pro
     status: 'declined',
     responded_at: serverTimestamp(),
   });
+
+  // Update folder_shares pivot collection (needed for other clients/mobile apps)
+  const folderShareRef = doc(db, `folder_shares/${collectionId}_${actorUserId}`);
+  await setDoc(folderShareRef, {
+    status: 'declined',
+    updated_at: serverTimestamp(),
+  }, { merge: true });
 }
 
 export async function revokeInvite(collectionId: string, inviteId: string): Promise<void> {

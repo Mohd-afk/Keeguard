@@ -107,6 +107,21 @@ service cloud.firestore {
       }
     }
 
+    // ─── New: folder_shares pivot collection ─────────────────────────────
+    match /folder_shares/{shareId} {
+      allow read: if isSignedIn() && (
+        resource == null || resource.data.user_id == request.auth.uid
+      );
+      allow write: if isSignedIn() && (
+        // Allow user to write their own share
+        (request.resource != null && request.resource.data.user_id == request.auth.uid) ||
+        (resource != null && resource.data.user_id == request.auth.uid) ||
+        // Allow active member of the folder to write
+        (request.resource != null && isActiveMember(request.resource.data.folder_id)) ||
+        (resource != null && isActiveMember(resource.data.folder_id))
+      );
+    }
+
     // ─── New: User notifications ─────────────────────────────────────────────
     // Users can read and mark-read their own notifications.
     // Cloud Functions create notifications (write is via Admin SDK).
