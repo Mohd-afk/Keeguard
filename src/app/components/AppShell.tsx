@@ -12,6 +12,7 @@ import { saveUserEmailToProfile } from '../firestore';
 import { Sidebar, type SidebarFilter } from './Sidebar';
 import { NotificationDrawer } from './notifications/NotificationDrawer';
 import { ConflictResolverSheet } from './sync/ConflictResolverSheet';
+import { initNotificationsStore } from '../stores/notificationsStore';
 
 const log = createLogger('UI');
 
@@ -100,6 +101,10 @@ export function AppShell() {
       log.warn('AppShell: Auth safety timeout fired — forcing authLoading=false to unblock UI');
       setAuthLoading(false);
     }, 5000);
+
+    // Initialize the notifications store now that Firebase is confirmed ready.
+    // This MUST be deferred from module load time — Firebase isn't initialized until App.tsx finishes boot.
+    initNotificationsStore();
 
     const unsubscribe = onAuthChange((firebaseUser) => {
       clearTimeout(safetyTimer); // Auth responded — cancel the safety timer

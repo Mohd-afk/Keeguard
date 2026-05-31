@@ -19,39 +19,47 @@ let _unreadActionableCount = 0;
 let _unsubscribeNotifications: (() => void) | null = null;
 let _changeListeners: Array<(notifications: AppNotification[], unreadActionableCount: number) => void> = [];
 
-// Handle auto-subscription on sign-in / cleanup on sign-out
-onAuthChange((user) => {
-  if (user) {
-    log.info('User signed in, initializing notifications listener', { uid: user.uid });
-    if (_unsubscribeNotifications) {
-      _unsubscribeNotifications();
-    }
+/**
+ * Initialize the notifications store auth listener.
+ * MUST be called AFTER initFirebase() completes — do NOT call at module level
+ * because Firebase is not initialized until App.tsx's boot useEffect runs.
+ * Called by AppShell.tsx once Firebase is ready.
+ */
+export function initNotificationsStore(): void {
+  log.info('Initializing notifications store (deferred after Firebase init)');
+  onAuthChange((user) => {
+    if (user) {
+      log.info('User signed in, initializing notifications listener', { uid: user.uid });
+      if (_unsubscribeNotifications) {
+        _unsubscribeNotifications();
+      }
 
-    _unsubscribeNotifications = subscribeToNotifications(user.uid, (notifs) => {
-      _notifications = notifs;
+      _unsubscribeNotifications = subscribeToNotifications(user.uid, (notifs) => {
+        _notifications = notifs;
 
-      // Unread Actionable alert count: High/Urgent OR Collaboration-category pending
-      _unreadActionableCount = notifs.filter((n) => {
-        const isActionable =
-          n.priority === 'high' ||
-          n.priority === 'urgent' ||
-          (n.type_category === 'collaboration' && n.status === 'pending');
-        return isActionable;
-      }).length;
+        // Unread Actionable alert count: High/Urgent OR Collaboration-category pending
+        _unreadActionableCount = notifs.filter((n) => {
+          const isActionable =
+            n.priority === 'high' ||
+            n.priority === 'urgent' ||
+            (n.type_category === 'collaboration' && n.status === 'pending');
+          return isActionable;
+        }).length;
 
+        notifyChangeListeners();
+      });
+    } else {
+      log.info('User signed out, cleaning up notifications store');
+      if (_unsubscribeNotifications) {
+        _unsubscribeNotifications();
+        _unsubscribeNotifications = null;
+      }
+      _notifications = [];
+      _unreadActionableCount = 0;
       notifyChangeListeners();
-    });
-  } else {
-    log.info('User signed out, cleaning up notifications store');
-    if (_unsubscribeNotifications) {
-      _unsubscribeNotifications();
-      _unsubscribeNotifications = null;
     }
-    _notifications = [];
-    _unreadActionableCount = 0;
-    notifyChangeListeners();
-  }
-});
+  });
+}
 
 function notifyChangeListeners(): void {
   log.debug('Notifying notifications change listeners', {
