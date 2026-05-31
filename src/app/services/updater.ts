@@ -427,9 +427,22 @@ async function downloadAndApply(remote: VersionMetadata): Promise<void> {
 
     log.info(`[OTA_EVENT: staged] Bundle ${bundle.id} (v${remote.version}) staged. Will apply on next app restart.`);
 
-    toast(`✨ v${remote.version} downloaded! Restart to get the new features.`, {
-      duration: 8000,
+    toast(`✨ v${remote.version} downloaded!`, {
+      description: "Restart the app now to apply the update.",
+      duration: 15000,
       position: 'bottom-center',
+      action: {
+        label: 'Restart Now',
+        onClick: async () => {
+          try {
+            log.info('[OTA] User clicked Restart Now from staging toast. Reloading...');
+            await CapacitorUpdater.reload();
+          } catch (e) {
+            log.error('[OTA] Failed to reload app natively:', e);
+            window.location.reload();
+          }
+        }
+      }
     });
 
   } catch (err: any) {

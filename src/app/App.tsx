@@ -40,6 +40,48 @@ export default function App() {
     };
   }, []);
 
+  // Proactively check and prompt for staged updates on app resume (foregrounding)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let appStateListener: any = null;
+    import('@capacitor/app').then(({ App }) => {
+      App.addListener('appStateChange', async ({ isActive }) => {
+        if (isActive) {
+          const pendingVersion = localStorage.getItem('sv_ota_pending_version');
+          const pendingBundleId = localStorage.getItem('sv_ota_pending_bundle_id');
+          if (pendingVersion && pendingBundleId) {
+            console.log('[OTA] Staged update pending on app resume:', pendingVersion);
+            toast(`✨ Version v${pendingVersion} is ready!`, {
+              description: 'Restart the app now to apply the updates and get new features.',
+              duration: 15000,
+              position: 'bottom-center',
+              action: {
+                label: 'Restart Now',
+                onClick: async () => {
+                  try {
+                    const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
+                    await CapacitorUpdater.reload();
+                  } catch (e) {
+                    window.location.reload();
+                  }
+                }
+              }
+            });
+          }
+        }
+      }).then(handle => {
+        appStateListener = handle;
+      });
+    });
+
+    return () => {
+      if (appStateListener) {
+        appStateListener.remove();
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const _bm = (k: string) => { try { const p = localStorage.getItem('OTA_DEBUG_LOG') || ''; localStorage.setItem('OTA_DEBUG_LOG', p + '\n' + k + ': ' + new Date().toISOString()); } catch(e) {} };
     _bm('BOOT_MARK_1_react_mounted');
