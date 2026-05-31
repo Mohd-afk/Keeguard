@@ -315,24 +315,57 @@ export function subscribeToMyCollections(
   userId: string,
   callback: (collectionIds: string[]) => void,
 ): Unsubscribe {
-  log.info('Subscribing to user collections membership (via folder_shares)', { userId });
+  log.info('Subscribing to user collections membership (hybrid: folder_shares + members)', { userId });
 
-  // Query the top-level folder_shares collection where user_id == userId and status == accepted.
-  // This standard query does not require a complex collection group index to function.
-  const q = query(
+  let folderSharesIds: string[] = [];
+  let membersIds: string[] = [];
+
+  const notifyUnion = () => {
+    const union = Array.from(new Set([...folderSharesIds, ...membersIds]));
+    log.debug('Hybrid collections list resolved', {
+      userId,
+      count: union.length,
+      folderSharesCount: folderSharesIds.length,
+      membersCount: membersIds.length,
+    });
+    callback(union);
+  };
+
+  // 1. Subscribe to folder_shares (standard query, fast, no index required, instantly works for new/invite collections)
+  const qShares = query(
     collection(getFirebaseDb(), 'folder_shares'),
     where('user_id', '==', userId),
     where('status', '==', 'accepted')
   );
 
-  return onSnapshot(q, (snap) => {
-    const ids = snap.docs.map((d) => d.data().folder_id as string);
-    log.debug('User collections updated via folder_shares', { userId, count: ids.length });
-    callback(ids);
+  const unsubShares = onSnapshot(qShares, (snap) => {
+    folderSharesIds = snap.docs.map((d) => d.data().folder_id as string);
+    notifyUnion();
   }, (err) => {
-    log.error('User collections snapshot error via folder_shares', { userId, err });
-    callback([]);
+    log.error('Folder shares subscription error in hybrid resolver', { userId, err });
+    notifyUnion();
   });
+
+  // 2. Subscribe to members collection group (handles legacy folders created in older versions)
+  const qMembers = query(
+    collectionGroup(getFirebaseDb(), 'members'),
+    where('user_id', '==', userId),
+    where('status', '==', 'active')
+  );
+
+  const unsubMembers = onSnapshot(qMembers, (snap) => {
+    membersIds = snap.docs.map((d) => d.ref.parent.parent!.id);
+    notifyUnion();
+  }, (err) => {
+    log.warn('Members collectionGroup subscription error (index may be building in background)', { userId, err });
+    // Non-fatal: if the collectionGroup index is absent or building, we still have the folder_shares results
+    notifyUnion();
+  });
+
+  return () => {
+    unsubShares();
+    unsubMembers();
+  };
 }
 
 // ── Pending invites for a collection ─────────────────────────────────────────
