@@ -906,8 +906,8 @@ class SmartCategorizerService {
   }
 
   private _clusterKey(item: VaultItemData) {
-    const title = (item.title || item.appName || '').toLowerCase();
-    const domain = (item.domain || item.url || '').toLowerCase();
+    const title = String(item.title || item.appName || '').toLowerCase();
+    const domain = String(item.domain || item.url || '').toLowerCase();
     const cleanDomain = domain.replace(/^www\./, '').split('.')[0] || '';
     const cleanTitle = title.split(/[^\p{L}\p{N}]+/u)[0] || '';
     return `${cleanDomain}:${cleanTitle}`;

@@ -351,7 +351,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
         custom[item.categoryId] = (custom[item.categoryId] || 0) + 1;
       }
 
-      const titleLower = item.title.toLowerCase();
+      const titleLower = String(item.title || '').toLowerCase();
 
       if (item.type === 'Website' || item.type === 'App') {
         passwords++;
@@ -392,14 +392,14 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       return activeVaultItems.filter((i) => !!i.note && !i.password);
     if (sidebarFilter === 'ids')
       return activeVaultItems.filter((i) => {
-        const t = i.title.toLowerCase();
+        const t = String(i.title || '').toLowerCase();
         return t.includes('id') || t.includes('passport') || t.includes('license') || t.includes('ssn');
       });
     if (sidebarFilter === 'expiring') {
       return activeVaultItems.filter((i) => {
-        const noteLower = (i.note || '').toLowerCase();
-        const titleLower = i.title.toLowerCase();
-        return i.labels?.some(l => l.toLowerCase().includes('expiring')) || noteLower.includes('expiring') || titleLower.includes('expiring');
+        const noteLower = String(i.note || '').toLowerCase();
+        const titleLower = String(i.title || '').toLowerCase();
+        return i.labels?.some(l => String(l || '').toLowerCase().includes('expiring')) || noteLower.includes('expiring') || titleLower.includes('expiring');
       });
     }
     if (sidebarFilter === 'templates') {
@@ -415,7 +415,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
     if (!activeCategory) return sidebarFiltered;
 
     return sidebarFiltered.filter((item) => {
-      const titleLower = item.title.toLowerCase();
+      const titleLower = String(item.title || '').toLowerCase();
 
       if (activeCategory === 'passwords') {
         return item.type === 'Website' || item.type === 'App';
@@ -451,14 +451,14 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
       case 'favorites':
         return coreCategoryFiltered.filter((i) => i.isFavorite);
       case 'work':
-        return coreCategoryFiltered.filter((i) => i.categoryId === 'cat_work' || i.labels?.some(l => l.toLowerCase() === 'work'));
+        return coreCategoryFiltered.filter((i) => i.categoryId === 'cat_work' || i.labels?.some(l => String(l || '').toLowerCase() === 'work'));
       case 'personal':
-        return coreCategoryFiltered.filter((i) => i.categoryId === 'cat_personal' || i.labels?.some(l => l.toLowerCase() === 'personal'));
+        return coreCategoryFiltered.filter((i) => i.categoryId === 'cat_personal' || i.labels?.some(l => String(l || '').toLowerCase() === 'personal'));
       case 'expiring':
         return coreCategoryFiltered.filter((i) => {
-          const noteLower = i.note.toLowerCase();
-          const titleLower = i.title.toLowerCase();
-          return i.labels?.some(l => l.toLowerCase().includes('expiring')) || noteLower.includes('expiring') || titleLower.includes('expiring');
+          const noteLower = String(i.note || '').toLowerCase();
+          const titleLower = String(i.title || '').toLowerCase();
+          return i.labels?.some(l => String(l || '').toLowerCase().includes('expiring')) || noteLower.includes('expiring') || titleLower.includes('expiring');
         });
       default:
         return coreCategoryFiltered;
@@ -487,7 +487,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   const detailItems = useMemo(() => {
     if (!activeCategoryDetail) return [];
     return activeVaultItems.filter(item => {
-      const t = item.title.toLowerCase();
+      const t = String(item.title || '').toLowerCase();
       if (activeCategoryDetail === 'passwords') return item.type === 'Website' || item.type === 'App';
       if (activeCategoryDetail === 'cards') return item.type === 'Card';
       if (activeCategoryDetail === 'devices') return item.type === 'Phone' || item.type === 'Door Lock';

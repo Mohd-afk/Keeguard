@@ -35,7 +35,7 @@ export function useSmartSearch(
         ...(item.labels || []),
         item.createdAt,
         item.updatedAt,
-      ].map((f) => (f || '').toLowerCase());
+      ].map((f) => String(f || '').toLowerCase());
 
       // Every search token must match at least one field
       return tokens.every((token) =>
