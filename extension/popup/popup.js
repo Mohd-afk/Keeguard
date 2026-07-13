@@ -208,6 +208,25 @@ function loadAllItems() {
   });
 }
 
+function createDetailFieldRow(label, value, copyMsg = 'Copied!') {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  const row = document.createElement('div');
+  row.className = 'detail-row';
+  row.innerHTML = `
+    <span class="detail-label">${escapeHtml(label)}</span>
+    <div class="detail-value-group">
+      <input type="text" class="detail-input" value="${escapeHtml(value)}" readonly>
+      <button class="action-btn-sm copy-field-btn" title="Copy ${escapeHtml(label)}">📋 Copy</button>
+    </div>
+  `;
+  row.querySelector('.copy-field-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    copyToClipboard(String(value));
+    showToast(copyMsg);
+  });
+  return row;
+}
+
 function renderList(container, items) {
   container.innerHTML = '';
   items.forEach(item => {
@@ -289,65 +308,118 @@ function renderList(container, items) {
     const details = document.createElement('div');
     details.className = 'item-details';
 
+    // 1. Username / Email
     if (item.username) {
-      const uRow = document.createElement('div');
-      uRow.className = 'detail-row';
-      uRow.innerHTML = `
-        <span class="detail-label">Username / Email</span>
+      const uRow = createDetailFieldRow('Username / Email', item.username, 'Copied Username!');
+      if (uRow) details.appendChild(uRow);
+    }
+
+    // 2. Password row (with eye toggle)
+    if (item.password !== undefined && item.password !== null) {
+      const pRow = document.createElement('div');
+      pRow.className = 'detail-row';
+      pRow.innerHTML = `
+        <span class="detail-label">Password</span>
         <div class="detail-value-group">
-          <input type="text" class="detail-input" value="${escapeHtml(item.username)}" readonly>
-          <button class="action-btn-sm copy-u-btn" title="Copy Username">📋 Copy</button>
+          <input type="password" class="detail-input pwd-font pwd-view-input" value="${escapeHtml(item.password || '')}" readonly>
+          <button class="action-btn-sm toggle-pwd-btn" title="Show/Hide Password">👁️</button>
+          <button class="action-btn-sm copy-p-btn" title="Copy Password">📋 Copy</button>
         </div>
       `;
-      uRow.querySelector('.copy-u-btn').addEventListener('click', (e) => {
+      const pwdInput = pRow.querySelector('.pwd-view-input');
+      const togglePwdBtn = pRow.querySelector('.toggle-pwd-btn');
+      togglePwdBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        copyToClipboard(item.username || '');
-        showToast('Copied Username!');
+        if (pwdInput.type === 'password') {
+          pwdInput.type = 'text';
+          togglePwdBtn.textContent = '🔒';
+        } else {
+          pwdInput.type = 'password';
+          togglePwdBtn.textContent = '👁️';
+        }
       });
-      details.appendChild(uRow);
+      pRow.querySelector('.copy-p-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyToClipboard(item.password || '');
+        showToast('Copied Password!');
+      });
+      details.appendChild(pRow);
     }
 
-    const pRow = document.createElement('div');
-    pRow.className = 'detail-row';
-    pRow.innerHTML = `
-      <span class="detail-label">Password</span>
-      <div class="detail-value-group">
-        <input type="password" class="detail-input pwd-font pwd-view-input" value="${escapeHtml(item.password || '')}" readonly>
-        <button class="action-btn-sm toggle-pwd-btn" title="Show/Hide Password">👁️</button>
-        <button class="action-btn-sm copy-p-btn" title="Copy Password">📋 Copy</button>
-      </div>
-    `;
-    const pwdInput = pRow.querySelector('.pwd-view-input');
-    const togglePwdBtn = pRow.querySelector('.toggle-pwd-btn');
-    togglePwdBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (pwdInput.type === 'password') {
-        pwdInput.type = 'text';
-        togglePwdBtn.textContent = '🔒';
-      } else {
-        pwdInput.type = 'password';
-        togglePwdBtn.textContent = '👁️';
-      }
-    });
-    pRow.querySelector('.copy-p-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      copyToClipboard(item.password || '');
-      showToast('Copied Password!');
-    });
-    details.appendChild(pRow);
-
+    // 3. Website URL
     if (item.url) {
-      const urlRow = document.createElement('div');
-      urlRow.className = 'detail-row';
-      urlRow.innerHTML = `
-        <span class="detail-label">Website</span>
-        <div class="detail-value-group">
-          <input type="text" class="detail-input" value="${escapeHtml(item.url)}" readonly>
-        </div>
-      `;
-      details.appendChild(urlRow);
+      const urlRow = createDetailFieldRow('Website URL', item.url, 'Copied URL!');
+      if (urlRow) details.appendChild(urlRow);
     }
 
+    // 4. Custom Fields (if saved as object)
+    if (item.customFields && typeof item.customFields === 'object') {
+      Object.entries(item.customFields).forEach(([k, v]) => {
+        const cfRow = createDetailFieldRow(k, v, `Copied ${k}!`);
+        if (cfRow) details.appendChild(cfRow);
+      });
+    }
+
+    // 5. Parse Note for structured lines (UPI ID, ATM Pin, Bank, IFSC, Account Number, etc.)
+    if (item.note && typeof item.note === 'string' && item.note.trim()) {
+      const lines = item.note.split(/\r?\n/);
+      const remainingLines = [];
+
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        // Check if line looks like "Key: Value" or "Key = Value"
+        const kvMatch = trimmed.match(/^([A-Za-z0-9 _\/\-]+)[:=]\s*(.+)$/);
+        if (kvMatch) {
+          const keyName = kvMatch[1].trim();
+          const valStr = kvMatch[2].trim();
+          const kvRow = createDetailFieldRow(keyName, valStr, `Copied ${keyName}!`);
+          if (kvRow) details.appendChild(kvRow);
+        } else {
+          remainingLines.push(trimmed);
+        }
+      });
+
+      if (remainingLines.length > 0) {
+        const noteRow = createDetailFieldRow('Notes', remainingLines.join('\n'), 'Copied Notes!');
+        if (noteRow) details.appendChild(noteRow);
+      }
+    }
+
+    // 6. Card Data (for saved Cards)
+    if (item.cardData) {
+      const cd = item.cardData;
+      if (cd.number) {
+        const r = createDetailFieldRow('Card Number', cd.number, 'Copied Card Number!');
+        if (r) details.appendChild(r);
+      }
+      if (cd.cardholderName) {
+        const r = createDetailFieldRow('Cardholder Name', cd.cardholderName, 'Copied Name!');
+        if (r) details.appendChild(r);
+      }
+      if (cd.expMonth || cd.expYear) {
+        const exp = `${cd.expMonth || ''}/${cd.expYear || ''}`;
+        const r = createDetailFieldRow('Expiry Date', exp, 'Copied Expiry!');
+        if (r) details.appendChild(r);
+      }
+      if (cd.cvv) {
+        const r = createDetailFieldRow('CVV / CVC', cd.cvv, 'Copied CVV!');
+        if (r) details.appendChild(r);
+      }
+    }
+
+    // 7. Address Data / Identity Data
+    if (item.addressData) {
+      const ad = item.addressData;
+      Object.entries(ad).forEach(([k, v]) => {
+        if (v && typeof v === 'string') {
+          const r = createDetailFieldRow(k, v, `Copied ${k}!`);
+          if (r) details.appendChild(r);
+        }
+      });
+    }
+
+    // Big Auto-fill button
     const bigFillBtn = document.createElement('button');
     bigFillBtn.className = 'fill-page-btn';
     bigFillBtn.innerHTML = '⚡ Auto-Fill into Page';
