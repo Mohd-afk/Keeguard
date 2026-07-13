@@ -129,6 +129,7 @@ async function handleSaveCredential(credential) {
   if (!encKeyHex) throw new Error('Vault is locked');
   
   const localVault = await getLocalVault();
+  if (!localVault) throw new Error('Failed to load and decrypt local vault. Please lock and unlock the extension.');
   
   // Check if item already exists to update it, else append
   const existingIndex = localVault.findIndex(item => 
@@ -158,7 +159,7 @@ async function handleSaveCredential(credential) {
   }
   
   // Re-encrypt and save locally and to Firestore
-  const encryptedPayload = await encryptVault(localVault, encKeyHex);
+  const encryptedPayload = await encryptVault(JSON.stringify(localVault), encKeyHex);
   
   const uid = (await chrome.storage.local.get('uid')).uid;
   const idToken = (await chrome.storage.local.get('idToken')).idToken;
@@ -166,7 +167,7 @@ async function handleSaveCredential(credential) {
   if (uid && idToken) {
     const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/data/vault?updateMask.fieldPaths=encryptedPayload&updateMask.fieldPaths=updatedAt`;
     
-    await fetch(firestoreUrl, {
+    const res = await fetch(firestoreUrl, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${idToken}`,
@@ -179,6 +180,12 @@ async function handleSaveCredential(credential) {
         }
       })
     });
+    
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[Background] Firestore save failed:', res.status, errText);
+      throw new Error(`Cloud sync failed: ${res.status} ${res.statusText}`);
+    }
     
     // Save to local cache
     await chrome.storage.local.set({ encryptedVault: encryptedPayload });
