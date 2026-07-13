@@ -18,6 +18,10 @@ class CredentialMatcherTest {
             return creds
         }
 
+        override suspend fun getAllCredentials(): List<VaultCredential> {
+            return creds
+        }
+
         override suspend fun saveCredential(credential: VaultCredential) {}
         override suspend fun updateCredentialPassword(id: String, newPassword: String) {}
         override suspend fun isVaultUnlocked(): Boolean = true

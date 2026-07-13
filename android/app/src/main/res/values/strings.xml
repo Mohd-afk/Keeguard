@@ -4,4 +4,5 @@
     <string name="title_activity_main">Keeguard</string>
     <string name="package_name">com.mohdj.securevault</string>
     <string name="custom_url_scheme">com.mohdj.securevault</string>
+    <string name="default_web_client_id">1087322543080-ocplb6n6pqk98uig5vaiv7uve3t0br9t.apps.googleusercontent.com</string>
 </resources>

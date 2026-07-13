@@ -28,6 +28,7 @@ import {
   Server,
   StickyNote,
   Heart,
+  Globe,
 } from 'lucide-react';
 import {
   addVaultItem,
@@ -172,6 +173,15 @@ export const TEMPLATES = [
     type: 'Other' as const,
     titlePrefill: 'Emergency: ',
     fields: ["Type", "Details", "Emergency Contact", "Location", "Notes"]
+  },
+  {
+    id: 'addresses',
+    name: 'Addresses / Locations',
+    categoryId: 'cat_personal',
+    icon: Globe,
+    type: 'Other' as const,
+    titlePrefill: 'Address: ',
+    fields: ["Full Name", "Company / Org", "Street Address", "Apartment / Suite", "City", "State", "ZIP / Postal Code", "Country", "Phone", "Email"]
   }
 ];
 
@@ -489,6 +499,55 @@ export function AddEditForm() {
             .join('\n')
         : note.trim();
 
+      let addressData = undefined;
+      let cardData = undefined;
+      let identityData = undefined;
+
+      if (selectedTemplateId === 'cards') {
+        const expRaw = templateFields["Expiry Date"] || '';
+        let expMonth = '';
+        let expYear = '';
+        if (expRaw.includes('/')) {
+          const parts = expRaw.split('/');
+          expMonth = parts[0]?.trim() || '';
+          expYear = parts[1]?.trim() || '';
+        }
+        cardData = {
+          cardholderName: templateFields["Card Holder Name"] || '',
+          number: templateFields["Card Number"] || '',
+          expMonth,
+          expYear,
+          cvv: templateFields["CVV"] || '',
+          brand: templateFields["Bank Name"] || '',
+        };
+      } else if (selectedTemplateId === 'addresses') {
+        addressData = {
+          fullName: templateFields["Full Name"] || '',
+          organization: templateFields["Company / Org"] || '',
+          streetAddress: templateFields["Street Address"] || '',
+          streetAddress2: templateFields["Apartment / Suite"] || '',
+          city: templateFields["City"] || '',
+          state: templateFields["State"] || '',
+          postalCode: templateFields["ZIP / Postal Code"] || '',
+          country: templateFields["Country"] || '',
+          phone: templateFields["Phone"] || '',
+          email: templateFields["Email"] || '',
+        };
+      } else if (selectedTemplateId === 'identity') {
+        const nameParts = (templateFields["Full Name"] || '').trim().split(/\s+/);
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        identityData = {
+          firstName,
+          lastName,
+          dateOfBirth: templateFields["Date of Birth"] || '',
+          email: templateFields["Email"] || '',
+          phone: templateFields["Phone"] || '',
+          licenseNumber: templateFields["Document Number"] || '',
+          company: templateFields["Issued By"] || '',
+        };
+      }
+
       const itemPayload = {
         title: title.trim(),
         username: username.trim(),
@@ -501,6 +560,9 @@ export function AddEditForm() {
         totpSecretEncrypted,
         totpSecret: undefined, // Never store raw TOTP in vault blob
         categoryId: selectedCategoryId || undefined,
+        addressData,
+        cardData,
+        identityData,
       };
 
       // Learn from user decision if they manually picked a category

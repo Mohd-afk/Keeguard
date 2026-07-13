@@ -40,7 +40,7 @@ class CredentialDeliveryActivity : FragmentActivity() {
                 val locator = AutofillServiceLocator.getInstance(applicationContext)
                 
                 // Perform targeted database retrieval by ID
-                val allCreds = locator.credentialMatcher.vaultRepository.findMatchingCredentials("")
+                val allCreds = locator.credentialMatcher.vaultRepository.getAllCredentials()
                 val cred = allCreds.firstOrNull { it.id == credId }
 
                 withContext(Dispatchers.Main) {

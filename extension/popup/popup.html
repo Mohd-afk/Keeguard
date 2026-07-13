@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-wrapper">
+    <!-- Header -->
+    <div class="header">
+      <div class="brand">
+        <div class="logo">K</div>
+        <span>KeeGuard</span>
+      </div>
+      <button id="lock-btn" class="icon-btn" title="Lock Vault" style="display: none;">🔒</button>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="screen">
+      <h2>Unlock Vault</h2>
+      <p class="subtitle">Enter your KeeGuard credentials</p>
+      
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" id="email-input" placeholder="you@example.com">
+      </div>
+      
+      <div class="form-group">
+        <label>Master Password</label>
+        <input type="password" id="password-input" placeholder="••••••••">
+      </div>
+      
+      <button id="login-btn" class="primary-btn">Unlock</button>
+      <div id="login-error" class="error-msg" style="display: none;"></div>
+    </div>
+
+    <!-- Main Screen -->
+    <div id="main-screen" class="screen" style="display: none;">
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="matching">Matching</button>
+        <button class="tab-btn" data-tab="all">All Items</button>
+        <button class="tab-btn" data-tab="generator">Generator</button>
+      </div>
+
+      <!-- Matching Tab Content -->
+      <div id="tab-matching" class="tab-content">
+        <div class="search-bar">
+          <input type="text" id="matching-search" placeholder="Search matching items...">
+        </div>
+        <div id="matching-list" class="items-list">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- All Items Tab Content -->
+      <div id="tab-all" class="tab-content" style="display: none;">
+        <div class="search-bar">
+          <input type="text" id="all-search" placeholder="Search all items...">
+        </div>
+        <div id="all-list" class="items-list">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- Generator Tab Content -->
+      <div id="tab-generator" class="tab-content" style="display: none;">
+        <h2>Password Generator</h2>
+        
+        <div class="pwd-display-container">
+          <input type="text" id="gen-pwd" readonly>
+          <button id="copy-gen-pwd" class="icon-btn">📋</button>
+        </div>
+
+        <div class="settings-group">
+          <div class="setting-row">
+            <label>Length: <span id="length-val">16</span></label>
+            <input type="range" id="length-slider" min="8" max="64" value="16">
+          </div>
+          
+          <div class="setting-row toggle-row">
+            <label>Uppercase (A-Z)</label>
+            <input type="checkbox" id="opt-upper" checked>
+          </div>
+          
+          <div class="setting-row toggle-row">
+            <label>Lowercase (a-z)</label>
+            <input type="checkbox" id="opt-lower" checked>
+          </div>
+          
+          <div class="setting-row toggle-row">
+            <label>Numbers (0-9)</label>
+            <input type="checkbox" id="opt-nums" checked>
+          </div>
+          
+          <div class="setting-row toggle-row">
+            <label>Symbols (!@#...)</label>
+            <input type="checkbox" id="opt-symbols" checked>
+          </div>
+        </div>
+
+        <button id="generate-btn" class="primary-btn">Generate</button>
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

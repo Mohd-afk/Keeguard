@@ -60,6 +60,15 @@ class AutofillVaultRepositoryAdapter(
             .map { it.toVaultCredential() }
     }
 
+    override suspend fun getAllCredentials(): List<VaultCredential> {
+        return try {
+            repo.getAllActive().map { it.toVaultCredential() }
+        } catch (e: Exception) {
+            SecureLogger.e("Failed to get all active credentials", e)
+            emptyList()
+        }
+    }
+
     override suspend fun isVaultUnlocked(): Boolean =
         BiometricVaultUnlocker.isVaultUnlocked()
 
@@ -83,7 +92,10 @@ class AutofillVaultRepositoryAdapter(
             type      = if (credential.packageName != null) "App" else "Website",
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis(),
-            deletedAt = null
+            deletedAt = null,
+            addressJson = credential.addressJson,
+            cardJson = credential.cardJson,
+            identityJson = credential.identityJson
         )
         repo.insert(entity)
     }
@@ -139,7 +151,10 @@ class AutofillVaultRepositoryAdapter(
             packageName = parsedPackageName,
             categoryId  = "",
             lastUsedAt  = updatedAt,
-            faviconUrl  = null
+            faviconUrl  = null,
+            addressJson = addressJson,
+            cardJson = cardJson,
+            identityJson = identityJson
         )
     }
 }

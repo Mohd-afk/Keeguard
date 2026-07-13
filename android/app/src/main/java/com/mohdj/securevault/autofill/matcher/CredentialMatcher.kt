@@ -10,6 +10,17 @@ class CredentialMatcher(
     constructor(vaultRepository: VaultRepository) : this(vaultRepository, DomainMatcher(null))
 
     suspend fun findMatches(parsedForm: ParsedForm): List<VaultCredential> {
+        val formType = parsedForm.formType
+        if (formType == com.mohdj.securevault.autofill.parser.FormType.CARD_PAYMENT) {
+            return vaultRepository.getAllCredentials().filter { it.cardJson != null }
+        }
+        if (formType == com.mohdj.securevault.autofill.parser.FormType.ADDRESS) {
+            return vaultRepository.getAllCredentials().filter { it.addressJson != null }
+        }
+        if (formType == com.mohdj.securevault.autofill.parser.FormType.IDENTITY) {
+            return vaultRepository.getAllCredentials().filter { it.identityJson != null }
+        }
+
         val target = parsedForm.canonicalIdentifier
         val matches = vaultRepository.findMatchingCredentials(target)
 

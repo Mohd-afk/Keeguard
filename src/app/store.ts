@@ -49,6 +49,49 @@ const log = createLogger('STORE');
 
 export type ItemType = 'Website' | 'App' | 'Phone' | 'Door Lock' | 'Card' | 'Other';
 
+// ── Structured Autofill Data Types ───────────────────────────────────
+
+/** Structured address data for autofill (shipping/billing forms) */
+export interface VaultAddress {
+  fullName?: string;
+  organization?: string;
+  streetAddress?: string;
+  streetAddress2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+  phone?: string;
+  email?: string;
+}
+
+/** Structured payment card data for autofill (checkout forms) */
+export interface VaultCard {
+  cardholderName?: string;
+  number?: string;
+  expMonth?: string;
+  expYear?: string;
+  cvv?: string;
+  brand?: string;           // Auto-detected: Visa, Mastercard, Amex, etc.
+  billingAddressId?: string; // Link to a VaultItem with addressData
+}
+
+/** Structured identity data for autofill (registration/profile forms) */
+export interface VaultIdentity {
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+  email?: string;
+  phone?: string;
+  address?: VaultAddress;
+  company?: string;
+  jobTitle?: string;
+  ssn?: string;
+  passportNumber?: string;
+  licenseNumber?: string;
+}
+
 export interface VaultItem {
   id: string;
   title: string;
@@ -77,6 +120,12 @@ export interface VaultItem {
   totpSecret?: string;
   /** Optional custom category link */
   categoryId?: string;
+  /** Structured address for autofill (optional — used when type is address-related) */
+  addressData?: VaultAddress;
+  /** Structured payment card for autofill (optional — used when type is 'Card') */
+  cardData?: VaultCard;
+  /** Structured identity for autofill (optional — used for identity/profile forms) */
+  identityData?: VaultIdentity;
 }
 
 export interface CustomCategory {
@@ -1086,6 +1135,9 @@ export async function syncAllToNative(): Promise<void> {
       createdAt: new Date(i.createdAt).getTime(),
       updatedAt: new Date(i.updatedAt).getTime(),
       deletedAt: i.deletedAt ? new Date(i.deletedAt).getTime() : null,
+      addressData: i.addressData || null,
+      cardData: i.cardData || null,
+      identityData: i.identityData || null,
     }));
 
     const formattedShared = sharedItems.map(i => ({
@@ -1135,6 +1187,9 @@ async function checkAndMergeAutofillItems(): Promise<void> {
         note: nItem.note || '',
         createdAt: nItem.createdAt || new Date().toISOString(),
         updatedAt: nItem.updatedAt || new Date().toISOString(),
+        addressData: nItem.addressData || undefined,
+        cardData: nItem.cardData || undefined,
+        identityData: nItem.identityData || undefined,
       }));
       
       const mergedItems = [...items, ...formattedItems];

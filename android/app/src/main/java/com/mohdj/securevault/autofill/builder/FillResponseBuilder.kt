@@ -72,54 +72,178 @@ class FillResponseBuilder(private val context: Context) {
         for (cred in credentials) {
             val datasetBuilder = Dataset.Builder()
             val presentation = RemoteViews(context.packageName, R.layout.autofill_dataset)
-            presentation.setTextViewText(
-                R.id.text1,
-                cred.username.ifEmpty { cred.title }.ifEmpty { "Keeguard" }
-            )
+            
+            // Format presentation text based on type
+            val titleText = when (parsedForm.formType) {
+                com.mohdj.securevault.autofill.parser.FormType.CARD_PAYMENT -> {
+                    val cardJson = cred.cardJson
+                    if (!cardJson.isNullOrEmpty()) {
+                        val cardObj = org.json.JSONObject(cardJson)
+                        val num = cardObj.optString("number", "")
+                        val brand = cardObj.optString("brand", "Card")
+                        val last4 = if (num.length >= 4) num.substring(num.length - 4) else ""
+                        if (last4.isNotEmpty()) "$brand •••• $last4" else brand
+                    } else {
+                        cred.title
+                    }
+                }
+                com.mohdj.securevault.autofill.parser.FormType.ADDRESS -> {
+                    val addressJson = cred.addressJson
+                    if (!addressJson.isNullOrEmpty()) {
+                        val addrObj = org.json.JSONObject(addressJson)
+                        val street = addrObj.optString("streetAddress", "")
+                        val name = addrObj.optString("fullName", "")
+                        if (street.isNotEmpty()) "$street ($name)" else name
+                    } else {
+                        cred.title
+                    }
+                }
+                else -> cred.username.ifEmpty { cred.title }.ifEmpty { "Keeguard" }
+            }
+            
+            presentation.setTextViewText(R.id.text1, titleText)
 
             // Attempt to build inline presentation if specs are provided and allowed
             var inlinePresentation: InlinePresentation? = null
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && inlineSpecs != null && inlineSpecs.isNotEmpty() && isInlineAllowed) {
                 val inlineSpec = inlineSpecs[0]
-                inlinePresentation = buildInlinePresentation(inlineSpec, cred)
+                inlinePresentation = buildInlinePresentation(inlineSpec, cred, titleText)
             }
 
             var datasetUsable = false
 
-            parsedForm.usernameField?.autofillId?.let { id ->
+            fun setValueSafely(id: AutofillId, value: AutofillValue) {
                 if (inlinePresentation != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    datasetBuilder.setValue(id, AutofillValue.forText(cred.username), presentation, inlinePresentation)
+                    datasetBuilder.setValue(id, value, presentation, inlinePresentation)
                 } else {
-                    datasetBuilder.setValue(id, AutofillValue.forText(cred.username), presentation)
+                    datasetBuilder.setValue(id, value, presentation)
                 }
                 datasetUsable = true
             }
 
-            parsedForm.emailField?.autofillId?.let { id ->
-                if (inlinePresentation != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    datasetBuilder.setValue(id, AutofillValue.forText(cred.username), presentation, inlinePresentation)
-                } else {
-                    datasetBuilder.setValue(id, AutofillValue.forText(cred.username), presentation)
-                }
-                datasetUsable = true
-            }
+            // Fill based on form type
+            when (parsedForm.formType) {
+                com.mohdj.securevault.autofill.parser.FormType.CARD_PAYMENT -> {
+                    val cardJson = cred.cardJson
+                    if (!cardJson.isNullOrEmpty()) {
+                        try {
+                            val cardObj = org.json.JSONObject(cardJson)
+                            val cardNumber = cardObj.optString("number", "")
+                            val cardholderName = cardObj.optString("cardholderName", "")
+                            val expMonth = cardObj.optString("expMonth", "")
+                            val expYear = cardObj.optString("expYear", "")
+                            val cvv = cardObj.optString("cvv", "")
 
-            parsedForm.passwordField?.autofillId?.let { id ->
-                if (inlinePresentation != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    datasetBuilder.setValue(id, AutofillValue.forText(cred.password), presentation, inlinePresentation)
-                } else {
-                    datasetBuilder.setValue(id, AutofillValue.forText(cred.password), presentation)
+                            parsedForm.cardNumberField?.autofillId?.let { id ->
+                                if (cardNumber.isNotEmpty()) setValueSafely(id, AutofillValue.forText(cardNumber))
+                            }
+                            parsedForm.cardHolderField?.autofillId?.let { id ->
+                                if (cardholderName.isNotEmpty()) setValueSafely(id, AutofillValue.forText(cardholderName))
+                            }
+                            parsedForm.cardExpiryMonthField?.autofillId?.let { id ->
+                                if (expMonth.isNotEmpty()) setValueSafely(id, AutofillValue.forText(expMonth))
+                            }
+                            parsedForm.cardExpiryYearField?.autofillId?.let { id ->
+                                if (expYear.isNotEmpty()) setValueSafely(id, AutofillValue.forText(expYear))
+                            }
+                            parsedForm.cardCvvField?.autofillId?.let { id ->
+                                if (cvv.isNotEmpty()) setValueSafely(id, AutofillValue.forText(cvv))
+                            }
+                            parsedForm.cardExpiryField?.autofillId?.let { id ->
+                                val expDate = if (expMonth.isNotEmpty() && expYear.isNotEmpty()) "$expMonth/$expYear" else ""
+                                if (expDate.isNotEmpty()) setValueSafely(id, AutofillValue.forText(expDate))
+                            }
+                        } catch (e: Exception) {
+                            SecureLogger.e("Error filling card form", e)
+                        }
+                    }
                 }
-                datasetUsable = true
-            }
+                com.mohdj.securevault.autofill.parser.FormType.ADDRESS -> {
+                    val addressJson = cred.addressJson
+                    if (!addressJson.isNullOrEmpty()) {
+                        try {
+                            val addrObj = org.json.JSONObject(addressJson)
+                            val fullName = addrObj.optString("fullName", "")
+                            val organization = addrObj.optString("organization", "")
+                            val street = addrObj.optString("streetAddress", "")
+                            val street2 = addrObj.optString("streetAddress2", "")
+                            val city = addrObj.optString("city", "")
+                            val state = addrObj.optString("state", "")
+                            val zip = addrObj.optString("postalCode", "")
+                            val country = addrObj.optString("country", "")
+                            val phone = addrObj.optString("phone", "")
+                            val email = addrObj.optString("email", "")
 
-            parsedForm.newPasswordField?.autofillId?.let { id ->
-                if (inlinePresentation != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    datasetBuilder.setValue(id, AutofillValue.forText(cred.password), presentation, inlinePresentation)
-                } else {
-                    datasetBuilder.setValue(id, AutofillValue.forText(cred.password), presentation)
+                            parsedForm.addressStreetField?.autofillId?.let { id ->
+                                val fullStreet = if (street2.isNotEmpty()) "$street, $street2" else street
+                                if (fullStreet.isNotEmpty()) setValueSafely(id, AutofillValue.forText(fullStreet))
+                            }
+                            parsedForm.addressCityField?.autofillId?.let { id ->
+                                if (city.isNotEmpty()) setValueSafely(id, AutofillValue.forText(city))
+                            }
+                            parsedForm.addressStateField?.autofillId?.let { id ->
+                                if (state.isNotEmpty()) setValueSafely(id, AutofillValue.forText(state))
+                            }
+                            parsedForm.addressZipField?.autofillId?.let { id ->
+                                if (zip.isNotEmpty()) setValueSafely(id, AutofillValue.forText(zip))
+                            }
+                            parsedForm.addressCountryField?.autofillId?.let { id ->
+                                if (country.isNotEmpty()) setValueSafely(id, AutofillValue.forText(country))
+                            }
+                            parsedForm.nameField?.autofillId?.let { id ->
+                                if (fullName.isNotEmpty()) setValueSafely(id, AutofillValue.forText(fullName))
+                            }
+                            parsedForm.phoneField?.autofillId?.let { id ->
+                                if (phone.isNotEmpty()) setValueSafely(id, AutofillValue.forText(phone))
+                            }
+                            parsedForm.emailField?.autofillId?.let { id ->
+                                if (email.isNotEmpty()) setValueSafely(id, AutofillValue.forText(email))
+                            }
+                        } catch (e: Exception) {
+                            SecureLogger.e("Error filling address form", e)
+                        }
+                    }
                 }
-                datasetUsable = true
+                com.mohdj.securevault.autofill.parser.FormType.IDENTITY -> {
+                    val identityJson = cred.identityJson
+                    if (!identityJson.isNullOrEmpty()) {
+                        try {
+                            val idObj = org.json.JSONObject(identityJson)
+                            val firstName = idObj.optString("firstName", "")
+                            val lastName = idObj.optString("lastName", "")
+                            val email = idObj.optString("email", "")
+                            val phone = idObj.optString("phone", "")
+
+                            parsedForm.nameField?.autofillId?.let { id ->
+                                val fullName = "$firstName $lastName".trim()
+                                if (fullName.isNotEmpty()) setValueSafely(id, AutofillValue.forText(fullName))
+                            }
+                            parsedForm.emailField?.autofillId?.let { id ->
+                                if (email.isNotEmpty()) setValueSafely(id, AutofillValue.forText(email))
+                            }
+                            parsedForm.phoneField?.autofillId?.let { id ->
+                                if (phone.isNotEmpty()) setValueSafely(id, AutofillValue.forText(phone))
+                            }
+                        } catch (e: Exception) {
+                            SecureLogger.e("Error filling identity form", e)
+                        }
+                    }
+                }
+                else -> {
+                    // Standard login/signup logic
+                    parsedForm.usernameField?.autofillId?.let { id ->
+                        setValueSafely(id, AutofillValue.forText(cred.username))
+                    }
+                    parsedForm.emailField?.autofillId?.let { id ->
+                        setValueSafely(id, AutofillValue.forText(cred.username))
+                    }
+                    parsedForm.passwordField?.autofillId?.let { id ->
+                        setValueSafely(id, AutofillValue.forText(cred.password))
+                    }
+                    parsedForm.newPasswordField?.autofillId?.let { id ->
+                        setValueSafely(id, AutofillValue.forText(cred.password))
+                    }
+                }
             }
 
             if (datasetUsable) {
@@ -150,11 +274,11 @@ class FillResponseBuilder(private val context: Context) {
     @RequiresApi(Build.VERSION_CODES.R)
     private fun buildInlinePresentation(
         spec: InlinePresentationSpec,
-        cred: VaultCredential
+        cred: VaultCredential,
+        titleText: String
     ): InlinePresentation? {
         return try {
-            val titleText = cred.username.ifEmpty { cred.title }.ifEmpty { "Keeguard" }
-            val subtitleText = cred.title.takeIf { it != cred.username && it.isNotEmpty() } ?: ""
+            val subtitleText = cred.title.takeIf { it != titleText && it != cred.username && it.isNotEmpty() } ?: ""
             
             // Create dummy PendingIntent needed by newContentBuilder for Gboard slices
             val dummyIntent = Intent()

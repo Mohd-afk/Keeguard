@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "KeeGuard Browser Extension",
+  "version": "1.0.0",
+  "description": "Secure password manager extension for KeeGuard.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "webNavigation",
+    "scripting",
+    "alarms",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "content/field-classifier.js",
+        "content/form-detector.js",
+        "content/fill-engine.js",
+        "content/overlay.js",
+        "content/save-detector.js",
+        "content/content.js"
+      ],
+      "css": ["styles/overlay.css"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "128": "icons/icon-128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'"
+  }
+}

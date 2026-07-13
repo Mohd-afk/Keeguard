@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import net.sqlcipher.database.SQLiteDatabase
 import net.sqlcipher.database.SupportFactory
 
-@Database(entities = [VaultItemEntity::class], version = 1, exportSchema = false)
+@Database(entities = [VaultItemEntity::class], version = 2, exportSchema = false)
 abstract class NativeVaultDatabase : RoomDatabase() {
     abstract fun vaultDao(): VaultDao
 

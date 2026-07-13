@@ -9,5 +9,8 @@ data class VaultCredential(
     val packageName: String?,
     val categoryId: String,
     val lastUsedAt: Long,
-    val faviconUrl: String?
+    val faviconUrl: String?,
+    val addressJson: String? = null,
+    val cardJson: String? = null,
+    val identityJson: String? = null
 )

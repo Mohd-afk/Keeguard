@@ -14,3 +14,11 @@ ota-updates/bundles/*.zip
 # Backups and archives
 /backups/
 /archive/
+
+# IDE and Local settings
+.vscode/settings.json
+.DS_Store
+Thumbs.db
+
+# Firebase local cache
+.firebase/

@@ -69,6 +69,18 @@ class VaultBridgePlugin : Plugin() {
             }
             Log.d("VaultBridgePlugin", "item uris parsed → $urisString")
 
+            val addressJson: String? = if (obj.has("addressData") && !obj.isNull("addressData")) {
+                obj.optJSONObject("addressData")?.toString()
+            } else null
+
+            val cardJson: String? = if (obj.has("cardData") && !obj.isNull("cardData")) {
+                obj.optJSONObject("cardData")?.toString()
+            } else null
+
+            val identityJson: String? = if (obj.has("identityData") && !obj.isNull("identityData")) {
+                obj.optJSONObject("identityData")?.toString()
+            } else null
+
             // Security note: 'password' arrives as plaintext from JS because the vault is
             // already unlocked (decrypted in memory) when syncToNativeVault() is called.
             // The SQLCipher-encrypted native DB (keyed by Android Keystore) is the
@@ -83,7 +95,10 @@ class VaultBridgePlugin : Plugin() {
                 // Native dates are numbers (timestamps), optLong extracts them safely
                 createdAt = obj.optLong("createdAt", 0L),
                 updatedAt = obj.optLong("updatedAt", 0L),
-                deletedAt = if (obj.isNull("deletedAt")) null else obj.optLong("deletedAt", 0L)
+                deletedAt = if (obj.isNull("deletedAt")) null else obj.optLong("deletedAt", 0L),
+                addressJson = addressJson,
+                cardJson = cardJson,
+                identityJson = identityJson
             )
             entities.add(entity)
         }
@@ -117,6 +132,17 @@ class VaultBridgePlugin : Plugin() {
                         put("url", item.uris)
                         put("createdAt", item.createdAt)
                         put("updatedAt", item.updatedAt)
+                        
+                        // Re-parse and put JSON objects back for JS layer
+                        if (item.addressJson != null) {
+                            put("addressData", JSObject(item.addressJson))
+                        }
+                        if (item.cardJson != null) {
+                            put("cardData", JSObject(item.cardJson))
+                        }
+                        if (item.identityJson != null) {
+                            put("identityData", JSObject(item.identityJson))
+                        }
                     }
                     jsArray.put(jsObj)
                 }

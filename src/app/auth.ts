@@ -36,7 +36,7 @@ export async function sendPasswordlessVerificationLink(email: string, mode: 'sig
     log.info('Sending passwordless verification link', { email, mode });
 
     const actionCodeSettings = {
-        url: `${window.location.origin}/?mode=${mode}`,
+        url: `https://vault-app-ba6e2.firebaseapp.com/?mode=${mode}`,
         handleCodeInApp: true,
     };
     await sendSignInLinkToEmail(getFirebaseAuth(), email, actionCodeSettings);

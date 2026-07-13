@@ -69,10 +69,13 @@ class SecureVaultAutofillService : AutofillService() {
         val hasEmail = parsedForm.emailField != null
         val hasPassword = parsedForm.passwordField != null
         val hasNewPassword = parsedForm.newPasswordField != null
+        val hasCardFields = parsedForm.cardNumberField != null
+        val hasAddressFields = parsedForm.addressStreetField != null
+        val hasIdentityFields = parsedForm.nameField != null || parsedForm.phoneField != null
 
-        SecureLogger.i("AUTOFILL_PARSED_FORM formType=${parsedForm.formType} hasUser=$hasUsername hasEmail=$hasEmail hasPass=$hasPassword hasNewPass=$hasNewPassword webDomain=${parsedForm.webDomain}")
+        SecureLogger.i("AUTOFILL_PARSED_FORM formType=${parsedForm.formType} hasUser=$hasUsername hasEmail=$hasEmail hasPass=$hasPassword hasNewPass=$hasNewPassword hasCard=$hasCardFields hasAddr=$hasAddressFields hasId=$hasIdentityFields webDomain=${parsedForm.webDomain}")
 
-        if (!hasUsername && !hasEmail && !hasPassword && !hasNewPassword) {
+        if (!hasUsername && !hasEmail && !hasPassword && !hasNewPassword && !hasCardFields && !hasAddressFields && !hasIdentityFields) {
             SecureLogger.d("AUTOFILL_SUPPRESSED_REASON=no_relevant_fields package=$rawPackageName")
             callback.onSuccess(null)
             return

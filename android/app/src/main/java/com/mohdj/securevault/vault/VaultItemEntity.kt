@@ -56,6 +56,10 @@ data class VaultItemEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 
-    // If non-null, this item is in the trash bin and should not be suggested
-    @ColumnInfo(name = "deleted_at") val deletedAt: Long?
+    @ColumnInfo(name = "deleted_at") val deletedAt: Long?,
+
+    // Additional structured fields for shipping/billing address, cards, and personal identities
+    @ColumnInfo(name = "address_json") val addressJson: String? = null,
+    @ColumnInfo(name = "card_json") val cardJson: String? = null,
+    @ColumnInfo(name = "identity_json") val identityJson: String? = null
 )

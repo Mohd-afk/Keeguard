@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="128" height="128">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#a78bfa" />
+    </linearGradient>
+  </defs>
+  <!-- Shield outline -->
+  <path d="M12 2L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-3z" fill="url(#shieldGrad)" />
+  <!-- Lock keyhole outline -->
+  <path d="M12 7a3 3 0 0 0-3 3v2a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-2a3 3 0 0 0-3-3zm1 5h-2v-2a1 1 0 0 1 2 0v2z" fill="#ffffff" />
+  <circle cx="12" cy="15" r="1.5" fill="#ffffff" />
+  <path d="M12 16.5v2.5" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" />
+</svg>
