@@ -109,13 +109,63 @@ async function handleLogin() {
 }
 
 let loadedItems = [];
+let loadedMatchingItems = [];
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast-msg');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.style.display = 'block';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.style.display = 'none';
+  }, 2200);
+}
+
+async function autofillIntoPage(item) {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id) return;
+    chrome.tabs.sendMessage(tab.id, {
+      type: 'AUTOFILL_CREDENTIAL',
+      credential: item
+    }, (res) => {
+      if (chrome.runtime.lastError) {
+        showToast('Open site page to auto-fill');
+        return;
+      }
+      if (res && res.success) {
+        showToast('⚡ Auto-filled into page!');
+      } else {
+        showToast('⚡ Credentials sent to page');
+      }
+    });
+  } catch (err) {
+    console.error('Autofill error:', err);
+  }
+}
 
 async function loadMatchingItems() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.url) return;
 
-  const url = new URL(tab.url);
-  const domain = url.hostname;
+  let domain = '';
+  try {
+    const url = new URL(tab.url);
+    domain = url.hostname;
+  } catch (e) {
+    domain = '';
+  }
 
   chrome.runtime.sendMessage({
     type: 'GET_CREDENTIALS',
@@ -125,12 +175,12 @@ async function loadMatchingItems() {
     listDiv.innerHTML = '';
 
     if (response && response.success) {
-      const creds = response.credentials || [];
-      if (creds.length === 0) {
+      loadedMatchingItems = response.credentials || [];
+      if (loadedMatchingItems.length === 0) {
         listDiv.innerHTML = '<div class="subtitle" style="text-align: center; margin-top: 20px;">No matching items for this site</div>';
         return;
       }
-      renderList(listDiv, creds);
+      renderList(listDiv, loadedMatchingItems);
     } else {
       listDiv.innerHTML = '<div class="error-msg">Failed to load items.</div>';
     }
@@ -147,7 +197,13 @@ function loadAllItems() {
 
     if (response && response.success) {
       loadedItems = response.credentials || [];
+      if (loadedItems.length === 0) {
+        listDiv.innerHTML = '<div class="subtitle" style="text-align: center; margin-top: 20px;">No saved items in vault</div>';
+        return;
+      }
       renderList(listDiv, loadedItems);
+    } else {
+      listDiv.innerHTML = '<div class="error-msg">Failed to load vault items.</div>';
     }
   });
 }
@@ -157,6 +213,9 @@ function renderList(container, items) {
   items.forEach(item => {
     const card = document.createElement('div');
     card.className = 'item-card';
+
+    const header = document.createElement('div');
+    header.className = 'item-card-header';
 
     const info = document.createElement('div');
     info.className = 'item-info';
@@ -175,56 +234,195 @@ function renderList(container, items) {
     const actions = document.createElement('div');
     actions.className = 'item-actions';
 
+    // Quick Fill button
+    const fillBtn = document.createElement('button');
+    fillBtn.className = 'action-btn-sm';
+    fillBtn.innerHTML = '⚡ Fill';
+    fillBtn.title = 'Auto-fill into page';
+    fillBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      autofillIntoPage(item);
+    });
+
     // Copy username
     const copyUser = document.createElement('button');
     copyUser.className = 'icon-btn';
     copyUser.innerHTML = '👤';
     copyUser.title = 'Copy Username';
-    copyUser.addEventListener('click', () => copyToClipboard(item.username));
+    copyUser.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyToClipboard(item.username || '');
+      showToast('Copied Username!');
+    });
 
     // Copy password
     const copyPass = document.createElement('button');
     copyPass.className = 'icon-btn';
     copyPass.innerHTML = '🔑';
     copyPass.title = 'Copy Password';
-    copyPass.addEventListener('click', () => copyToClipboard(item.password));
+    copyPass.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyToClipboard(item.password || '');
+      showToast('Copied Password!');
+    });
 
+    actions.appendChild(fillBtn);
     actions.appendChild(copyUser);
     actions.appendChild(copyPass);
 
-    card.appendChild(info);
-    card.appendChild(actions);
+    header.appendChild(info);
+    header.appendChild(actions);
+
+    // Clicking header opens/closes details AND triggers autofill
+    header.addEventListener('click', () => {
+      const isExpanded = card.classList.contains('expanded');
+      container.querySelectorAll('.item-card.expanded').forEach(c => {
+        if (c !== card) c.classList.remove('expanded');
+      });
+      card.classList.toggle('expanded');
+      if (!isExpanded) {
+        autofillIntoPage(item);
+      }
+    });
+
+    // Expanded Details Section
+    const details = document.createElement('div');
+    details.className = 'item-details';
+
+    if (item.username) {
+      const uRow = document.createElement('div');
+      uRow.className = 'detail-row';
+      uRow.innerHTML = `
+        <span class="detail-label">Username / Email</span>
+        <div class="detail-value-group">
+          <input type="text" class="detail-input" value="${escapeHtml(item.username)}" readonly>
+          <button class="action-btn-sm copy-u-btn" title="Copy Username">📋 Copy</button>
+        </div>
+      `;
+      uRow.querySelector('.copy-u-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyToClipboard(item.username || '');
+        showToast('Copied Username!');
+      });
+      details.appendChild(uRow);
+    }
+
+    const pRow = document.createElement('div');
+    pRow.className = 'detail-row';
+    pRow.innerHTML = `
+      <span class="detail-label">Password</span>
+      <div class="detail-value-group">
+        <input type="password" class="detail-input pwd-font pwd-view-input" value="${escapeHtml(item.password || '')}" readonly>
+        <button class="action-btn-sm toggle-pwd-btn" title="Show/Hide Password">👁️</button>
+        <button class="action-btn-sm copy-p-btn" title="Copy Password">📋 Copy</button>
+      </div>
+    `;
+    const pwdInput = pRow.querySelector('.pwd-view-input');
+    const togglePwdBtn = pRow.querySelector('.toggle-pwd-btn');
+    togglePwdBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (pwdInput.type === 'password') {
+        pwdInput.type = 'text';
+        togglePwdBtn.textContent = '🔒';
+      } else {
+        pwdInput.type = 'password';
+        togglePwdBtn.textContent = '👁️';
+      }
+    });
+    pRow.querySelector('.copy-p-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyToClipboard(item.password || '');
+      showToast('Copied Password!');
+    });
+    details.appendChild(pRow);
+
+    if (item.url) {
+      const urlRow = document.createElement('div');
+      urlRow.className = 'detail-row';
+      urlRow.innerHTML = `
+        <span class="detail-label">Website</span>
+        <div class="detail-value-group">
+          <input type="text" class="detail-input" value="${escapeHtml(item.url)}" readonly>
+        </div>
+      `;
+      details.appendChild(urlRow);
+    }
+
+    const bigFillBtn = document.createElement('button');
+    bigFillBtn.className = 'fill-page-btn';
+    bigFillBtn.innerHTML = '⚡ Auto-Fill into Page';
+    bigFillBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      autofillIntoPage(item);
+    });
+    details.appendChild(bigFillBtn);
+
+    card.appendChild(header);
+    card.appendChild(details);
 
     container.appendChild(card);
   });
 }
 
 function filterMatchingItems() {
-  const query = document.getElementById('matching-search').value.toLowerCase();
+  const query = document.getElementById('matching-search').value.toLowerCase().trim();
   const listDiv = document.getElementById('matching-list');
-  const cards = listDiv.querySelectorAll('.item-card');
   
-  cards.forEach(card => {
-    const title = card.querySelector('.item-title').textContent.toLowerCase();
-    const user = card.querySelector('.item-user').textContent.toLowerCase();
-    if (title.includes(query) || user.includes(query)) {
-      card.style.display = 'flex';
+  if (!query) {
+    if (loadedMatchingItems.length === 0) {
+      listDiv.innerHTML = '<div class="subtitle" style="text-align: center; margin-top: 20px;">No matching items for this site</div>';
     } else {
-      card.style.display = 'none';
+      renderList(listDiv, loadedMatchingItems);
     }
-  });
+    return;
+  }
+
+  const matches = loadedMatchingItems.filter(item => 
+    (item.title && item.title.toLowerCase().includes(query)) ||
+    (item.username && item.username.toLowerCase().includes(query)) ||
+    (item.url && item.url.toLowerCase().includes(query))
+  );
+
+  if (matches.length > 0) {
+    renderList(listDiv, matches);
+  } else {
+    // Search across ALL vault items when matching search returns none
+    const allMatches = loadedItems.filter(item => 
+      (item.title && item.title.toLowerCase().includes(query)) ||
+      (item.username && item.username.toLowerCase().includes(query)) ||
+      (item.url && item.url.toLowerCase().includes(query))
+    );
+
+    if (allMatches.length > 0) {
+      listDiv.innerHTML = '<div class="subtitle" style="text-align: center; margin: 8px 0 4px;">Found in All Vault Items:</div>';
+      const wrapper = document.createElement('div');
+      renderList(wrapper, allMatches);
+      listDiv.appendChild(wrapper);
+    } else {
+      listDiv.innerHTML = '<div class="subtitle" style="text-align: center; margin-top: 20px;">No items match your search</div>';
+    }
+  }
 }
 
 function filterAllItems() {
-  const query = document.getElementById('all-search').value.toLowerCase();
+  const query = document.getElementById('all-search').value.toLowerCase().trim();
+  const listDiv = document.getElementById('all-list');
+
   const filtered = loadedItems.filter(item => 
     (item.title && item.title.toLowerCase().includes(query)) ||
-    (item.username && item.username.toLowerCase().includes(query))
+    (item.username && item.username.toLowerCase().includes(query)) ||
+    (item.url && item.url.toLowerCase().includes(query))
   );
-  renderList(document.getElementById('all-list'), filtered);
+
+  if (filtered.length === 0) {
+    listDiv.innerHTML = '<div class="subtitle" style="text-align: center; margin-top: 20px;">No items match your search</div>';
+  } else {
+    renderList(listDiv, filtered);
+  }
 }
 
 function copyToClipboard(text) {
+  if (!text) return;
   navigator.clipboard.writeText(text);
 }
 

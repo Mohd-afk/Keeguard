@@ -111,6 +111,10 @@ async function handleGetCredentials(domain) {
   const localVault = await getLocalVault();
   if (!localVault || !localVault.length) return [];
   
+  if (!domain) {
+    return localVault.filter(item => !item.deletedAt);
+  }
+
   // Clean domain (e.g. www.sub.example.com -> example.com)
   const cleanDomain = normalizeDomain(domain);
   

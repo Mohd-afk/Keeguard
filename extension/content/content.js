@@ -42,6 +42,62 @@ function initContentScript() {
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+
+  // 5. Listen for direct autofill requests from Popup
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'AUTOFILL_CREDENTIAL' && message.credential) {
+      const cred = message.credential;
+      let filled = false;
+      const forms = window.scanPageForms ? window.scanPageForms() : [];
+      if (forms && forms.length > 0) {
+        forms.forEach(form => {
+          window.fillFormFields(form, cred);
+          filled = true;
+        });
+      }
+      // Fallback: direct input fill if scanPageForms missed elements
+      const passwordInputs = document.querySelectorAll('input[type="password"]');
+      passwordInputs.forEach(pwdInput => {
+        if (window.setFieldValue) {
+          window.setFieldValue(pwdInput, cred.password || '');
+        } else {
+          pwdInput.value = cred.password || '';
+          pwdInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        filled = true;
+        const formEl = pwdInput.closest('form') || document.body;
+        const userInputs = formEl.querySelectorAll('input[type="email"], input[type="text"], input:not([type])');
+        for (const uInput of userInputs) {
+          if (uInput !== pwdInput && uInput.offsetParent !== null) {
+            if (window.setFieldValue) {
+              window.setFieldValue(uInput, cred.username || '');
+            } else {
+              uInput.value = cred.username || '';
+              uInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            break;
+          }
+        }
+      });
+      // Also check standalone username/email fields if no password field found
+      if (!filled && cred.username) {
+        const userInputs = document.querySelectorAll('input[type="email"], input[name*="user"], input[id*="user"], input[name*="email"], input[id*="email"]');
+        userInputs.forEach(uInput => {
+          if (uInput.offsetParent !== null) {
+            if (window.setFieldValue) {
+              window.setFieldValue(uInput, cred.username);
+            } else {
+              uInput.value = cred.username;
+              uInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            filled = true;
+          }
+        });
+      }
+      sendResponse({ success: filled });
+      return true;
+    }
+  });
 }
 
 function runFormScanner() {
