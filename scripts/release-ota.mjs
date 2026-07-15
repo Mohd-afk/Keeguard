@@ -143,22 +143,25 @@ try {
 
   const db = admin.firestore();
 
-  // Use merge: true so we never overwrite min_apk_version or apk_download_url
-  // (those fields are only set when publishing a new native APK release).
+  // Set min_apk_version and apk_download_url so users get the GitHub update prompt screen
   const firestorePayload = {
     version:      version,
     url:          hostedUrl,
     checksum:     checksum,
     critical:     false,
     releaseNotes: `Automated OTA release ${version}`,
-    releasedAt:   new Date().toISOString()
+    releasedAt:   new Date().toISOString(),
+    min_apk_version: version,
+    apk_download_url: 'https://github.com/Mohd-afk/Keeguard/releases/latest'
   };
 
   console.log(`\n   Writing to Firestore app_config/latest_version:`);
-  console.log(`     version:  ${firestorePayload.version}`);
-  console.log(`     url:      ${firestorePayload.url}`);
-  console.log(`     checksum: ${firestorePayload.checksum}`);
-  console.log(`     critical: ${firestorePayload.critical}\n`);
+  console.log(`     version:          ${firestorePayload.version}`);
+  console.log(`     url:              ${firestorePayload.url}`);
+  console.log(`     checksum:         ${firestorePayload.checksum}`);
+  console.log(`     critical:         ${firestorePayload.critical}`);
+  console.log(`     min_apk_version:  ${firestorePayload.min_apk_version}`);
+  console.log(`     apk_download_url: ${firestorePayload.apk_download_url}\n`);
 
   await db.collection('app_config').doc('latest_version').set(firestorePayload, { merge: true });
 

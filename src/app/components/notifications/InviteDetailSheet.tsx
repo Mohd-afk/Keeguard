@@ -106,12 +106,19 @@ export function InviteDetailSheet({ inviteNotification, onClose }: InviteDetailS
           </button>
         </div>
 
-        {/* Message Panel */}
-        <div className="bg-[#1a1a2e]/55 border border-white/5 rounded-2xl p-4 flex flex-col gap-2">
-          <p className="text-gray-400 text-[10px] uppercase font-extrabold tracking-wider">Invitation Message</p>
-          <p className="text-gray-200 text-sm leading-relaxed italic">
-            "{inviteNotification.body || 'Would like to share a secure vault collection with you.'}"
+        {/* Professional Invitation Banner */}
+        <div className="bg-cyan-500/10 border border-cyan-500/25 rounded-2xl p-4 flex flex-col gap-1.5">
+          <p className="text-cyan-400 text-xs font-bold">
+            @{inviterUsername || inviterName} wants to share the vault folder "{metadata.collection_name || 'Shared Vault'}" with you.
           </p>
+          <p className="text-gray-300 text-xs leading-relaxed">
+            Do you agree to join as <strong className="text-white font-semibold">{currentRole.title}</strong>?
+          </p>
+          {inviteNotification.body && (
+            <p className="text-gray-400 text-xs italic mt-1 pt-2 border-t border-cyan-500/15">
+              Note: "{inviteNotification.body}"
+            </p>
+          )}
         </div>
 
         {/* Metadata Details Blocks */}

@@ -64,13 +64,14 @@ export function ShareCategoryPage() {
   const [connections, setConnections] = useState<UserSearchResult[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(true);
 
-  // Categories state
+  // Categories & Vault Items state
   const [customCategories, setCustomCategories] = useState<any[]>([]);
+  const [vaultItems, setVaultItems] = useState<any[]>([]);
 
   useEffect(() => {
-    // We import from store since it's defined there in this codebase
     import('../../store').then((m) => {
       m.subscribeToCustomCategories(setCustomCategories);
+      m.subscribe(setVaultItems);
     });
   }, []);
 
@@ -167,17 +168,28 @@ export function ShareCategoryPage() {
           if (!privKey) throw new Error('Could not load device private key');
           const selfWrappedKey = await wrapCollectionKey(collectionKey, privKey, myPubKeyB64);
           
+          const itemsToMigrate = vaultItems
+            .filter((i: any) => !i.deletedAt && (i.categoryId === selectedFolder.id || (i.type || 'login').toLowerCase() === selectedFolder.id.toLowerCase()))
+            .map((i: any) => ({
+              id: i.id,
+              title: i.title || 'Untitled Item',
+              plaintext: i.password || '',
+              itemType: ((i.type || 'login').toLowerCase() as any)
+            }));
+
           const { migrateCategoryToCollection } = await import('../../api/collections');
           finalCollectionId = await migrateCategoryToCollection(
              selectedFolder.id, 
              selectedFolder.name, 
-             { wrappedKey: selfWrappedKey, senderPublicKeyB64: myPubKeyB64 }
+             { wrappedKey: selfWrappedKey, senderPublicKeyB64: myPubKeyB64 },
+             itemsToMigrate,
+             collectionKey
           );
           
           const { setCollectionKey } = await import('../../stores/syncStore');
           setCollectionKey(finalCollectionId, collectionKey);
           
-          toast.success(`Category "${selectedFolder.name}" migrated to a Shared Vault!`);
+          toast.success(`Folder "${selectedFolder.name}" shared with ${itemsToMigrate.length} password(s)!`);
       } else {
           // Normal flow — get key from syncStore cache
           const { getCollectionKey } = await import('../../stores/syncStore');
@@ -256,28 +268,58 @@ export function ShareCategoryPage() {
           <h1 className="text-white font-bold text-lg">Select Folder to Share</h1>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-           {customCategories.length === 0 ? (
-             <div className="text-center py-10 text-gray-500 text-sm">You have no custom folders to share.</div>
-           ) : (
-             customCategories.map((cat: any) => (
+         {(() => {
+             const folders = [
+               ...customCategories.map((cat: any) => ({
+                 id: cat.id,
+                 name: cat.name,
+                 subtitle: 'Custom Folder',
+                 count: vaultItems.filter((i: any) => !i.deletedAt && i.categoryId === cat.id).length
+               })),
+               {
+                 id: 'login',
+                 name: 'Logins',
+                 subtitle: 'Built-in Folder',
+                 count: vaultItems.filter((i: any) => !i.deletedAt && !i.categoryId && (i.type || 'login').toLowerCase() === 'login').length
+               },
+               {
+                 id: 'card',
+                 name: 'Cards',
+                 subtitle: 'Built-in Folder',
+                 count: vaultItems.filter((i: any) => !i.deletedAt && !i.categoryId && (i.type || '').toLowerCase() === 'card').length
+               },
+               {
+                 id: 'note',
+                 name: 'Secure Notes',
+                 subtitle: 'Built-in Folder',
+                 count: vaultItems.filter((i: any) => !i.deletedAt && !i.categoryId && (i.type || '').toLowerCase() === 'note').length
+               }
+             ];
+
+             return folders.map((folder) => (
                <button
-                 key={cat.id}
-                 onClick={() => setSelectedFolder({ id: cat.id, name: cat.name, type: 'category' })}
-                 className="w-full flex items-center justify-between p-4 bg-[#16213e] hover:bg-[#16213e]/70 border border-white/5 hover:border-cyan-500/50 rounded-2xl text-left transition-all active:scale-[0.98] group"
+                 key={folder.id}
+                 onClick={() => setSelectedFolder({ id: folder.id, name: folder.name, type: 'category' })}
+                 className="w-full flex items-center justify-between p-4 bg-[#16213e] hover:bg-[#16213e]/80 border border-white/5 hover:border-cyan-500/50 rounded-2xl text-left transition-all active:scale-[0.98] group"
                >
                  <div className="flex items-center gap-4">
                    <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/20 group-hover:bg-cyan-500/20 transition-colors">
                      <FolderHeart className="w-5 h-5" />
                    </div>
                    <div>
-                     <h3 className="text-white text-sm font-bold group-hover:text-cyan-400 transition-colors">{cat.name}</h3>
-                     <p className="text-gray-500 text-[10px] mt-0.5">Personal Category</p>
+                     <h3 className="text-white text-sm font-bold group-hover:text-cyan-400 transition-colors">{folder.name}</h3>
+                     <p className="text-gray-500 text-[10px] mt-0.5">{folder.subtitle}</p>
                    </div>
                  </div>
-                 <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
+                 <div className="flex items-center gap-3">
+                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                     {folder.count} password{folder.count === 1 ? '' : 's'} saved
+                   </span>
+                   <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
+                 </div>
                </button>
-             ))
-           )}
+             ));
+           })()}
         </div>
       </div>
     );

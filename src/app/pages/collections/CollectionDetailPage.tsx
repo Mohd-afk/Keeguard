@@ -30,7 +30,7 @@ import {
   addSyncStoreListener,
   type DecryptedCollectionItemExtended
 } from '../../stores/syncStore';
-import { getSharedCollection, subscribeToSharedCollection, type SharedCollection } from '../../firestore/collections';
+import { getSharedCollection, subscribeToSharedCollection, subscribeToCollectionMembers, type SharedCollection } from '../../firestore/collections';
 import { toast } from 'sonner';
 
 interface OutletContext {
@@ -49,6 +49,7 @@ export function CollectionDetailPage() {
   const [items, setItems] = useState<DecryptedCollectionItemExtended[]>([]);
   const [isWaitingKey, setIsWaitingKey] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [myRole, setMyRole] = useState<'owner' | 'manager' | 'editor' | 'viewer'>('editor');
 
   // Modal / Form state for Add/Edit Form Sheet
   const [showFormSheet, setShowFormSheet] = useState(false);
@@ -71,8 +72,19 @@ export function CollectionDetailPage() {
       setLoading(false);
     });
 
-    return unsub;
-  }, [collectionId]);
+    const unsubMembers = subscribeToCollectionMembers(collectionId, (members) => {
+      if (!user) return;
+      const me = members.find((m) => m.user_id === user.uid);
+      if (me) {
+        setMyRole(me.role as any);
+      }
+    });
+
+    return () => {
+      unsub();
+      unsubMembers();
+    };
+  }, [collectionId, user]);
 
   // 2. Subscribe to items and waiting key state from syncStore
   useEffect(() => {
@@ -276,13 +288,15 @@ export function CollectionDetailPage() {
           >
             <Users className="w-4 h-4" />
           </button>
-          <button
-            onClick={handleOpenAddForm}
-            className="p-1.5 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 rounded-xl transition-all border border-cyan-500/20 active:scale-95 flex items-center gap-1 text-xs font-bold"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add
-          </button>
+          {myRole !== 'viewer' && (
+            <button
+              onClick={handleOpenAddForm}
+              className="p-1.5 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 rounded-xl transition-all border border-cyan-500/20 active:scale-95 flex items-center gap-1 text-xs font-bold"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add
+            </button>
+          )}
         </div>
       </div>
 
@@ -396,22 +410,24 @@ export function CollectionDetailPage() {
                       </div>
 
                       {/* Controls */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-white/5 justify-end">
-                        <button
-                          onClick={() => handleOpenEditForm(item)}
-                          className="py-1.5 px-3 rounded-lg text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-1 border border-white/5 transition-all"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteItem(item)}
-                          className="py-1.5 px-3 rounded-lg text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/5 flex items-center gap-1 border border-rose-500/10 transition-all"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Delete
-                        </button>
-                      </div>
+                      {myRole !== 'viewer' && (
+                        <div className="flex items-center gap-2 pt-2 border-t border-white/5 justify-end">
+                          <button
+                            onClick={() => handleOpenEditForm(item)}
+                            className="py-1.5 px-3 rounded-lg text-xs font-bold text-gray-400 hover:text-white hover:bg-white/5 flex items-center gap-1 border border-white/5 transition-all"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(item)}
+                            className="py-1.5 px-3 rounded-lg text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/5 flex items-center gap-1 border border-rose-500/10 transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

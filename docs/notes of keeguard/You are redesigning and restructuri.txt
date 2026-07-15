@@ -1,0 +1,187 @@
+You are redesigning and restructuring the SecureVault mobile app UX/UI architecture.
+
+This is NOT a visual-only redesign.
+This is a usability, scalability, security, and information architecture redesign for a premium password manager and secure vault platform.
+
+The current implementation suffers from:
+- Conflicting navigation systems
+- Weak search UX
+- Flat visual hierarchy
+- Inconsistent interaction models
+- Poor scalability for large vaults
+- Collapsible search groups causing friction
+- Weak separation between dashboard state and operational state
+- List view lacking visual density, depth, and scanability
+- Overexposed data structures instead of user-centered retrieval design
+
+The redesign must prioritize:
+- Speed of retrieval
+- Trust perception
+- Cognitive simplicity
+- Security clarity
+- Scalability to thousands of vault items
+- Future extensibility
+- Smooth premium interactions
+- Reduced visual fatigue
+
+The app aesthetic should remain:
+- Dark cyber-secure
+- Premium
+- Minimal
+- Professional
+- High-trust
+- Modern
+Inspired by:
+- 1Password
+- Raycast
+- Apple Spotlight
+- Arc Browser
+- Notion
+- Linear
+
+--------------------------------------------------
+CORE UX PRINCIPLES
+--------------------------------------------------
+
+1. Retrieval Over Organization
+Users do not think in rigid schemas.
+Users think:
+“I need my Olive Gmail password.”
+NOT:
+“Was that stored in Website, App, or Other?”
+
+Design around retrieval speed and contextual recognition.
+
+2. One Mental Model Per Screen
+Avoid mixing:
+- categories
+- collapsible sections
+- tags
+- item types
+- favorites
+- filters
+all on the same screen.
+
+Each screen should have ONE primary purpose.
+
+3. Trust Through Clarity
+Password managers must feel:
+- calm
+- predictable
+- structured
+- readable
+- stable
+- deliberate
+
+Avoid clutter, noisy gradients, excessive glow, or over-animation.
+
+4. Scalable Information Density
+The UI must remain usable with:
+- 10 items
+- 500 items
+- 10,000 items
+
+Design for scale from the beginning.
+
+--------------------------------------------------
+NEW APP STRUCTURE
+--------------------------------------------------
+
+The app must have 3 completely distinct UI states:
+
+1. HOME DASHBOARD
+Purpose:
+- Overview
+- Security awareness
+- Quick access
+- Emotional reassurance
+
+This page should include:
+- Vault category cards
+- Favorites
+- Recent access
+- Security alerts
+- Watchtower/security insights
+- Recently added items
+- Quick actions
+
+This page should NOT:
+- show huge raw password lists
+- behave like a search result page
+- overload the user with operational data
+
+The home screen should feel:
+- premium
+- clean
+- calm
+- secure
+- organized
+
+--------------------------------------------------
+
+2. CATEGORY DETAIL VIEW
+Purpose:
+Operational management of vault entries.
+
+Example:
+Passwords
+Cards
+IDs
+Notes
+Devices
+Documents
+
+Each category opens its OWN page.
+
+DO NOT expand categories inline on the home page.
+
+Each category page should include:
+- Dedicated search
+- Sorting
+- Filters
+- Smart grouping
+- Medium-density item cards
+- Bulk actions
+- Quick add button
+- Empty states
+- Skeleton loading states
+
+Supported sorting:
+- Recently used
+- Recently created
+- Alphabetical
+- Frequently accessed
+- Last modified
+
+Supported filters:
+- Tags
+- Favorites
+- Weak passwords
+- Expiring items
+- Shared items
+- 2FA enabled
+
+--------------------------------------------------
+
+3. FULLSCREEN SEARCH MODE
+This is the MOST IMPORTANT redesign.
+
+Search must become a dedicated fullscreen state.
+
+When the user taps search:
+- Animate into fullscreen search mode
+- Expand search field
+- Hide FAB
+- Dim bottom navigation
+- Blur/dim background
+- Auto-focus keyboard
+- Instantly show recent searches and suggestions
+
+The search experience should feel:
+- immediate
+- focused
+- intelligent
+- fast
+- premium
+
+DO NOT mutate the home page into search mode.

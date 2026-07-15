@@ -210,8 +210,8 @@ export async function createInvite(params: CreateInviteParams): Promise<string> 
       type: 'invite_received',
       type_category: 'collaboration',
       priority: 'high',
-      title: `${inviterDisplayName} invited you to a shared vault`,
-      body: params.message || `${inviterDisplayName} wants to share "${collectionName}" with you.`,
+      title: `${inviterDisplayName || inviterUsername} wants to share vault folder "${collectionName}" with you`,
+      body: params.message || `@${inviterUsername || inviterDisplayName} wants to share the vault folder "${collectionName}" with you as ${params.role === 'viewer' ? 'a Viewer' : 'an Editor (Collaborator)'}. Do you agree?`,
       status: 'pending',
       sender_uid: actorUserId,        // Used by security rule
       created_at: now,
@@ -393,43 +393,81 @@ export async function transferOwnership(collectionId: string, targetUserId: stri
   await batch.commit();
 }
 
-export async function migrateCategoryToCollection(categoryId: string, categoryName: string, ownerEnvelope: { wrappedKey: string; senderPublicKeyB64: string }): Promise<string> {
+export interface MigrateFolderItem {
+  id: string;
+  title: string;
+  plaintext: string;
+  itemType: 'login' | 'card' | 'note' | 'identity' | 'wifi' | 'other';
+}
+
+export async function migrateCategoryToCollection(
+  categoryId: string,
+  categoryName: string,
+  ownerEnvelope: { wrappedKey: string; senderPublicKeyB64: string },
+  itemsToMigrate?: MigrateFolderItem[],
+  collectionKey?: CryptoKey
+): Promise<string> {
   // 1. Create the new shared collection
   const collectionId = await createCollection({
     name: categoryName,
     ownerEnvelope
   });
 
-  // 2. Fetch all personal items that have this categoryId
   const { getFirebaseDb } = await import('../firebase');
   const { getAuth } = await import('firebase/auth');
-  const { collection, getDocs, query, where, writeBatch, doc } = await import('firebase/firestore');
-  
+  const { doc, writeBatch, serverTimestamp } = await import('firebase/firestore');
   const auth = getAuth();
   if (!auth.currentUser) throw new Error("Unauthenticated");
   const db = getFirebaseDb();
-  
-  const personalItemsRef = collection(db, `users/${auth.currentUser.uid}/items`);
-  const q = query(personalItemsRef, where('category_id', '==', categoryId), where('deleted_at', '==', null));
-  const snap = await getDocs(q);
+  const actorUserId = auth.currentUser.uid;
+  const now = serverTimestamp();
 
-  // 3. Move them into the shared collection
+  // 2. Ensure owner's folder_shares pivot doc exists and is active
   const batch = writeBatch(db);
-  
-  snap.docs.forEach((d) => {
-    // Delete from personal items
-    batch.delete(d.ref);
-    
-    // Create in shared collection items
-    const newSharedItemRef = doc(db, `collections/${collectionId}/items/${d.id}`);
-    batch.set(newSharedItemRef, {
-       ...d.data(),
-       category_id: null,
-       collection_key_version: 1,
-       updated_by_user_id: auth.currentUser!.uid,
-    });
+  const ownerShareRef = doc(db, `folder_shares/${collectionId}_${actorUserId}`);
+  batch.set(ownerShareRef, {
+    folder_id: collectionId,
+    user_id: actorUserId,
+    role: 'owner',
+    status: 'accepted',
+    updated_at: now,
   });
+
+  // 3. Encrypt and write all local vault items belonging to this folder into the shared collection
+  if (itemsToMigrate && itemsToMigrate.length > 0 && collectionKey) {
+    const { encryptCollectionItemConsistent } = await import('../crypto/collectionCrypto');
+    for (const item of itemsToMigrate) {
+      const { payload, envelope } = await encryptCollectionItemConsistent(
+        item.plaintext,
+        item.title,
+        collectionKey,
+        collectionId
+      );
+      const sharedItemRef = doc(db, `collections/${collectionId}/items/${item.id}`);
+      batch.set(sharedItemRef, {
+        owner_type: 'collection',
+        owner_id: collectionId,
+        title_enc: payload.title_enc,
+        item_type: (item.itemType || 'login').toLowerCase(),
+        ciphertext: payload.ciphertext,
+        iv: payload.iv,
+        auth_tag: payload.auth_tag,
+        item_key_version: 1,
+        base_revision: 1,
+        latest_revision: 1,
+        deleted_at: null,
+        created_by_user_id: actorUserId,
+        updated_by_user_id: actorUserId,
+        created_at: now,
+        updated_at: now,
+        wrapped_item_key: envelope.wrapped_item_key,
+        vault_item_id: item.id,
+        owner_user_id: actorUserId,
+      });
+    }
+  }
 
   await batch.commit();
   return collectionId;
 }
+
