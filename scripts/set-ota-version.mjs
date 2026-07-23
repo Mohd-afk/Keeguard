@@ -15,18 +15,25 @@ if (!accessToken) {
 }
 console.log('Got access token for:', account.user?.email);
 
+import { readFileSync } from 'fs';
+import { join, resolve } from 'path';
+
+const ROOT = resolve(import.meta.dirname, '..');
+const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'));
+const version = pkg.version;
+
 const PROJECT = 'vault-app-ba6e2';
 const url = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/app_config/latest_version`;
 
 const body = {
   fields: {
-    version:         { stringValue:  '2.0.5' },
-    url:             { stringValue:  `https://${PROJECT}.web.app/bundles/2.0.5.zip` },
+    version:         { stringValue:  version },
+    url:             { stringValue:  `https://${PROJECT}.web.app/bundles/${version}.zip` },
     critical:        { booleanValue: false },
-    releaseNotes:    { stringValue:  'GitHub Release workflow + in-app APK update banner (v2.0.5)' },
+    releaseNotes:    { stringValue:  `Release v${version}` },
     releasedAt:      { stringValue:  new Date().toISOString() },
-    min_apk_version: { integerValue: '2' },
-    apk_download_url:{ stringValue:  'https://github.com/Mohd-afk/apk-releases/releases/latest' },
+    min_apk_version: { stringValue:  version },
+    apk_download_url:{ stringValue:  `https://github.com/Mohd-afk/apk-releases/releases/download/v${version}/app-debug.apk` },
   }
 };
 

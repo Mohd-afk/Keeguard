@@ -5,7 +5,7 @@ import { Capacitor } from '@capacitor/core';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { router } from './routes';
 import { initFirebase } from './firebase';
-import { initUpdater, OTA_JUST_UPDATED_KEY } from './services/updater';
+import { initUpdater, OTA_JUST_UPDATED_KEY, compareVersions } from './services/updater';
 import { checkApkUpdateRequired } from './services/apk-update-checker';
 import CriticalUpdateScreen from './components/CriticalUpdateScreen';
 import ApkUpdateBanner from './components/ApkUpdateBanner';
@@ -51,6 +51,13 @@ export default function App() {
           const pendingVersion = localStorage.getItem('sv_ota_pending_version');
           const pendingBundleId = localStorage.getItem('sv_ota_pending_bundle_id');
           if (pendingVersion && pendingBundleId) {
+            const appInfo = await App.getInfo().catch(() => ({ version: '0.0.0' }));
+            const nativeVer = appInfo.version || '0.0.0';
+            if (compareVersions(pendingVersion, nativeVer) <= 0) {
+              localStorage.removeItem('sv_ota_pending_version');
+              localStorage.removeItem('sv_ota_pending_bundle_id');
+              return;
+            }
             console.log('[OTA] Staged update pending on app resume:', pendingVersion);
             toast(`✨ Version v${pendingVersion} is ready!`, {
               description: 'Restart the app now to apply the updates and get new features.',
@@ -147,12 +154,19 @@ export default function App() {
         const justUpdated = localStorage.getItem(OTA_JUST_UPDATED_KEY);
         if (justUpdated) {
           localStorage.removeItem(OTA_JUST_UPDATED_KEY);
-          setTimeout(() => {
-            toast.success(`✅ Updated to v${justUpdated}`, {
-              description: 'New features are live. Enjoy Keeguard!',
-              duration: 5000,
-            });
-          }, 1500);
+          import('@capacitor/app').then(({ App }) => {
+            App.getInfo().then(info => {
+              const nativeVer = info.version || '0.0.0';
+              if (compareVersions(justUpdated, nativeVer) > 0) {
+                setTimeout(() => {
+                  toast.success(`✅ Updated to v${justUpdated}`, {
+                    description: 'New features are live. Enjoy Keeguard!',
+                    duration: 5000,
+                  });
+                }, 1500);
+              }
+            }).catch(() => {});
+          });
         }
       }
 

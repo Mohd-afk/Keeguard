@@ -45,7 +45,7 @@ const VERSION_DOC_ID   = 'latest_version';
  * Compare two semantic version strings.
  * Returns 1 if v1 > v2, -1 if v1 < v2, 0 if v1 === v2.
  */
-function compareVersions(v1: string, v2: string): number {
+export function compareVersions(v1: string, v2: string): number {
   if (!v1 || !v2) return 0;
   const p1 = v1.split('.').map(Number);
   const p2 = v2.split('.').map(Number);
@@ -171,6 +171,13 @@ export async function initUpdater(options: UpdaterOptions = {}): Promise<void> {
       localStorage.removeItem(PENDING_VERSION_KEY);
       localStorage.removeItem(PENDING_BUNDLE_ID_KEY);
       localStorage.removeItem(FAILED_VERSIONS_KEY);
+      localStorage.removeItem(OTA_JUST_UPDATED_KEY);
+      try {
+        await CapacitorUpdater.reset();
+        log.info('[OTA MIGRATION] CapacitorUpdater reset to builtin bundle for new native APK.');
+      } catch (resetErr) {
+        log.warn('[OTA MIGRATION] CapacitorUpdater.reset() failed (non-fatal):', resetErr);
+      }
       log.info('[OTA MIGRATION] All OTA localStorage keys cleared. OTA state reset for new native base.');
     }
 
@@ -333,9 +340,25 @@ async function checkForUpdate(options: UpdaterOptions): Promise<void> {
   const remote = snapshot.data() as VersionMetadata;
   log.info(`Remote version: ${remote.version}`, { critical: remote.critical, url: remote.url });
 
-  // 2. Get the ground-truth active version from CapacitorUpdater (NOT localStorage)
+  // 2. Get the installed native APK version and ground-truth active bundle version
+  let nativeVersion = '0.0.0';
+  try {
+    const currentInfo = await CapacitorUpdater.current();
+    nativeVersion = currentInfo.native || (await App.getInfo()).version;
+  } catch (e) {
+    try {
+      nativeVersion = (await App.getInfo()).version;
+    } catch (_) {}
+  }
+
+  // CRITICAL GUARD: Never download an OTA update if remote version <= installed native APK version
+  if (compareVersions(remote.version, nativeVersion) <= 0) {
+    log.info(`[OTA_EVENT: check_skip] Remote OTA version (${remote.version}) <= installed native APK version (${nativeVersion}). Skipping OTA download.`);
+    return;
+  }
+
   const activeVersion = await getActiveVersion();
-  log.info(`[OTA_EVENT: check] Active (running) version: ${activeVersion}`);
+  log.info(`[OTA_EVENT: check] Active (running) version: ${activeVersion}, Native version: ${nativeVersion}`);
 
   if (compareVersions(remote.version, activeVersion) <= 0) {
     log.info(`[OTA_EVENT: check_skip] Already running latest or newer (${activeVersion} >= ${remote.version}). No update needed.`);
