@@ -11,6 +11,7 @@ import { LicensePage } from './components/legal/LicensePage';
 import { SecurityDashboard } from './components/SecurityDashboard';
 import { PasswordGenerator } from './components/PasswordGenerator';
 import ManageCategories from './components/ManageCategories';
+import ManageProfiles from './components/ManageProfiles';
 import { PendingRequests } from './components/PendingRequests';
 import { CollectionListPage } from './pages/collections/CollectionListPage';
 import { CollectionDetailPage } from './pages/collections/CollectionDetailPage';
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
       { path: 'security', Component: SecurityDashboard },
       { path: 'generator', Component: PasswordGenerator },
       { path: 'categories', Component: ManageCategories },
+      { path: 'profiles', Component: ManageProfiles },
       { path: 'pending-requests', Component: PendingRequests },
       { path: 'share', Component: ShareCategoryPage },
       // Shared collection pages

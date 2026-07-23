@@ -69,10 +69,18 @@ export function ShareCategoryPage() {
   const [vaultItems, setVaultItems] = useState<any[]>([]);
 
   useEffect(() => {
+    let unsubVault: (() => void) | undefined;
+    let unsubCats: (() => void) | undefined;
     import('../../store').then((m) => {
-      m.subscribeToCustomCategories(setCustomCategories);
-      m.subscribe(setVaultItems);
+      unsubCats = m.subscribeToCustomCategories(setCustomCategories);
+      // addVaultChangeListener does NOT emit initial state, so seed it first
+      setVaultItems(m.getVaultItems());
+      unsubVault = m.addVaultChangeListener(setVaultItems);
     });
+    return () => {
+      unsubVault?.();
+      unsubCats?.();
+    };
   }, []);
 
   // Fetch connections
@@ -169,12 +177,16 @@ export function ShareCategoryPage() {
           const selfWrappedKey = await wrapCollectionKey(collectionKey, privKey, myPubKeyB64);
           
           const itemsToMigrate = vaultItems
-            .filter((i: any) => !i.deletedAt && (i.categoryId === selectedFolder.id || (i.type || 'login').toLowerCase() === selectedFolder.id.toLowerCase()))
+            .filter((i: any) => {
+              if (i.deletedAt) return false;
+              if (selectedFolder.id === '__uncategorized__') return !i.categoryId;
+              return i.categoryId === selectedFolder.id;
+            })
             .map((i: any) => ({
               id: i.id,
               title: i.title || 'Untitled Item',
               plaintext: i.password || '',
-              itemType: ((i.type || 'login').toLowerCase() as any)
+              itemType: (i.type || 'Website').toLowerCase() as any
             }));
 
           const { migrateCategoryToCollection } = await import('../../api/collections');
@@ -269,32 +281,24 @@ export function ShareCategoryPage() {
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
          {(() => {
+             const activeItems = vaultItems.filter((i: any) => !i.deletedAt);
+             const uncategorizedCount = activeItems.filter((i: any) => !i.categoryId).length;
              const folders = [
                ...customCategories.map((cat: any) => ({
                  id: cat.id,
                  name: cat.name,
-                 subtitle: 'Custom Folder',
-                 count: vaultItems.filter((i: any) => !i.deletedAt && i.categoryId === cat.id).length
+                 count: activeItems.filter((i: any) => i.categoryId === cat.id).length
                })),
-               {
-                 id: 'login',
-                 name: 'Logins',
-                 subtitle: 'Built-in Folder',
-                 count: vaultItems.filter((i: any) => !i.deletedAt && !i.categoryId && (i.type || 'login').toLowerCase() === 'login').length
-               },
-               {
-                 id: 'card',
-                 name: 'Cards',
-                 subtitle: 'Built-in Folder',
-                 count: vaultItems.filter((i: any) => !i.deletedAt && !i.categoryId && (i.type || '').toLowerCase() === 'card').length
-               },
-               {
-                 id: 'note',
-                 name: 'Secure Notes',
-                 subtitle: 'Built-in Folder',
-                 count: vaultItems.filter((i: any) => !i.deletedAt && !i.categoryId && (i.type || '').toLowerCase() === 'note').length
-               }
+               ...(uncategorizedCount > 0 ? [{
+                 id: '__uncategorized__',
+                 name: 'Uncategorized',
+                 count: uncategorizedCount
+               }] : [])
              ];
+
+             if (folders.length === 0) {
+               return <div className="text-center py-10 text-gray-500 text-sm">No folders with saved passwords found in your vault.</div>;
+             }
 
              return folders.map((folder) => (
                <button
@@ -308,13 +312,15 @@ export function ShareCategoryPage() {
                    </div>
                    <div>
                      <h3 className="text-white text-sm font-bold group-hover:text-cyan-400 transition-colors">{folder.name}</h3>
-                     <p className="text-gray-500 text-[10px] mt-0.5">{folder.subtitle}</p>
+                     <p className="text-gray-500 text-[10px] mt-0.5">{folder.count} password{folder.count === 1 ? '' : 's'} saved</p>
                    </div>
                  </div>
                  <div className="flex items-center gap-3">
-                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
-                     {folder.count} password{folder.count === 1 ? '' : 's'} saved
-                   </span>
+                   {folder.count > 0 && (
+                     <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                       {folder.count}
+                     </span>
+                   )}
                    <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
                  </div>
                </button>

@@ -19,7 +19,12 @@ import {
   Save,
   X,
   AlertTriangle,
-  FolderOpen
+  FolderOpen,
+  Check,
+  CheckSquare,
+  Square,
+  Layers,
+  FolderHeart
 } from 'lucide-react';
 import { type User } from 'firebase/auth';
 import {
@@ -31,6 +36,7 @@ import {
   type DecryptedCollectionItemExtended
 } from '../../stores/syncStore';
 import { getSharedCollection, subscribeToSharedCollection, subscribeToCollectionMembers, type SharedCollection } from '../../firestore/collections';
+import { getVaultItems, addVaultChangeListener, subscribeToCustomCategories } from '../../store';
 import { toast } from 'sonner';
 
 interface OutletContext {
@@ -54,10 +60,17 @@ export function CollectionDetailPage() {
   // Modal / Form state for Add/Edit Form Sheet
   const [showFormSheet, setShowFormSheet] = useState(false);
   const [editingItem, setEditingItem] = useState<DecryptedCollectionItemExtended | null>(null);
+  const [addTab, setAddTab] = useState<'vault' | 'new'>('vault');
   const [formTitle, setFormTitle] = useState('');
   const [formPlaintext, setFormPlaintext] = useState('');
   const [formType, setFormType] = useState<'login' | 'card' | 'note' | 'identity' | 'wifi' | 'other'>('login');
   const [formLoading, setFormLoading] = useState(false);
+
+  // Personal Vault Items Picker State
+  const [vaultItems, setVaultItems] = useState<any[]>([]);
+  const [customCategories, setCustomCategories] = useState<any[]>([]);
+  const [selectedVaultItemIds, setSelectedVaultItemIds] = useState<string[]>([]);
+  const [pickerCategory, setPickerCategory] = useState<string>('all');
 
   // Item details expansion state
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
@@ -100,6 +113,17 @@ export function CollectionDetailPage() {
     return unsub;
   }, [collectionId]);
 
+  // 3. Subscribe to Personal Vault items and categories for the picker
+  useEffect(() => {
+    const unsubCats = subscribeToCustomCategories(setCustomCategories);
+    setVaultItems(getVaultItems());
+    const unsubVault = addVaultChangeListener(setVaultItems);
+    return () => {
+      unsubCats();
+      unsubVault();
+    };
+  }, []);
+
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard!`);
@@ -117,6 +141,9 @@ export function CollectionDetailPage() {
     setFormTitle('');
     setFormPlaintext('');
     setFormType('login');
+    setAddTab('vault');
+    setSelectedVaultItemIds([]);
+    setPickerCategory('all');
     setShowFormSheet(true);
   };
 
@@ -125,7 +152,41 @@ export function CollectionDetailPage() {
     setFormTitle(item.title);
     setFormPlaintext(item.plaintext);
     setFormType(item.itemType as any);
+    setAddTab('new');
     setShowFormSheet(true);
+  };
+
+  const handleImportSelected = async () => {
+    if (!collectionId || selectedVaultItemIds.length === 0) return;
+    setFormLoading(true);
+    try {
+      let count = 0;
+      for (const id of selectedVaultItemIds) {
+        const vItem = vaultItems.find((v) => v.id === id);
+        if (!vItem) continue;
+        const itemId = crypto.randomUUID();
+        const typeStr = (vItem.type || 'Website').toLowerCase() as any;
+        const result = await commitSharedItem(
+          collectionId,
+          itemId,
+          vItem.title || 'Untitled Item',
+          vItem.password || '',
+          typeStr,
+          0
+        );
+        if (result.success || !result.conflict) {
+          count++;
+        }
+      }
+      toast.success(`Successfully added ${count} password(s) from your vault!`);
+      setShowFormSheet(false);
+      setSelectedVaultItemIds([]);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Failed to import selected items');
+    } finally {
+      setFormLoading(false);
+    }
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -444,15 +505,12 @@ export function CollectionDetailPage() {
           <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={() => !formLoading && setShowFormSheet(false)} />
 
           {/* Form container */}
-          <form
-            onSubmit={handleFormSubmit}
-            className="relative w-full bg-[#16213e] border-t border-white/10 rounded-t-3xl p-6 pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_16px)] flex flex-col gap-4 shadow-2xl animate-in slide-in-from-bottom duration-300"
-          >
-            <div className="w-12 h-1.5 bg-gray-600 rounded-full mx-auto -mt-2.5 mb-1 opacity-45" />
+          <div className="relative w-full max-h-[85vh] bg-[#16213e] border-t border-white/10 rounded-t-3xl p-6 pb-[calc(max(env(safe-area-inset-bottom),_16px)_+_16px)] flex flex-col gap-4 shadow-2xl animate-in slide-in-from-bottom duration-300 overflow-hidden">
+            <div className="w-12 h-1.5 bg-gray-600 rounded-full mx-auto -mt-2.5 mb-1 opacity-45 shrink-0" />
 
-            <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+            <div className="flex items-center justify-between border-b border-white/5 pb-2.5 shrink-0">
               <h2 className="text-white font-bold text-base">
-                {editingItem ? 'Edit Shared Item' : 'New Shared Item'}
+                {editingItem ? 'Edit Shared Item' : 'Add to Shared Vault'}
               </h2>
               <button
                 type="button"
@@ -464,81 +522,265 @@ export function CollectionDetailPage() {
               </button>
             </div>
 
-            <div className="space-y-3.5">
-              <div>
-                <label className="text-gray-400 text-xs font-semibold mb-1 block">Item Title</label>
-                <input
-                  type="text"
-                  required
-                  value={formTitle}
-                  onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="e.g. Server Login, API Access"
-                  maxLength={50}
-                  className="w-full bg-[#1a1a2e] border border-white/5 rounded-xl py-2.5 px-3.5 text-white text-xs font-semibold focus:outline-none focus:border-cyan-500/50 focus:bg-white/5 transition-all"
-                />
+            {!editingItem && (
+              <div className="flex p-1 bg-[#1a1a2e] rounded-xl border border-white/5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setAddTab('vault')}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+                    addTab === 'vault'
+                      ? 'bg-cyan-500 text-white shadow-md'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  Select from Vault
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddTab('new')}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+                    addTab === 'new'
+                      ? 'bg-cyan-500 text-white shadow-md'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Create New
+                </button>
               </div>
+            )}
 
-              <div>
-                <label className="text-gray-400 text-xs font-semibold mb-1 block">Item Type</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['login', 'card', 'note'] as const).map((type) => (
+            {addTab === 'vault' && !editingItem ? (
+              <div className="flex flex-col gap-3 overflow-hidden flex-1">
+                {/* Category Picker Chips */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 shrink-0 no-scrollbar">
+                  <button
+                    type="button"
+                    onClick={() => setPickerCategory('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all border ${
+                      pickerCategory === 'all'
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                        : 'bg-[#1a1a2e] text-gray-400 border-white/5 hover:text-white'
+                    }`}
+                  >
+                    All Items ({vaultItems.filter(i => !i.deletedAt).length})
+                  </button>
+                  {customCategories.map((cat) => {
+                    const count = vaultItems.filter(i => !i.deletedAt && i.categoryId === cat.id).length;
+                    if (count === 0) return null;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setPickerCategory(cat.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all border ${
+                          pickerCategory === cat.id
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                            : 'bg-[#1a1a2e] text-gray-400 border-white/5 hover:text-white'
+                        }`}
+                      >
+                        {cat.name} ({count})
+                      </button>
+                    );
+                  })}
+                  {(() => {
+                    const uncategorizedCount = vaultItems.filter(i => !i.deletedAt && !i.categoryId).length;
+                    if (uncategorizedCount === 0) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setPickerCategory('__uncategorized__')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all border ${
+                          pickerCategory === '__uncategorized__'
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                            : 'bg-[#1a1a2e] text-gray-400 border-white/5 hover:text-white'
+                        }`}
+                      >
+                        Uncategorized ({uncategorizedCount})
+                      </button>
+                    );
+                  })()}
+                </div>
+
+                {/* Items List */}
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                  {(() => {
+                    const filtered = vaultItems.filter((i) => {
+                      if (i.deletedAt) return false;
+                      if (pickerCategory === 'all') return true;
+                      if (pickerCategory === '__uncategorized__') return !i.categoryId;
+                      return i.categoryId === pickerCategory;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="text-center py-8 text-gray-500 text-xs">
+                          No passwords found in this category.
+                        </div>
+                      );
+                    }
+
+                    return filtered.map((item) => {
+                      const isSelected = selectedVaultItemIds.includes(item.id);
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            setSelectedVaultItemIds((prev) =>
+                              isSelected ? prev.filter(id => id !== item.id) : [...prev, item.id]
+                            );
+                          }}
+                          className={`p-3 rounded-2xl border flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] ${
+                            isSelected
+                              ? 'bg-cyan-500/15 border-cyan-500/50 text-white'
+                              : 'bg-[#1a1a2e] border-white/5 text-gray-300 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="text-cyan-400 shrink-0">
+                              {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5 text-gray-600" />}
+                            </div>
+                            <div className="overflow-hidden">
+                              <h4 className="text-xs font-bold text-white truncate">{item.title || 'Untitled'}</h4>
+                              <p className="text-[10px] text-gray-400 truncate mt-0.5">{item.username || item.url || item.type}</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white/5 text-gray-400 uppercase shrink-0">
+                            {item.type || 'Login'}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {/* Action button */}
+                <div className="pt-2 border-t border-white/5 flex flex-col gap-2 shrink-0">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs text-gray-400 font-semibold">
+                      {selectedVaultItemIds.length} item(s) selected
+                    </span>
                     <button
-                      key={type}
                       type="button"
-                      onClick={() => setFormType(type)}
-                      className={`py-2 text-xs font-bold rounded-xl border flex items-center justify-center gap-1.5 uppercase transition-all ${
-                        formType === type
-                          ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-                          : 'bg-[#1a1a2e] border-white/5 text-gray-400 hover:text-white'
-                      }`}
+                      onClick={() => {
+                        const filteredIds = vaultItems
+                          .filter((i) => {
+                            if (i.deletedAt) return false;
+                            if (pickerCategory === 'all') return true;
+                            if (pickerCategory === '__uncategorized__') return !i.categoryId;
+                            return i.categoryId === pickerCategory;
+                          })
+                          .map((i) => i.id);
+                        const allSelected = filteredIds.every((id) => selectedVaultItemIds.includes(id));
+                        if (allSelected) {
+                          setSelectedVaultItemIds((prev) => prev.filter((id) => !filteredIds.includes(id)));
+                        } else {
+                          setSelectedVaultItemIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
+                        }
+                      }}
+                      className="text-xs font-bold text-cyan-400 hover:underline"
                     >
-                      {getItemIcon(type)}
-                      {type}
+                      Select / Deselect All
                     </button>
-                  ))}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={selectedVaultItemIds.length === 0 || formLoading}
+                    onClick={handleImportSelected}
+                    className="w-full py-3 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/10 active:scale-[0.98]"
+                  >
+                    {formLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Encrypting & Importing...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        Import Selected ({selectedVaultItemIds.length}) to Shared Vault
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
+            ) : (
+              <form onSubmit={handleFormSubmit} className="flex flex-col gap-3.5 overflow-y-auto pr-1">
+                <div>
+                  <label className="text-gray-400 text-xs font-semibold mb-1 block">Item Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    placeholder="e.g. Server Login, API Access"
+                    maxLength={50}
+                    className="w-full bg-[#1a1a2e] border border-white/5 rounded-xl py-2.5 px-3.5 text-white text-xs font-semibold focus:outline-none focus:border-cyan-500/50 focus:bg-white/5 transition-all"
+                  />
+                </div>
 
-              <div>
-                <label className="text-gray-400 text-xs font-semibold mb-1 block">
-                  Secret Content (Password, Token, Text)
-                </label>
-                <textarea
-                  value={formPlaintext}
-                  onChange={(e) => setFormPlaintext(e.target.value)}
-                  placeholder="Enter the sensitive payload (will be encrypted locally in client memory)..."
-                  required
-                  rows={4}
-                  className="w-full bg-[#1a1a2e] border border-white/5 rounded-xl py-2.5 px-3.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500/50 focus:bg-white/5 transition-all resize-none leading-relaxed"
-                />
-              </div>
+                <div>
+                  <label className="text-gray-400 text-xs font-semibold mb-1 block">Item Type</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['login', 'card', 'note'] as const).map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setFormType(type)}
+                        className={`py-2 text-xs font-bold rounded-xl border flex items-center justify-center gap-1.5 uppercase transition-all ${
+                          formType === type
+                            ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                            : 'bg-[#1a1a2e] border-white/5 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {getItemIcon(type)}
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              <div className="flex items-start gap-2 bg-cyan-500/5 border border-cyan-500/15 rounded-xl p-3 text-cyan-400 text-[10px] leading-relaxed">
-                <Shield className="w-4 h-4 shrink-0 mt-0.5" />
-                <p>
-                  <strong>AES-256-GCM Zero-Knowledge:</strong> This secret is encrypted in your device's memory using a unique key derived for this item before it leaves your device. Plaintext is never stored in the database.
-                </p>
-              </div>
-            </div>
+                <div>
+                  <label className="text-gray-400 text-xs font-semibold mb-1 block">
+                    Secret Content (Password, Token, Text)
+                  </label>
+                  <textarea
+                    value={formPlaintext}
+                    onChange={(e) => setFormPlaintext(e.target.value)}
+                    placeholder="Enter the sensitive payload (will be encrypted locally in client memory)..."
+                    required
+                    rows={4}
+                    className="w-full bg-[#1a1a2e] border border-white/5 rounded-xl py-2.5 px-3.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500/50 focus:bg-white/5 transition-all resize-none leading-relaxed"
+                  />
+                </div>
 
-            <button
-              type="submit"
-              disabled={formLoading}
-              className="w-full py-3 mt-2 bg-cyan-500 hover:bg-cyan-600 text-white font-bold text-sm rounded-xl hover:shadow-lg hover:shadow-cyan-500/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2 border border-cyan-400/20"
-            >
-              {formLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Encrypting and committing...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  {editingItem ? 'Save Updates' : 'Commit to Shared Vault'}
-                </>
-              )}
-            </button>
-          </form>
+                <div className="flex items-start gap-2 bg-cyan-500/5 border border-cyan-500/15 rounded-xl p-3 text-cyan-400 text-[10px] leading-relaxed">
+                  <Shield className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p>
+                    <strong>AES-256-GCM Zero-Knowledge:</strong> This secret is encrypted in your device's memory using a unique key derived for this item before it leaves your device. Plaintext is never stored in the database.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={formLoading}
+                  className="w-full py-3 mt-1 bg-cyan-500 hover:bg-cyan-600 text-white font-bold text-sm rounded-xl hover:shadow-lg hover:shadow-cyan-500/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2 border border-cyan-400/20"
+                >
+                  {formLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Encrypting and committing...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      {editingItem ? 'Save Updates' : 'Commit to Shared Vault'}
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       )}
     </div>

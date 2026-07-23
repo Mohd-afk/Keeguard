@@ -1,6 +1,6 @@
 import { db, auth } from './firebase-init.js';
 import { decryptVault, encryptVault, deriveKeys } from './vault-crypto.js';
-import { syncVault, getLocalVault, getSessionKey, setSessionKey } from './sync-engine.js';
+import { syncVault, getLocalVault, getLocalProfiles, getSessionKey, setSessionKey, saveProfileToCloud } from './sync-engine.js';
 
 // Main message listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -46,6 +46,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .then(cred => sendResponse({ success: true, credential: cred }))
         .catch(err => sendResponse({ success: false, error: err.message }));
       return true;
+
+    case 'GET_PROFILES':
+      syncVault()
+        .then(() => getLocalProfiles())
+        .then(profiles => sendResponse({ success: true, profiles }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
+    case 'SAVE_CAPTURED_PROFILE':
+      saveProfileToCloud(message.profile)
+        .then(profile => sendResponse({ success: true, profile }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
+    default:
+      sendResponse({ success: false, error: 'Unknown message type' });
+      return false;
   }
 });
 

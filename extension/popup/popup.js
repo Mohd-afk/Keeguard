@@ -3,6 +3,9 @@
 document.addEventListener('DOMContentLoaded', async () => {
   // Check if unlocked
   chrome.runtime.sendMessage({ type: 'IS_UNLOCKED' }, (response) => {
+    if (chrome.runtime.lastError) {
+      const _ = chrome.runtime.lastError;
+    }
     if (response && response.unlocked) {
       showMainScreen();
     } else {
@@ -25,6 +28,7 @@ function showMainScreen() {
   document.getElementById('lock-btn').style.display = 'block';
   loadMatchingItems();
   loadAllItems();
+  loadProfiles();
 }
 
 function setupEventListeners() {
@@ -59,6 +63,8 @@ function setupEventListeners() {
 
       if (targetTab === 'generator') {
         generatePassword();
+      } else if (targetTab === 'profiles') {
+        loadProfiles();
       }
     });
   });
@@ -66,6 +72,10 @@ function setupEventListeners() {
   // Search input events
   document.getElementById('matching-search').addEventListener('input', filterMatchingItems);
   document.getElementById('all-search').addEventListener('input', filterAllItems);
+  const profSearch = document.getElementById('profiles-search');
+  if (profSearch) profSearch.addEventListener('input', filterProfiles);
+  const captureBtn = document.getElementById('capture-page-btn');
+  if (captureBtn) captureBtn.addEventListener('click', capturePageFields);
 
   // Generator events
   document.getElementById('length-slider').addEventListener('input', (e) => {
@@ -96,6 +106,9 @@ async function handleLogin() {
     email,
     password
   }, (response) => {
+    if (chrome.runtime.lastError) {
+      const _ = chrome.runtime.lastError;
+    }
     loginBtn.disabled = false;
     loginBtn.textContent = 'Unlock';
 
@@ -132,22 +145,64 @@ function showToast(msg) {
   }, 2200);
 }
 
+async function sendMessageWithFallback(tabId, message, callback) {
+  if (!tabId) return;
+
+  chrome.tabs.sendMessage(tabId, message, async (res) => {
+    if (chrome.runtime.lastError) {
+      const _ = chrome.runtime.lastError;
+      // Content script was not ready. Dynamically inject content scripts into page!
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tabId, allFrames: true },
+          files: [
+            'content/field-classifier.js',
+            'content/form-detector.js',
+            'content/fill-engine.js',
+            'content/overlay.js',
+            'content/save-detector.js',
+            'content/content.js'
+          ]
+        });
+
+        setTimeout(() => {
+          chrome.tabs.sendMessage(tabId, message, (retryRes) => {
+            if (chrome.runtime.lastError) {
+              const err = chrome.runtime.lastError;
+              callback({ success: false, error: 'Cannot fill this page' });
+            } else {
+              callback(retryRes || { success: true });
+            }
+          });
+        }, 120);
+      } catch (e) {
+        callback({ success: false, error: 'Cannot access page' });
+      }
+    } else {
+      callback(res || { success: true });
+    }
+  });
+}
+
 async function autofillIntoPage(item) {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.id) return;
-    chrome.tabs.sendMessage(tab.id, {
+    
+    // Check if URL is restricted (chrome://, chrome-extension://, newtab)
+    if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:'))) {
+      showToast('Open a website page to auto-fill');
+      return;
+    }
+
+    sendMessageWithFallback(tab.id, {
       type: 'AUTOFILL_CREDENTIAL',
       credential: item
     }, (res) => {
-      if (chrome.runtime.lastError) {
-        showToast('Open site page to auto-fill');
-        return;
-      }
       if (res && res.success) {
-        showToast('⚡ Auto-filled into page!');
+        showToast(`⚡ Auto-filled ${res.filledCount || 1} field(s)!`);
       } else {
-        showToast('⚡ Credentials sent to page');
+        showToast(res.error || 'Open a website page to auto-fill');
       }
     });
   } catch (err) {
@@ -490,6 +545,458 @@ function filterAllItems() {
     listDiv.innerHTML = '<div class="subtitle" style="text-align: center; margin-top: 20px;">No items match your search</div>';
   } else {
     renderList(listDiv, filtered);
+  }
+}
+
+let loadedProfiles = [];
+
+async function loadProfiles() {
+  const listDiv = document.getElementById('profiles-list');
+  if (!listDiv) return;
+  listDiv.innerHTML = '<div class="subtitle" style="text-align: center; margin-top: 20px;">Loading profiles...</div>';
+
+  chrome.runtime.sendMessage({ type: 'GET_PROFILES' }, (res) => {
+    if (chrome.runtime.lastError) {
+      const _ = chrome.runtime.lastError;
+    }
+    if (res && res.success) {
+      loadedProfiles = res.profiles || [];
+      renderProfiles(listDiv, loadedProfiles);
+    } else {
+      listDiv.innerHTML = '<div class="subtitle" style="text-align: center; margin-top: 20px;">No field profiles found</div>';
+    }
+  });
+}
+
+function filterProfiles() {
+  const query = (document.getElementById('profiles-search')?.value || '').toLowerCase().trim();
+  const listDiv = document.getElementById('profiles-list');
+  if (!listDiv) return;
+
+  const filtered = loadedProfiles.filter(p =>
+    (p.name && p.name.toLowerCase().includes(query)) ||
+    (p.fields && p.fields.some(f => f.name && f.name.toLowerCase().includes(query)))
+  );
+
+  if (filtered.length === 0) {
+    listDiv.innerHTML = '<div class="subtitle" style="text-align: center; margin-top: 20px;">No profiles match search</div>';
+  } else {
+    renderProfiles(listDiv, filtered);
+  }
+}
+
+function renderProfiles(container, profiles) {
+  container.innerHTML = '';
+  if (!profiles || profiles.length === 0) {
+    container.innerHTML = '<div class="subtitle" style="text-align: center; margin-top: 20px;">No custom profiles created yet</div>';
+    return;
+  }
+
+  profiles.forEach(profile => {
+    const card = document.createElement('div');
+    card.className = 'item-card';
+
+    const header = document.createElement('div');
+    header.className = 'item-card-header';
+
+    const info = document.createElement('div');
+    info.className = 'item-info';
+
+    const title = document.createElement('span');
+    title.className = 'item-title';
+    title.textContent = profile.name || 'Untitled Profile';
+
+    const user = document.createElement('span');
+    user.className = 'item-user';
+    user.textContent = profile.url ? profile.url : `${(profile.fields || []).length} field(s)`;
+
+    info.appendChild(title);
+    info.appendChild(user);
+
+    const actions = document.createElement('div');
+    actions.className = 'item-actions';
+
+    // Quick Fill button (styled identical to vault item Fill button)
+    const fillBtn = document.createElement('button');
+    fillBtn.className = 'action-btn-sm';
+    fillBtn.innerHTML = '⚡ Fill';
+    fillBtn.title = 'Fill all matching fields on page';
+    fillBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      autofillProfileIntoPage(profile);
+    });
+
+    actions.appendChild(fillBtn);
+    header.appendChild(info);
+    header.appendChild(actions);
+    card.appendChild(header);
+
+    // Click header to toggle item-details expansion & trigger autofill
+    header.addEventListener('click', () => {
+      const isExpanded = card.classList.contains('expanded');
+      container.querySelectorAll('.item-card.expanded').forEach(c => {
+        if (c !== card) c.classList.remove('expanded');
+      });
+      card.classList.toggle('expanded');
+      if (!isExpanded) {
+        autofillProfileIntoPage(profile);
+      }
+    });
+
+    // Expanded Details Section (matching vault item detail design)
+    const details = document.createElement('div');
+    details.className = 'item-details';
+
+    // 1. Website URL if present
+    if (profile.url) {
+      const urlRow = createDetailFieldRow('Website URL', profile.url, 'Copied URL!');
+      if (urlRow) details.appendChild(urlRow);
+    }
+
+    // 2. Custom Fields inside Profile
+    const fields = profile.fields || [];
+    fields.forEach(f => {
+      if (f.sensitive || f.type === 'password') {
+        const pRow = document.createElement('div');
+        pRow.className = 'detail-row';
+        pRow.innerHTML = `
+          <span class="detail-label">${escapeHtml(f.name)}</span>
+          <div class="detail-value-group">
+            <input type="password" class="detail-input pwd-font pwd-view-input" value="${escapeHtml(f.value || '')}" readonly>
+            <button class="action-btn-sm toggle-pwd-btn" title="Show/Hide">👁️</button>
+            <button class="action-btn-sm copy-p-btn" title="Copy ${escapeHtml(f.name)}">📋 Copy</button>
+          </div>
+        `;
+        const pwdInput = pRow.querySelector('.pwd-view-input');
+        const togglePwdBtn = pRow.querySelector('.toggle-pwd-btn');
+        togglePwdBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (pwdInput.type === 'password') {
+            pwdInput.type = 'text';
+            togglePwdBtn.textContent = '🔒';
+          } else {
+            pwdInput.type = 'password';
+            togglePwdBtn.textContent = '👁️';
+          }
+        });
+        pRow.querySelector('.copy-p-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          copyToClipboard(f.value || '');
+          showToast(`Copied ${f.name}!`);
+        });
+        details.appendChild(pRow);
+      } else {
+        const row = createDetailFieldRow(f.name, f.value, `Copied ${f.name}!`);
+        if (row) details.appendChild(row);
+      }
+    });
+
+    card.appendChild(details);
+    container.appendChild(card);
+  });
+}
+
+async function autofillProfileIntoPage(profile) {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id) return;
+
+    if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:'))) {
+      showToast('Open a website page to auto-fill');
+      return;
+    }
+
+    sendMessageWithFallback(tab.id, {
+      type: 'AUTOFILL_PROFILE',
+      profile: profile
+    }, (res) => {
+      if (res && res.success) {
+        showToast(`⚡ Auto-filled ${res.filledCount || 1} field(s)!`);
+      } else {
+        showToast(res.error || 'Open a website page to auto-fill');
+      }
+    });
+  } catch (e) {
+    console.error('Failed to autofill profile:', e);
+  }
+}
+
+// ── Capture from Page ───────────────────────────────────────────────────
+
+let capturedFields = [];
+
+async function capturePageFields() {
+  const captureBtn = document.getElementById('capture-page-btn');
+  if (captureBtn) { captureBtn.textContent = '⏳'; captureBtn.disabled = true; }
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('about:')) {
+      showToast('Open a real webpage to capture fields');
+      if (captureBtn) { captureBtn.textContent = '📷 Capture'; captureBtn.disabled = false; }
+      return;
+    }
+
+    // Try sending message to content script first
+    chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE_FIELDS' }, async (res) => {
+      if (chrome.runtime.lastError) { const _ = chrome.runtime.lastError; }
+
+      if (res && res.success && res.fields && res.fields.length > 0) {
+        if (captureBtn) { captureBtn.textContent = '📷 Capture'; captureBtn.disabled = false; }
+        capturedFields = res.fields;
+        showCaptureModal(res.fields, res.url || tab.url);
+        return;
+      }
+
+      // Fallback: executeScript across all frames in parallel
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id, allFrames: true },
+          func: () => {
+            const captured = [];
+            const seen = new Set();
+
+            function cleanLabelText(str) {
+              if (!str) return '';
+              return String(str)
+                .replace(/[\n\r\t]+/g, ' ')
+                .replace(/[*ℹ️?]+/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            }
+
+            function extractFieldLabel(el, fallbackIdx) {
+              if (!el) return `Field ${fallbackIdx}`;
+              if (el.id) {
+                try {
+                  const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+                  if (lbl) { const t = cleanLabelText(lbl.innerText); if (t) return t; }
+                } catch(e) {}
+              }
+              const enclosingLabel = el.closest('label');
+              if (enclosingLabel) {
+                const clone = enclosingLabel.cloneNode(true);
+                clone.querySelectorAll('input, select, textarea, button, script, style').forEach(n => n.remove());
+                const t = cleanLabelText(clone.innerText);
+                if (t) return t;
+              }
+              const ariaLabel = el.getAttribute('aria-label');
+              if (ariaLabel?.trim()) return cleanLabelText(ariaLabel);
+              const ariaLabelledBy = el.getAttribute('aria-labelledby');
+              if (ariaLabelledBy) {
+                try {
+                  const lbl = document.getElementById(ariaLabelledBy);
+                  if (lbl && lbl.innerText?.trim()) return cleanLabelText(lbl.innerText);
+                } catch(e) {}
+              }
+              if (el.placeholder?.trim() && !/^[.\s•*]+$/.test(el.placeholder)) {
+                return cleanLabelText(el.placeholder);
+              }
+              const td = el.closest('td');
+              if (td) {
+                const prevTd = td.previousElementSibling;
+                if (prevTd && prevTd.innerText?.trim()) {
+                  const t = cleanLabelText(prevTd.innerText);
+                  if (t) return t;
+                }
+                const tr = td.closest('tr');
+                if (tr) {
+                  const th = tr.querySelector('th, td:not(:last-child)');
+                  if (th && th !== td && th.innerText?.trim()) {
+                    const t = cleanLabelText(th.innerText);
+                    if (t) return t;
+                  }
+                }
+              }
+              let parent = el.parentElement;
+              for (let depth = 0; depth < 4 && parent && parent.tagName !== 'BODY' && parent.tagName !== 'FORM'; depth++) {
+                const textNodes = [];
+                const children = Array.from(parent.children);
+                for (const child of children) {
+                  if (child.contains(el)) break;
+                  if (['SCRIPT', 'STYLE', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(child.tagName)) continue;
+                  const txt = child.innerText?.trim();
+                  if (txt && txt.length > 1 && txt.length < 100) textNodes.push(txt);
+                }
+                if (textNodes.length > 0) {
+                  const cleaned = cleanLabelText(textNodes.join(' '));
+                  if (cleaned) return cleaned;
+                }
+                parent = parent.parentElement;
+              }
+              let sib = el.previousElementSibling;
+              while (sib) {
+                if (!['SCRIPT', 'STYLE', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(sib.tagName)) {
+                  const t = sib.innerText?.trim();
+                  if (t && t.length > 1 && t.length < 100) {
+                    const cleaned = cleanLabelText(t);
+                    if (cleaned) return cleaned;
+                  }
+                }
+                sib = sib.previousElementSibling;
+              }
+              const nameAttr = el.getAttribute('name') || el.getAttribute('id');
+              if (nameAttr?.trim()) return cleanLabelText(nameAttr.replace(/[-_]/g, ' '));
+              return `Field ${fallbackIdx} (${(el.type || el.tagName || 'field').toUpperCase()})`;
+            }
+
+            const elements = document.querySelectorAll(
+              'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, [role="combobox"]'
+            );
+
+            let index = 1;
+            elements.forEach(el => {
+              if (el.disabled) return;
+              const style = window.getComputedStyle(el);
+              if (style.display === 'none' || style.visibility === 'hidden') return;
+              const rect = el.getBoundingClientRect();
+              if (rect.width === 0 && rect.height === 0) return;
+
+              const label = extractFieldLabel(el, index++);
+              if (!label) return;
+
+              let value = '';
+              if (el.tagName === 'SELECT') {
+                value = el.options[el.selectedIndex]?.text?.trim() || el.value || '';
+              } else {
+                value = (el.value || '').trim();
+              }
+
+              const key = label.toLowerCase();
+              if (seen.has(key)) return;
+              seen.add(key);
+              captured.push({ label, value, sensitive: el.type === 'password' });
+            });
+
+            return { fields: captured, url: window.location.href };
+          }
+        });
+
+        if (captureBtn) { captureBtn.textContent = '📷 Capture'; captureBtn.disabled = false; }
+
+        let allCaptured = [];
+        if (results && results.length > 0) {
+          results.forEach(r => {
+            if (r.result && r.result.fields && r.result.fields.length > 0) {
+              allCaptured = allCaptured.concat(r.result.fields);
+            }
+          });
+        }
+
+        // Deduplicate across frames
+        const uniqueFields = [];
+        const seenKeys = new Set();
+        allCaptured.forEach(f => {
+          const k = f.label.toLowerCase();
+          if (!seenKeys.has(k)) {
+            seenKeys.add(k);
+            uniqueFields.push(f);
+          }
+        });
+
+        if (uniqueFields.length > 0) {
+          capturedFields = uniqueFields;
+          showCaptureModal(uniqueFields, tab.url);
+        } else {
+          showToast('No form fields found on this page');
+        }
+      } catch (execErr) {
+        if (captureBtn) { captureBtn.textContent = '📷 Capture'; captureBtn.disabled = false; }
+        console.error('[Capture] executeScript fallback failed:', execErr);
+        showToast('No form fields found on this page');
+      }
+    });
+  } catch (e) {
+    if (captureBtn) { captureBtn.textContent = '📷 Capture'; captureBtn.disabled = false; }
+    showToast('Could not capture fields');
+  }
+}
+
+function showCaptureModal(fields, pageUrl) {
+  const modal = document.getElementById('capture-modal');
+  const subtitle = document.getElementById('capture-subtitle');
+  const fieldsList = document.getElementById('capture-fields-list');
+  const nameInput = document.getElementById('capture-profile-name');
+  const saveBtn = document.getElementById('capture-save-btn');
+  const closeBtn = document.getElementById('capture-close-btn');
+  if (!modal || !fieldsList) return;
+
+  // Set subtitle
+  let urlHost = '';
+  try { urlHost = new URL(pageUrl).hostname; } catch(e) {}
+  if (subtitle) subtitle.textContent = `${fields.length} fields found${urlHost ? ' · ' + urlHost : ''}`;
+  if (nameInput) { nameInput.value = urlHost ? urlHost.replace('www.', '') : ''; }
+
+  // Render field checkboxes
+  fieldsList.innerHTML = '';
+  fields.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.id = `cap-field-${i}`;
+    chk.checked = true;
+    chk.style.cssText = 'width:16px;height:16px;accent-color:#06b6d4;flex-shrink:0;cursor:pointer;';
+    const info = document.createElement('label');
+    info.htmlFor = `cap-field-${i}`;
+    info.style.cssText = 'flex:1;min-width:0;cursor:pointer;';
+    info.innerHTML = `
+      <div style="font-size:12px;color:#cbd5e1;font-weight:500;truncate;">${escapeHtml(f.label)}</div>
+      <div style="font-size:11px;color:${f.sensitive ? '#fbbf24' : '#64748b'};truncate;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.sensitive ? '••••••••' : (f.value || '(empty)')}</div>
+    `;
+    row.appendChild(chk);
+    row.appendChild(info);
+    fieldsList.appendChild(row);
+  });
+
+  modal.style.display = 'flex';
+
+  // Close
+  if (closeBtn) {
+    closeBtn.onclick = () => { modal.style.display = 'none'; };
+  }
+  modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+
+  // Save
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      const name = (nameInput?.value || '').trim();
+      if (!name) { nameInput?.focus(); showToast('Enter a profile name first'); return; }
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+
+      const selected = fields.filter((_, i) => {
+        const chk = document.getElementById(`cap-field-${i}`);
+        return chk && chk.checked;
+      });
+
+      if (selected.length === 0) { showToast('Select at least 1 field'); saveBtn.disabled = false; saveBtn.textContent = '✅ Save as Profile'; return; }
+
+      const profileFields = selected.map((f, i) => ({
+        id: 'field_' + Date.now() + '_' + i,
+        name: f.label,
+        value: f.value || '',
+        type: f.sensitive ? 'password' : 'text',
+        sensitive: f.sensitive || false,
+      }));
+
+      // Send to service worker to save via the vault
+      chrome.runtime.sendMessage({
+        type: 'SAVE_CAPTURED_PROFILE',
+        profile: { name, fields: profileFields, icon: 'Globe', color: '#06b6d4', url: pageUrl }
+      }, (res) => {
+        if (chrome.runtime.lastError) { const _ = chrome.runtime.lastError; }
+        modal.style.display = 'none';
+        saveBtn.disabled = false;
+        saveBtn.textContent = '✅ Save as Profile';
+        if (res && res.success) {
+          showToast(`✅ Profile "${name}" saved with ${profileFields.length} fields!`);
+          loadProfiles(); // refresh list
+        } else {
+          showToast('Failed to save profile');
+        }
+      });
+    };
   }
 }
 

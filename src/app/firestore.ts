@@ -152,6 +152,40 @@ function categoriesDocRef(uid: string) {
     return doc(getFirebaseDb(), 'users', uid, 'data', 'categories');
 }
 
+function fieldProfilesDocRef(uid: string) {
+    return doc(getFirebaseDb(), 'users', uid, 'data', 'field_profiles');
+}
+
+export async function saveFieldProfilesToCloud(
+    uid: string,
+    profiles: any[],
+): Promise<void> {
+    log.info('Saving field profiles to cloud', { uid });
+    await setDoc(fieldProfilesDocRef(uid), {
+        profiles: JSON.stringify(profiles),
+        updatedAt: serverTimestamp(),
+    });
+    log.debug('Field profiles saved to cloud', { uid });
+}
+
+export async function loadFieldProfilesFromCloud(
+    uid: string,
+): Promise<any[] | null> {
+    log.debug('Loading field profiles from cloud', { uid });
+    const snap = await getDoc(fieldProfilesDocRef(uid));
+    if (!snap.exists()) {
+        log.debug('No field profiles document found in cloud', { uid });
+        return null;
+    }
+
+    const data = snap.data();
+    log.info('Field profiles loaded from cloud', { uid });
+    if (data.profiles) {
+        return JSON.parse(data.profiles);
+    }
+    return null;
+}
+
 export async function saveCategoriesToCloud(
     uid: string,
     categories: any[],
@@ -222,11 +256,12 @@ export async function loadSettingsFromCloud(
  */
 export async function deleteCloudVault(uid: string): Promise<void> {
     log.warn('Deleting cloud vault data', { uid });
-    // Delete vault, settings, and categories subdocuments (NOT the parent user doc)
+    // Delete vault, settings, categories, and field_profiles subdocuments (NOT the parent user doc)
     const batch = writeBatch(getFirebaseDb());
     batch.delete(vaultDocRef(uid));
     batch.delete(settingsDocRef(uid));
     batch.delete(categoriesDocRef(uid));
+    batch.delete(fieldProfilesDocRef(uid));
     await batch.commit();
     log.info('Cloud vault data deleted successfully', { uid });
 }

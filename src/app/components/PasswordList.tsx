@@ -47,6 +47,8 @@ import { useSmartSearch } from '../hooks/useSmartSearch';
 import { useSort } from '../hooks/useSort';
 import { Sidebar, type SidebarFilter } from './Sidebar';
 import { TEMPLATES } from './AddEditForm';
+import { PROFILE_PRESETS, PresetPreviewSheet } from './ManageProfiles';
+import { addFieldProfile } from '../store';
 import { SortModal } from './SortModal';
 import type { User } from 'firebase/auth';
 import { CategoryIconMap } from './ManageCategories';
@@ -247,6 +249,7 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
   const [recentExpanded, setRecentExpanded] = useState(false);
   const [showAllFavourites, setShowAllFavourites] = useState(false);
   const [showAllRecent, setShowAllRecent] = useState(false);
+  const [selectedPresetPreview, setSelectedPresetPreview] = useState<(typeof PROFILE_PRESETS)[0] | null>(null);
 
   // ── Full Power Search Upgrades (D1) ──────────────────────────────────
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -943,6 +946,47 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
               })}
             </div>
 
+            {/* ── Profile Presets Section ──────────────────────────── */}
+            <div className="bg-gradient-to-br from-violet-500/10 to-purple-600/10 border border-violet-500/20 rounded-2xl p-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <h2 className="text-white text-base font-bold flex items-center gap-2">
+                <span className="text-violet-400">⚡</span> Custom Profile Presets
+              </h2>
+              <p className="text-gray-400 text-xs mt-1 leading-relaxed">
+                1-click create a ready-made autofill profile with predefined field names. Fill in the values once and reuse everywhere.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3.5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              {PROFILE_PRESETS.map((preset) => {
+                const accentColors: Record<string, string> = {
+                  ecommerce_seller: '#f97316',
+                  personal_id: '#3b82f6',
+                  banking_finance: '#f59e0b',
+                  job_application: '#8b5cf6',
+                  medical_health: '#ef4444',
+                };
+                const accentColor = accentColors[preset.id] || '#06b6d4';
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => setSelectedPresetPreview(preset)}
+                    className="p-4 rounded-2xl border border-white/5 bg-[#16213e] hover:bg-[#1f2d52] text-left transition-all duration-300 relative overflow-hidden group active:scale-[0.98] flex flex-col justify-between min-h-[110px] shadow-md hover:shadow-lg hover:border-violet-500/30"
+                  >
+                    <div className="flex justify-between items-start w-full">
+                      <div className="p-2.5 rounded-xl transition-all duration-300 group-hover:scale-110" style={{ backgroundColor: `${accentColor}15`, color: accentColor }}>
+                        <span className="text-lg">{preset.id === 'ecommerce_seller' ? '🛒' : preset.id === 'personal_id' ? '🪪' : preset.id === 'banking_finance' ? '🏦' : preset.id === 'job_application' ? '💼' : '🏥'}</span>
+                      </div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">Profile</span>
+                    </div>
+                    <div className="mt-3">
+                      <p className="text-white font-semibold text-xs group-hover:text-violet-400 transition-colors truncate">{preset.name}</p>
+                      <p className="text-gray-500 text-[10px] mt-0.5 truncate">{preset.fields.length} predefined fields</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
 
           </div>
         )}
@@ -1433,6 +1477,37 @@ export function PasswordList({ onLock: _onLock, user }: PasswordListProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Preset Preview Modal ────────────────────────────────────── */}
+      {selectedPresetPreview && (
+        <PresetPreviewSheet
+          preset={selectedPresetPreview}
+          onClose={() => setSelectedPresetPreview(null)}
+          onApply={async (profileName, profileUrl) => {
+            try {
+              const fields = selectedPresetPreview.fields.map((f, i) => ({
+                id: 'field_' + Date.now() + '_' + i,
+                name: f.name,
+                value: '',
+                type: f.type,
+                sensitive: f.sensitive,
+              }));
+              await addFieldProfile({
+                name: profileName,
+                url: profileUrl || undefined,
+                icon: selectedPresetPreview.icon,
+                color: selectedPresetPreview.color,
+                fields,
+              });
+              setSelectedPresetPreview(null);
+              toast.success(`✅ Profile "${profileName}" created!`);
+              navigate('/profiles');
+            } catch {
+              toast.error('Failed to create profile');
+            }
+          }}
+        />
       )}
 
       {/* ── Bottom Nav ──────────────────────────────────────────────── */}

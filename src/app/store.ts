@@ -18,6 +18,8 @@ import {
   deleteCloudVault,
   saveCategoriesToCloud,
   loadCategoriesFromCloud,
+  saveFieldProfilesToCloud,
+  loadFieldProfilesFromCloud,
 } from './firestore';
 import { idbGet, idbSet, idbDelete } from './idb';
 import { createLogger } from './utils/logger';
@@ -144,6 +146,31 @@ export interface CustomCategory {
   updatedAt?: string;
 }
 
+// ── Custom Field Profiles ─────────────────────────────────────────────
+
+export type CustomFieldType = 'text' | 'number' | 'date' | 'email' | 'phone' | 'url' | 'password';
+
+/** A single key-value entry inside a FieldProfile */
+export interface CustomField {
+  id: string;
+  name: string;             // e.g. "Weight", "Blood Group"
+  value: string;            // Always a string; UI casts based on type
+  type: CustomFieldType;
+  sensitive: boolean;       // true = mask like a password in UI
+}
+
+/** A named group of custom fields (e.g. "My Personal Info") */
+export interface FieldProfile {
+  id: string;
+  name: string;             // e.g. "My Personal Info"
+  url?: string;             // Optional website URL
+  icon?: string;            // Lucide icon name
+  color?: string;           // Hex accent color
+  fields: CustomField[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppSettings {
   autoLockTimeout: number; // minutes, 0 means never
   lockOnHide: boolean; // lock when app goes to background
@@ -191,6 +218,8 @@ export function clearSession(): void {
   _vaultChangeListeners = [];
   _cachedCustomCategories = null;
   _customCategoryChangeListeners = [];
+  _cachedFieldProfiles = null;
+  _fieldProfileChangeListeners = [];
 }
 
 /**
@@ -206,6 +235,7 @@ export async function clearLocalVaultData(): Promise<void> {
   log.info('Clearing local vault data from IndexedDB (settings preserved)');
   await idbDelete(VAULT_KEY);
   await idbDelete(CUSTOM_CATEGORIES_KEY);
+  await idbDelete(FIELD_PROFILES_KEY);
 }
 
 export function getSessionPassword(): string | null {
@@ -593,6 +623,11 @@ export async function unlockVault(password: string): Promise<VaultItem[]> {
   // Load custom categories after successful unlock
   loadCustomCategories().catch((e) => {
     log.error('Failed to load custom categories on unlock:', e);
+  });
+
+  // Load field profiles after successful unlock
+  loadFieldProfiles().catch((e) => {
+    log.error('Failed to load field profiles on unlock:', e);
   });
 
   if (uid && key) {
@@ -1280,6 +1315,11 @@ export async function unlockWithBiometric(): Promise<boolean> {
     loadCustomCategories().catch((e) => {
       log.error('Failed to load custom categories on biometric unlock:', e);
     });
+
+    // Load field profiles after successful biometric unlock
+    loadFieldProfiles().catch((e) => {
+      log.error('Failed to load field profiles on biometric unlock:', e);
+    });
     
     const uid = getUid();
     if (uid && key) {
@@ -1580,4 +1620,190 @@ export async function reorderCustomCategories(orderedIds: string[]): Promise<voi
   });
 
   await saveCustomCategories(reordered);
+}
+
+// ── Field Profiles System ─────────────────────────────────────────────
+
+const FIELD_PROFILES_KEY = 'securevault_field_profiles';
+let _cachedFieldProfiles: FieldProfile[] | null = null;
+let _fieldProfileChangeListeners: Array<(profiles: FieldProfile[]) => void> = [];
+
+function notifyFieldProfileListeners(): void {
+  const profiles = _cachedFieldProfiles || [];
+  _fieldProfileChangeListeners.forEach((listener) => {
+    try {
+      listener(profiles);
+    } catch (e) {
+      log.error('Error in field profile listener:', e);
+    }
+  });
+}
+
+export function subscribeToFieldProfiles(callback: (profiles: FieldProfile[]) => void): () => void {
+  _fieldProfileChangeListeners.push(callback);
+
+  // Proactively load if cache is empty
+  if (_cachedFieldProfiles === null) {
+    loadFieldProfiles().catch((e) => {
+      log.error('Proactive field profile load failed:', e);
+    });
+  }
+
+  // Emit current state immediately
+  callback(_cachedFieldProfiles || []);
+
+  return () => {
+    _fieldProfileChangeListeners = _fieldProfileChangeListeners.filter((l) => l !== callback);
+  };
+}
+
+export function getFieldProfiles(): FieldProfile[] {
+  return _cachedFieldProfiles || [];
+}
+
+export async function loadFieldProfiles(): Promise<FieldProfile[]> {
+  const uid = getUid();
+  let profiles: FieldProfile[] = [];
+
+  // 1. Try to load from IndexedDB first
+  try {
+    const local = await idbGet<FieldProfile[]>(FIELD_PROFILES_KEY);
+    if (local && Array.isArray(local) && local.length > 0) {
+      profiles = local;
+    }
+  } catch (e) {
+    log.warn('Failed to load field profiles from IndexedDB:', e);
+  }
+
+  // 2. Try to load from cloud if authenticated
+  if (uid) {
+    try {
+      const cloud = await loadFieldProfilesFromCloud(uid);
+      if (cloud && Array.isArray(cloud) && cloud.length > 0) {
+        profiles = cloud;
+        await idbSet(FIELD_PROFILES_KEY, profiles);
+      }
+    } catch (e) {
+      log.warn('Failed to load field profiles from cloud:', e);
+    }
+  }
+
+  _cachedFieldProfiles = profiles;
+  notifyFieldProfileListeners();
+  return profiles;
+}
+
+async function saveFieldProfilesEverywhere(profiles: FieldProfile[]): Promise<void> {
+  _cachedFieldProfiles = profiles;
+
+  try {
+    await idbSet(FIELD_PROFILES_KEY, profiles);
+  } catch (e) {
+    log.error('Failed to save field profiles to IndexedDB:', e);
+  }
+
+  const uid = getUid();
+  if (uid) {
+    try {
+      await saveFieldProfilesToCloud(uid, profiles);
+    } catch (e) {
+      log.error('Failed to sync field profiles to cloud:', e);
+    }
+  }
+
+  notifyFieldProfileListeners();
+}
+
+export async function addFieldProfile(
+  draft: Omit<FieldProfile, 'id' | 'createdAt' | 'updatedAt'>,
+): Promise<FieldProfile> {
+  const profiles = _cachedFieldProfiles ? [..._cachedFieldProfiles] : await loadFieldProfiles();
+  const now = new Date().toISOString();
+  const newProfile: FieldProfile = {
+    ...draft,
+    id: 'profile_' + generateId(),
+    fields: draft.fields || [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  profiles.push(newProfile);
+  await saveFieldProfilesEverywhere(profiles);
+  log.info('Added field profile', { id: newProfile.id, name: newProfile.name });
+  return newProfile;
+}
+
+export async function updateFieldProfile(
+  id: string,
+  updates: Partial<Omit<FieldProfile, 'id' | 'createdAt'>>,
+): Promise<void> {
+  const profiles = _cachedFieldProfiles ? [..._cachedFieldProfiles] : await loadFieldProfiles();
+  const idx = profiles.findIndex((p) => p.id === id);
+  if (idx === -1) {
+    log.warn('updateFieldProfile: profile not found', { id });
+    return;
+  }
+  profiles[idx] = {
+    ...profiles[idx],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveFieldProfilesEverywhere(profiles);
+  log.info('Updated field profile', { id });
+}
+
+export async function deleteFieldProfile(id: string): Promise<void> {
+  const profiles = (_cachedFieldProfiles ? [..._cachedFieldProfiles] : await loadFieldProfiles()).filter(
+    (p) => p.id !== id,
+  );
+  await saveFieldProfilesEverywhere(profiles);
+  log.info('Deleted field profile', { id });
+}
+
+/** Add or replace a single field inside a profile */
+export async function upsertFieldInProfile(profileId: string, field: CustomField): Promise<void> {
+  const profiles = _cachedFieldProfiles ? [..._cachedFieldProfiles] : await loadFieldProfiles();
+  const pIdx = profiles.findIndex((p) => p.id === profileId);
+  if (pIdx === -1) {
+    log.warn('upsertFieldInProfile: profile not found', { profileId });
+    return;
+  }
+  const fields = [...profiles[pIdx].fields];
+  const fIdx = fields.findIndex((f) => f.id === field.id);
+  if (fIdx === -1) {
+    fields.push(field);
+  } else {
+    fields[fIdx] = field;
+  }
+  profiles[pIdx] = { ...profiles[pIdx], fields, updatedAt: new Date().toISOString() };
+  await saveFieldProfilesEverywhere(profiles);
+}
+
+/** Remove a single field from a profile */
+export async function deleteFieldFromProfile(profileId: string, fieldId: string): Promise<void> {
+  const profiles = _cachedFieldProfiles ? [..._cachedFieldProfiles] : await loadFieldProfiles();
+  const pIdx = profiles.findIndex((p) => p.id === profileId);
+  if (pIdx === -1) return;
+  const fields = profiles[pIdx].fields.filter((f) => f.id !== fieldId);
+  profiles[pIdx] = { ...profiles[pIdx], fields, updatedAt: new Date().toISOString() };
+  await saveFieldProfilesEverywhere(profiles);
+  log.info('Deleted field from profile', { profileId, fieldId });
+}
+
+/** Reorder fields inside a profile to match the given ordered field IDs */
+export async function reorderFieldsInProfile(profileId: string, orderedFieldIds: string[]): Promise<void> {
+  const profiles = _cachedFieldProfiles ? [..._cachedFieldProfiles] : await loadFieldProfiles();
+  const pIdx = profiles.findIndex((p) => p.id === profileId);
+  if (pIdx === -1) return;
+  const existingFields = profiles[pIdx].fields;
+  const reordered: CustomField[] = [];
+  orderedFieldIds.forEach((fid) => {
+    const f = existingFields.find((x) => x.id === fid);
+    if (f) reordered.push(f);
+  });
+  // Append any field not in the ordered list
+  existingFields.forEach((f) => {
+    if (!orderedFieldIds.includes(f.id)) reordered.push(f);
+  });
+  profiles[pIdx] = { ...profiles[pIdx], fields: reordered, updatedAt: new Date().toISOString() };
+  await saveFieldProfilesEverywhere(profiles);
 }

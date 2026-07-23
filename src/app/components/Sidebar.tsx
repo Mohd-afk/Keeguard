@@ -21,6 +21,7 @@ import {
   FolderHeart,
   ChevronDown,
   Bell,
+  LayoutList,
 } from 'lucide-react';
 import type { VaultItem } from '../store';
 import type { User } from 'firebase/auth';
@@ -475,6 +476,15 @@ export function Sidebar({
               onClick={() => {
                 onClose();
                 navigate('/categories');
+              }}
+            />
+            <SidebarRow
+              icon={<LayoutList className="w-5 h-5" />}
+              label="Field Profiles"
+              active={false}
+              onClick={() => {
+                onClose();
+                navigate('/profiles');
               }}
             />
           </div>

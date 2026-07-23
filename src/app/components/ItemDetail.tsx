@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Eye, EyeOff, Copy, ExternalLink, Pencil, Trash2, Share2, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Check, RotateCcw, AlertTriangle, Star, Sparkles } from 'lucide-react';
-import { getVaultItem, deleteVaultItem, permanentlyDeleteVaultItem, restoreVaultItem, toggleFavorite, type ItemType } from '../store';
+import { ArrowLeft, Eye, EyeOff, Copy, ExternalLink, Pencil, Trash2, Share2, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Check, RotateCcw, AlertTriangle, Star, Sparkles, LayoutList, ChevronDown } from 'lucide-react';
+import { getVaultItem, deleteVaultItem, permanentlyDeleteVaultItem, restoreVaultItem, toggleFavorite, subscribeToFieldProfiles, type ItemType, type FieldProfile } from '../store';
 import { format, differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 import { Share } from '@capacitor/share';
@@ -59,6 +59,17 @@ export function ItemDetail() {
   const [copied, setCopied] = useState<string | null>(null);
   const [isFav, setIsFav] = useState(item?.isFavorite ?? false);
   const [showFieldSecrets, setShowFieldSecrets] = useState<Record<string, boolean>>({});
+
+  // Field Profiles — for Quick Copy section
+  const [fieldProfiles, setFieldProfiles] = useState<FieldProfile[]>([]);
+  const [showProfiles, setShowProfiles] = useState(false);
+  const [expandedProfileId, setExpandedProfileId] = useState<string | null>(null);
+  const [profileCopied, setProfileCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = subscribeToFieldProfiles(setFieldProfiles);
+    return unsub;
+  }, []);
 
   const parsedTemplate = item ? parseTemplateNote(item.note || '') : null;
   const activeTemplate = parsedTemplate ? TEMPLATES.find(t => t.id === parsedTemplate.templateId) : null;
@@ -382,6 +393,85 @@ export function ItemDetail() {
           </div>
         )}
       </div>
+
+      {/* Quick Copy from Profiles */}
+      {fieldProfiles.length > 0 && (
+        <div className="mx-4 mt-1 mb-2">
+          <button
+            onClick={() => setShowProfiles((s) => !s)}
+            className="w-full flex items-center gap-3 px-4 py-3 bg-white/[0.03] border border-white/[0.06] rounded-2xl hover:bg-white/[0.06] transition-colors group"
+          >
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+              <LayoutList className="w-4 h-4 text-cyan-400" />
+            </div>
+            <span className="flex-1 text-left text-gray-300 text-sm font-medium">Quick Copy from Profiles</span>
+            <ChevronDown
+              className={`w-4 h-4 text-gray-500 transition-transform duration-150 ${showProfiles ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {showProfiles && (
+            <div className="mt-2 space-y-2">
+              {fieldProfiles.map((profile) => (
+                <div key={profile.id} className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden">
+                  {/* Profile header */}
+                  <button
+                    onClick={() => setExpandedProfileId((id) => id === profile.id ? null : profile.id)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors"
+                  >
+                    <span className="flex-1 text-left text-white text-sm font-medium">{profile.name}</span>
+                    <span className="text-gray-500 text-xs">{profile.fields.length} fields</span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-gray-600 transition-transform duration-150 ${
+                        expandedProfileId === profile.id ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {/* Fields list */}
+                  {expandedProfileId === profile.id && (
+                    <div className="border-t border-white/5 divide-y divide-white/5">
+                      {profile.fields.length === 0 && (
+                        <p className="px-4 py-3 text-gray-600 text-xs italic">No fields in this profile</p>
+                      )}
+                      {profile.fields.map((field) => {
+                        const copyKey = `${profile.id}__${field.id}`;
+                        const isCopied = profileCopied === copyKey;
+                        return (
+                          <div key={field.id} className="flex items-center gap-3 px-4 py-2.5 group/row">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-gray-500 text-[10px] font-medium uppercase tracking-wide">{field.name}</p>
+                              <p className="text-gray-200 text-sm font-mono truncate">
+                                {field.sensitive ? '••••••••' : (field.value || <span className="text-gray-600 italic font-sans text-xs">empty</span>)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(field.value).then(() => {
+                                  setProfileCopied(copyKey);
+                                  toast.success(`"${field.name}" copied`);
+                                  setTimeout(() => setProfileCopied(null), 2000);
+                                });
+                              }}
+                              className={`shrink-0 p-1.5 rounded-lg transition-colors ${
+                                isCopied
+                                  ? 'text-cyan-400 bg-cyan-500/10'
+                                  : 'text-gray-600 hover:text-cyan-400 hover:bg-white/5'
+                              }`}
+                            >
+                              {isCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Move to Trash confirmation dialog */}
       {showDeleteDialog && (
