@@ -104,7 +104,11 @@ export function AppShell() {
 
     // Initialize the notifications store now that Firebase is confirmed ready.
     // This MUST be deferred from module load time — Firebase isn't initialized until App.tsx finishes boot.
-    initNotificationsStore();
+    try {
+      initNotificationsStore();
+    } catch (notifErr) {
+      log.warn('AppShell: Failed to initialize notifications store (non-fatal):', notifErr);
+    }
 
     const unsubscribe = onAuthChange((firebaseUser) => {
       clearTimeout(safetyTimer); // Auth responded — cancel the safety timer

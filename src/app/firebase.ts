@@ -81,15 +81,18 @@ export async function initFirebase(): Promise<void> {
     // 2. Init Auth with appropriate persistence
     if (Capacitor.isNativePlatform()) {
         try {
-            // Using initializeAuth instead of getAuth + setPersistence
-            // This prevents IndexedDB initialization from hanging the boot sequence
             _auth = initializeAuth(_app, {
                 persistence: indexedDBLocalPersistence
             });
             console.log('[Firebase] Auth initialized with IndexedDB persistence (native)');
         } catch (err) {
-            console.error('[Firebase] CRITICAL: Auth initialization failed on native. Auth state will be lost on reload.', err);
-            throw err;
+            console.warn('[Firebase] initializeAuth failed on native, falling back to getAuth:', err);
+            try {
+                _auth = getAuth(_app);
+                console.log('[Firebase] Fallback getAuth succeeded');
+            } catch (fallbackErr) {
+                console.error('[Firebase] CRITICAL: Fallback getAuth failed:', fallbackErr);
+            }
         }
     } else {
         _auth = getAuth(_app);

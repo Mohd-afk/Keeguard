@@ -14,7 +14,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, renameSync } from 'fs';
 import { join, resolve } from 'path';
 import { execSync } from 'child_process';
-import admin from 'firebase-admin';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const ROOT    = resolve(import.meta.dirname, '..');
 const DIST    = join(ROOT, 'dist');
@@ -137,11 +138,11 @@ if (!serviceAccountFile) {
 try {
   const serviceAccount = JSON.parse(readFileSync(join(ROOT, serviceAccountFile), 'utf-8'));
 
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+  initializeApp({
+    credential: cert(serviceAccount)
   });
 
-  const db = admin.firestore();
+  const db = getFirestore();
 
   // Use merge: true so we never overwrite min_apk_version or apk_download_url
   // (those fields are only set when publishing a new native APK release).

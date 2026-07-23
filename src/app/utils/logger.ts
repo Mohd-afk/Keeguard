@@ -1,7 +1,16 @@
 // ─── Keeguard Structured Logger ───────────────────────────────────
 // Provides namespaced, leveled logging for debugging auth, sync, and crypto flows.
 // Usage: const log = createLogger('AUTH');  log.info('User signed in', { uid });
+//
+// Log level is controlled at BUILD TIME via Vite's define plugin:
+//   Production build → __LOG_LEVEL__ = 'warn'  (suppresses debug + info)
+//   Development build → __LOG_LEVEL__ = 'debug' (full verbosity)
+// This prevents UIDs, emails, and crypto internals from appearing in
+// production adb logcat or browser DevTools.
 // ─────────────────────────────────────────────────────────────────────
+
+// Injected by Vite at build time. Falls back to 'debug' in test/SSR environments.
+declare const __LOG_LEVEL__: string;
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -29,8 +38,11 @@ const NAMESPACE_COLORS: Record<string, string> = {
   SETTINGS: 'color: #eab308; font-weight: bold',  // yellow
 };
 
-// Minimum log level — set to 'debug' for full verbosity during dev
-let minLevel: LogLevel = 'debug';
+// Minimum log level — controlled by build-time __LOG_LEVEL__ constant.
+// Do NOT hardcode 'debug' here; that leaks sensitive data in production builds.
+let minLevel: LogLevel = (typeof __LOG_LEVEL__ !== 'undefined'
+  ? __LOG_LEVEL__
+  : 'debug') as LogLevel;
 
 export function setLogLevel(level: LogLevel): void {
   minLevel = level;

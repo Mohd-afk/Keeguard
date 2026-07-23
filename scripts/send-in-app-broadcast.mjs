@@ -1,11 +1,16 @@
 // ─── Send In-App Broadcast Notification to All Users ──────────────────────────
-// Run: node scripts/send-in-app-broadcast.mjs "Title" "Body Message"
-// Example: node scripts/send-in-app-broadcast.mjs "🚀 New Update v5.0.1 Live" "Please update your app to get the latest performance fixes!"
+// Usage Option A (Command Line):
+//   node scripts/send-in-app-broadcast.mjs "Your Title Here" "Your Message Body Here"
+//
+// Usage Option B (Interactive Prompt):
+//   node scripts/send-in-app-broadcast.mjs
+//   (It will ask you to type your Title and Message)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import admin from 'firebase-admin';
 import { readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
+import readline from 'readline';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const rootFiles = readdirSync(ROOT);
@@ -23,13 +28,47 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
-const title = process.argv[2] || "⚠️ System Announcement";
-const body = process.argv[3] || "Scheduled maintenance will take place soon. Thank you for your patience!";
+function promptInput(query) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  return new Promise(res => rl.question(query, ans => {
+    rl.close();
+    res(ans);
+  }));
+}
 
 async function broadcastNotification() {
+  let title = process.argv[2];
+  let body = process.argv[3];
+
+  if (!title) {
+    title = await promptInput('📝 Enter Notification Title: ');
+  }
+  if (!body) {
+    body = await promptInput('📝 Enter Notification Message/Body: ');
+  }
+
+  if (!title || !title.trim()) {
+    console.error('❌ Title cannot be empty. Aborting.');
+    process.exit(1);
+  }
+
+  if (!body || !body.trim()) {
+    console.error('❌ Message body cannot be empty. Aborting.');
+    process.exit(1);
+  }
+
   console.log(`\n📢 Preparing Broadcast Notification:`);
-  console.log(`   Title: "${title}"`);
-  console.log(`   Body:  "${body}"\n`);
+  console.log(`   Title: "${title.trim()}"`);
+  console.log(`   Body:  "${body.trim()}"\n`);
+
+  const confirm = await promptInput('⚠️  Are you sure you want to send this in-app notification to ALL users? (y/n): ');
+  if (confirm.toLowerCase() !== 'y' && confirm.toLowerCase() !== 'yes') {
+    console.log('❌ Cancelled by user. No notifications sent.');
+    process.exit(0);
+  }
 
   const db = admin.firestore();
   let pageToken;
@@ -46,8 +85,8 @@ async function broadcastNotification() {
         type: 'system',
         type_category: 'system',
         priority: 'high',
-        title: title,
-        body: body,
+        title: title.trim(),
+        body: body.trim(),
         status: 'pending',
         created_at: admin.firestore.FieldValue.serverTimestamp(),
         read_at: null,
@@ -63,7 +102,7 @@ async function broadcastNotification() {
     pageToken = listUsersResult.pageToken;
   } while (pageToken);
 
-  console.log(`✅ Successfully sent in-app notification to all ${count} users!\n`);
+  console.log(`\n✅ Successfully sent in-app notification to all ${count} users!\n`);
   process.exit(0);
 }
 

@@ -3,7 +3,7 @@ import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: './',
   plugins: [
     // The React and Tailwind plugins are both required for Make, even if
@@ -16,6 +16,15 @@ export default defineConfig({
       // Alias @ to the src directory
       '@': path.resolve(__dirname, './src'),
     },
+  },
+
+  // ── Build-time constants ─────────────────────────────────────────────
+  // __LOG_LEVEL__ is replaced at compile time — no runtime cost.
+  // Production: 'warn' → hides debug/info logs (UIDs, emails, crypto internals)
+  //             from adb logcat and browser DevTools in the wild.
+  // Development: 'debug' → full verbosity for local debugging.
+  define: {
+    __LOG_LEVEL__: JSON.stringify(mode === 'production' ? 'warn' : 'debug'),
   },
 
   build: {
@@ -36,4 +45,4 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
-})
+}))
