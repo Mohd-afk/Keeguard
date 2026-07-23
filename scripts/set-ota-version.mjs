@@ -26,7 +26,7 @@ const body = {
     releaseNotes:    { stringValue:  'GitHub Release workflow + in-app APK update banner (v2.0.5)' },
     releasedAt:      { stringValue:  new Date().toISOString() },
     min_apk_version: { integerValue: '2' },
-    apk_download_url:{ stringValue:  'https://github.com/Mohd-afk/securevault-app/releases/latest' },
+    apk_download_url:{ stringValue:  'https://github.com/Mohd-afk/apk-releases/releases/latest' },
   }
 };
 

@@ -184,10 +184,7 @@ export async function checkApkUpdateRequired(): Promise<ApkUpdateCheckResult> {
     // ── Step 3: Compare and return result ──────────────────────────────
     if (compareVersions(installedVersion, minApkVersion) < 0) {
       log.warn(`[APK_UPDATE] UPDATE REQUIRED — installed: "${installedVersion}", required: ">= ${minApkVersion}"`);
-      // Normalise the download URL to the current (renamed) repo
-      const url = (apkDownloadUrl || '')
-        .replace('securevault-app', 'Keeguard') // fix old repo name
-        || 'https://github.com/Mohd-afk/Keeguard/releases/latest';
+      const url = apkDownloadUrl || 'https://github.com/Mohd-afk/apk-releases/releases/latest';
       return { updateRequired: true, downloadUrl: url };
     }
 

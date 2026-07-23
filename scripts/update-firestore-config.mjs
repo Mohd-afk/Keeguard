@@ -30,7 +30,7 @@ const body = {
     
     // APK versioning
     min_apk_version: { stringValue:  '3.2.0' },
-    apk_download_url:{ stringValue:  'https://github.com/Mohd-afk/securevault-app/releases/tag/v3.2.0' },
+    apk_download_url:{ stringValue:  'https://github.com/Mohd-afk/apk-releases/releases/tag/v5.0.1' },
     
     // Also store version code for internal tracking if needed
     versionCode:     { integerValue: '5' }

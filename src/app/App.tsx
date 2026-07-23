@@ -17,7 +17,7 @@ export default function App() {
   const [bootComplete, setBootComplete] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
   const [apkUpdateRequired, setApkUpdateRequired] = useState(false);
-  const [apkDownloadUrl, setApkDownloadUrl] = useState('https://github.com/Mohd-afk/securevault-app/releases/latest');
+  const [apkDownloadUrl, setApkDownloadUrl] = useState('https://github.com/Mohd-afk/apk-releases/releases/latest');
   const [activeSaveRequest, setActiveSaveRequest] = useState<AutofillSaveEvent | null>(null);
 
   useEffect(() => {
