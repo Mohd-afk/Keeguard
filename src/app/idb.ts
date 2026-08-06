@@ -13,51 +13,47 @@ const DB_VERSION = 1;
 const STORE_NAME = 'keyval';
 
 /**
- * Open (or create) the IndexedDB database.
- * Creates the object store on first run.
+ * Single cached DB connection promise. Opening a new connection on every
+ * operation is wasteful — we open once and reuse for the session lifetime.
  */
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+let _dbPromise: Promise<IDBDatabase> | null = null;
 
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME);
-        log.info('IndexedDB object store created', { storeName: STORE_NAME });
-      }
-    };
+function getDB(): Promise<IDBDatabase> {
+  if (!_dbPromise) {
+    _dbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    request.onsuccess = () => {
-      resolve(request.result);
-    };
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME);
+          log.info('IndexedDB object store created', { storeName: STORE_NAME });
+        }
+      };
 
-    request.onerror = () => {
-      log.error('Failed to open IndexedDB', request.error);
-      reject(request.error);
-    };
-  });
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => {
+        log.error('Failed to open IndexedDB', request.error);
+        _dbPromise = null; // allow retry on next call
+        reject(request.error);
+      };
+    });
+  }
+  return _dbPromise;
 }
 
 /**
  * Get a value by key from IndexedDB.
  */
 export async function idbGet<T>(key: string): Promise<T | null> {
-  const db = await openDB();
+  const db = await getDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.get(key);
-
-    request.onsuccess = () => {
-      resolve(request.result ?? null);
-    };
+    const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(key);
+    request.onsuccess = () => resolve(request.result ?? null);
     request.onerror = () => {
       log.error('IndexedDB get failed', { key, error: request.error });
       reject(request.error);
     };
-
-    tx.oncomplete = () => db.close();
   });
 }
 
@@ -65,19 +61,14 @@ export async function idbGet<T>(key: string): Promise<T | null> {
  * Set a value by key in IndexedDB.
  */
 export async function idbSet(key: string, value: unknown): Promise<void> {
-  const db = await openDB();
+  const db = await getDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.put(value, key);
-
+    const request = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).put(value, key);
     request.onsuccess = () => resolve();
     request.onerror = () => {
       log.error('IndexedDB set failed', { key, error: request.error });
       reject(request.error);
     };
-
-    tx.oncomplete = () => db.close();
   });
 }
 
@@ -85,18 +76,13 @@ export async function idbSet(key: string, value: unknown): Promise<void> {
  * Delete a key from IndexedDB.
  */
 export async function idbDelete(key: string): Promise<void> {
-  const db = await openDB();
+  const db = await getDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.delete(key);
-
+    const request = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).delete(key);
     request.onsuccess = () => resolve();
     request.onerror = () => {
       log.error('IndexedDB delete failed', { key, error: request.error });
       reject(request.error);
     };
-
-    tx.oncomplete = () => db.close();
   });
 }

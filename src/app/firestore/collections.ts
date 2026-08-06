@@ -13,11 +13,11 @@ import {
   limit,
   onSnapshot,
   getDocs,
-  getDoc,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '../firebase';
 import { createLogger } from '../utils/logger';
+import { getDocOrNull, snapsToDocs, snapshotWith, querySnapshotWith } from './helpers';
 
 const log = createLogger('FIRESTORE_COLLECTIONS');
 
@@ -154,18 +154,11 @@ function syncEventsRef(collectionId: string) {
   return collection(getFirebaseDb(), 'collections', collectionId, 'syncEvents');
 }
 
-function userInvitesRef(userId: string) {
-  // Collection-group query across all collections
-  return collection(getFirebaseDb(), 'invites');
-}
-
 // ── Collection reads ──────────────────────────────────────────────────────────
 
 export async function getSharedCollection(collectionId: string): Promise<SharedCollection | null> {
   log.debug('Fetching shared collection', { collectionId });
-  const snap = await getDoc(collectionRef(collectionId));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as SharedCollection;
+  return getDocOrNull<SharedCollection>(collectionRef(collectionId));
 }
 
 export function subscribeToSharedCollection(
@@ -173,15 +166,7 @@ export function subscribeToSharedCollection(
   callback: (collection: SharedCollection | null) => void,
 ): Unsubscribe {
   log.info('Subscribing to shared collection', { collectionId });
-  return onSnapshot(collectionRef(collectionId), (snap) => {
-    if (!snap.exists()) {
-      callback(null);
-      return;
-    }
-    callback({ id: snap.id, ...snap.data() } as SharedCollection);
-  }, (err) => {
-    log.error('Collection snapshot error', { collectionId, err });
-  });
+  return snapshotWith<SharedCollection>(collectionRef(collectionId), callback, log, 'Collection');
 }
 
 // ── Member reads ──────────────────────────────────────────────────────────────
@@ -190,9 +175,7 @@ export async function getMyMembership(
   collectionId: string,
   userId: string,
 ): Promise<CollectionMember | null> {
-  const snap = await getDoc(memberRef(collectionId, userId));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as CollectionMember;
+  return getDocOrNull<CollectionMember>(memberRef(collectionId, userId));
 }
 
 export function subscribeToCollectionMembers(
@@ -201,17 +184,10 @@ export function subscribeToCollectionMembers(
 ): Unsubscribe {
   log.info('Subscribing to collection members', { collectionId });
   const q = query(membersRef(collectionId), where('status', '==', 'active'));
-
-  return onSnapshot(q, (snap) => {
-    const members: CollectionMember[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    } as CollectionMember));
+  return querySnapshotWith<CollectionMember>(q, (members) => {
     log.debug('Members snapshot received', { collectionId, count: members.length });
     callback(members);
-  }, (err) => {
-    log.error('Members snapshot error', { collectionId, err });
-  });
+  }, log, 'Members');
 }
 
 // ── Item reads ────────────────────────────────────────────────────────────────
@@ -226,26 +202,17 @@ export function subscribeToCollectionItems(
     where('deleted_at', '==', null),
     orderBy('updated_at', 'desc'),
   );
-
-  return onSnapshot(q, (snap) => {
-    const items: CollectionItem[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    } as CollectionItem));
+  return querySnapshotWith<CollectionItem>(q, (items) => {
     log.debug('Items snapshot received', { collectionId, count: items.length });
     callback(items);
-  }, (err) => {
-    log.error('Items snapshot error', { collectionId, err });
-  });
+  }, log, 'Items');
 }
 
 export async function getCollectionItem(
   collectionId: string,
   itemId: string,
 ): Promise<CollectionItem | null> {
-  const snap = await getDoc(itemRef(collectionId, itemId));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as CollectionItem;
+  return getDocOrNull<CollectionItem>(itemRef(collectionId, itemId));
 }
 
 // ── Key Envelope reads ────────────────────────────────────────────────────────
@@ -259,12 +226,9 @@ export async function getCollectionKeyEnvelope(
   userId: string,
 ): Promise<CollectionKeyEnvelope | null> {
   log.debug('Fetching collection key envelope', { collectionId, userId });
-  const snap = await getDoc(keyEnvelopeRef(collectionId, userId));
-  if (!snap.exists()) {
-    log.warn('No collection key envelope found', { collectionId, userId });
-    return null;
-  }
-  return { id: snap.id, ...snap.data() } as CollectionKeyEnvelope;
+  const result = await getDocOrNull<CollectionKeyEnvelope>(keyEnvelopeRef(collectionId, userId));
+  if (!result) log.warn('No collection key envelope found', { collectionId, userId });
+  return result;
 }
 
 // ── Sync event reads (delta catch-up) ────────────────────────────────────────
@@ -281,18 +245,11 @@ export function subscribeToSyncEvents(
     orderBy('revision', 'asc'),
     limit(100),
   );
-
-  return onSnapshot(q, (snap) => {
-    if (snap.empty) return;
-    const events: SyncEvent[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    } as SyncEvent));
+  return querySnapshotWith<SyncEvent>(q, (events) => {
+    if (!events.length) return;
     log.debug('Sync events received', { collectionId, count: events.length });
     callback(events);
-  }, (err) => {
-    log.error('Sync events snapshot error', { collectionId, err });
-  });
+  }, log, 'SyncEvents');
 }
 
 export async function fetchDeltaSince(
@@ -306,7 +263,7 @@ export async function fetchDeltaSince(
     orderBy('revision', 'asc'),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SyncEvent));
+  return snapsToDocs<SyncEvent>(snap);
 }
 
 // ── User's collections (where they are active member) ─────────────────────────
@@ -331,11 +288,11 @@ export function subscribeToMyCollections(
     callback(union);
   };
 
-  // 1. Subscribe to folder_shares (standard query, fast, no index required, instantly works for new/invite collections)
+  // 1. Subscribe to folder_shares (standard query, fast, no index required)
   const qShares = query(
     collection(getFirebaseDb(), 'folder_shares'),
     where('user_id', '==', userId),
-    where('status', '==', 'accepted')
+    where('status', '==', 'accepted'),
   );
 
   const unsubShares = onSnapshot(qShares, (snap) => {
@@ -346,11 +303,11 @@ export function subscribeToMyCollections(
     notifyUnion();
   });
 
-  // 2. Subscribe to members collection group (handles legacy folders created in older versions)
+  // 2. Subscribe to members collection group (handles legacy folders)
   const qMembers = query(
     collectionGroup(getFirebaseDb(), 'members'),
     where('user_id', '==', userId),
-    where('status', '==', 'active')
+    where('status', '==', 'active'),
   );
 
   const unsubMembers = onSnapshot(qMembers, (snap) => {
@@ -358,7 +315,7 @@ export function subscribeToMyCollections(
     notifyUnion();
   }, (err) => {
     log.warn('Members collectionGroup subscription error (index may be building in background)', { userId, err });
-    // Non-fatal: if the collectionGroup index is absent or building, we still have the folder_shares results
+    // Non-fatal: if the collectionGroup index is absent or building, we still have folder_shares
     notifyUnion();
   });
 
@@ -370,16 +327,14 @@ export function subscribeToMyCollections(
 
 // ── Pending invites for a collection ─────────────────────────────────────────
 
-export async function getCollectionPendingInvites(
-  collectionId: string,
-): Promise<CollectionInvite[]> {
+export async function getCollectionPendingInvites(collectionId: string): Promise<CollectionInvite[]> {
   const q = query(
     invitesRef(collectionId),
     where('status', '==', 'pending'),
     orderBy('created_at', 'desc'),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CollectionInvite));
+  return snapsToDocs<CollectionInvite>(snap);
 }
 
 export function subscribeToCollectionPendingInvites(
@@ -391,11 +346,5 @@ export function subscribeToCollectionPendingInvites(
     where('status', '==', 'pending'),
     orderBy('created_at', 'desc'),
   );
-
-  return onSnapshot(q, (snap) => {
-    const invites = snap.docs.map((d) => ({ id: d.id, ...d.data() } as CollectionInvite));
-    callback(invites);
-  }, (err) => {
-    log.error('Pending invites snapshot error', { collectionId, err });
-  });
+  return querySnapshotWith<CollectionInvite>(q, callback, log, 'PendingInvites');
 }

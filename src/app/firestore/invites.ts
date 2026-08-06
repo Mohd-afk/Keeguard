@@ -8,14 +8,23 @@ import {
   where,
   orderBy,
   getDocs,
-  onSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '../firebase';
 import { createLogger } from '../utils/logger';
+import { snapsToDocs, querySnapshotWith } from './helpers';
 import type { CollectionInvite } from './collections';
 
 const log = createLogger('FIRESTORE_INVITES');
+
+/** Shared query builder for user's pending invites. */
+function pendingInvitesQuery(userId: string) {
+  return query(
+    collectionGroup(getFirebaseDb(), 'invites'),
+    where('invited_user_id', '==', userId),
+    where('status', '==', 'pending'),
+  );
+}
 
 /**
  * Fetch all pending invites for the current user across all collections.
@@ -23,19 +32,9 @@ const log = createLogger('FIRESTORE_INVITES');
  */
 export async function getMyPendingInvites(userId: string): Promise<CollectionInvite[]> {
   log.info('Fetching pending invites', { userId });
-  
-  const q = query(
-    collectionGroup(getFirebaseDb(), 'invites'),
-    where('invited_user_id', '==', userId),
-    where('status', '==', 'pending')
-  );
-
   try {
-    const snap = await getDocs(q);
-    const invites = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    } as CollectionInvite));
+    const snap = await getDocs(pendingInvitesQuery(userId));
+    const invites = snapsToDocs<CollectionInvite>(snap);
     log.debug('Pending invites fetched', { userId, count: invites.length });
     return invites;
   } catch (err) {
@@ -53,21 +52,13 @@ export function subscribeToMyInvites(
   callback: (invites: CollectionInvite[]) => void,
 ): Unsubscribe {
   log.info('Subscribing to user invites', { userId });
-  
-  const q = query(
-    collectionGroup(getFirebaseDb(), 'invites'),
-    where('invited_user_id', '==', userId),
-    where('status', '==', 'pending')
+  return querySnapshotWith<CollectionInvite>(
+    pendingInvitesQuery(userId),
+    (invites) => {
+      log.debug('Invites snapshot received', { userId, count: invites.length });
+      callback(invites);
+    },
+    log,
+    'Invites',
   );
-
-  return onSnapshot(q, (snap) => {
-    const invites = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    } as CollectionInvite));
-    log.debug('Invites snapshot received', { userId, count: invites.length });
-    callback(invites);
-  }, (err) => {
-    log.error('Invites snapshot error', { userId, err });
-  });
 }

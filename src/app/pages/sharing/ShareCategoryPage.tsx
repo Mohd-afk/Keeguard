@@ -16,7 +16,14 @@ import {
   FolderHeart,
   Check,
   ChevronRight,
+  ChevronDown,
   Shield,
+  CheckSquare,
+  Square,
+  Globe,
+  CreditCard,
+  FileText,
+  Lock,
 } from 'lucide-react';
 import { type User } from 'firebase/auth';
 import { InviteByUsernameInput } from '../../components/collections/InviteByUsernameInput';
@@ -67,6 +74,10 @@ export function ShareCategoryPage() {
   // Categories & Vault Items state
   const [customCategories, setCustomCategories] = useState<any[]>([]);
   const [vaultItems, setVaultItems] = useState<any[]>([]);
+
+  // Expandable Tree & Item Selection State
+  const [expandedFolderIds, setExpandedFolderIds] = useState<string[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   useEffect(() => {
     let unsubVault: (() => void) | undefined;
@@ -176,18 +187,72 @@ export function ShareCategoryPage() {
           if (!privKey) throw new Error('Could not load device private key');
           const selfWrappedKey = await wrapCollectionKey(collectionKey, privKey, myPubKeyB64);
           
-          const itemsToMigrate = vaultItems
+          const { getVaultItems } = await import('../../store');
+          const liveVaultItems = getVaultItems();
+          const itemsToMigrate = liveVaultItems
             .filter((i: any) => {
               if (i.deletedAt) return false;
+              if (selectedItemIds.length > 0) {
+                return selectedItemIds.includes(i.id);
+              }
               if (selectedFolder.id === '__uncategorized__') return !i.categoryId;
               return i.categoryId === selectedFolder.id;
             })
-            .map((i: any) => ({
-              id: i.id,
-              title: i.title || 'Untitled Item',
-              plaintext: i.password || '',
-              itemType: (i.type || 'Website').toLowerCase() as any
-            }));
+            .map((i: any) => {
+              const rawType = (i.type || '').toLowerCase();
+              let mappedType: 'login' | 'card' | 'note' | 'identity' | 'wifi' | 'other' = 'login';
+              if (rawType.includes('card')) mappedType = 'card';
+              else if (rawType.includes('note')) mappedType = 'note';
+              else if (rawType.includes('identity') || rawType.includes('passport') || rawType.includes('license') || rawType.includes('driver') || rawType.includes('aadhaar') || rawType.includes('employee')) mappedType = 'identity';
+              else if (rawType.includes('wifi')) mappedType = 'wifi';
+              else mappedType = 'login';
+
+              let payloadParts: string[] = [];
+              if (i.username && i.password) {
+                payloadParts.push(`Username: ${i.username}\nPassword: ${i.password}`);
+              } else if (i.username) {
+                payloadParts.push(`Username: ${i.username}`);
+              } else if (i.password) {
+                payloadParts.push(`Password: ${i.password}`);
+              }
+              if (i.url) payloadParts.push(`URL: ${i.url}`);
+
+              if (i.identityData) {
+                const id = i.identityData;
+                const name = [id.firstName, id.middleName, id.lastName].filter(Boolean).join(' ');
+                if (name) payloadParts.push(`Full Name: ${name}`);
+                if (id.email) payloadParts.push(`Email: ${id.email}`);
+                if (id.phone) payloadParts.push(`Phone: ${id.phone}`);
+                if (id.dateOfBirth) payloadParts.push(`DOB: ${id.dateOfBirth}`);
+                if (id.company) payloadParts.push(`Company: ${id.company}`);
+                if (id.ssn) payloadParts.push(`SSN/ID: ${id.ssn}`);
+              }
+
+              if (i.cardData) {
+                const card = i.cardData;
+                if (card.cardholderName) payloadParts.push(`Cardholder: ${card.cardholderName}`);
+                if (card.number) payloadParts.push(`Card Number: ${card.number}`);
+                if (card.expMonth && card.expYear) payloadParts.push(`Expiry: ${card.expMonth}/${card.expYear}`);
+                if (card.cvv) payloadParts.push(`CVV: ${card.cvv}`);
+              }
+
+              if (i.addressData) {
+                const addr = i.addressData;
+                const fullAddr = [addr.streetAddress, addr.streetAddress2, addr.city, addr.state, addr.postalCode, addr.country].filter(Boolean).join(', ');
+                if (fullAddr) payloadParts.push(`Address: ${fullAddr}`);
+              }
+
+              if (i.note) payloadParts.push(`Notes: ${i.note}`);
+
+              const payload = payloadParts.join('\n\n') || i.password || '';
+
+              return {
+                id: i.id,
+                title: i.title || 'Untitled Item',
+                plaintext: payload,
+                itemType: mappedType,
+              };
+            });
 
           const { migrateCategoryToCollection } = await import('../../api/collections');
           finalCollectionId = await migrateCategoryToCollection(
@@ -282,17 +347,22 @@ export function ShareCategoryPage() {
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
          {(() => {
              const activeItems = vaultItems.filter((i: any) => !i.deletedAt);
-             const uncategorizedCount = activeItems.filter((i: any) => !i.categoryId).length;
+             const uncategorizedItems = activeItems.filter((i: any) => !i.categoryId);
              const folders = [
-               ...customCategories.map((cat: any) => ({
-                 id: cat.id,
-                 name: cat.name,
-                 count: activeItems.filter((i: any) => i.categoryId === cat.id).length
-               })),
-               ...(uncategorizedCount > 0 ? [{
+               ...customCategories.map((cat: any) => {
+                 const catItems = activeItems.filter((i: any) => i.categoryId === cat.id);
+                 return {
+                   id: cat.id,
+                   name: cat.name,
+                   items: catItems,
+                   count: catItems.length
+                 };
+               }),
+               ...(uncategorizedItems.length > 0 ? [{
                  id: '__uncategorized__',
                  name: 'Uncategorized',
-                 count: uncategorizedCount
+                 items: uncategorizedItems,
+                 count: uncategorizedItems.length
                }] : [])
              ];
 
@@ -300,33 +370,171 @@ export function ShareCategoryPage() {
                return <div className="text-center py-10 text-gray-500 text-sm">No folders with saved passwords found in your vault.</div>;
              }
 
-             return folders.map((folder) => (
-               <button
-                 key={folder.id}
-                 onClick={() => setSelectedFolder({ id: folder.id, name: folder.name, type: 'category' })}
-                 className="w-full flex items-center justify-between p-4 bg-[#16213e] hover:bg-[#16213e]/80 border border-white/5 hover:border-cyan-500/50 rounded-2xl text-left transition-all active:scale-[0.98] group"
-               >
-                 <div className="flex items-center gap-4">
-                   <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/20 group-hover:bg-cyan-500/20 transition-colors">
-                     <FolderHeart className="w-5 h-5" />
-                   </div>
-                   <div>
-                     <h3 className="text-white text-sm font-bold group-hover:text-cyan-400 transition-colors">{folder.name}</h3>
-                     <p className="text-gray-500 text-[10px] mt-0.5">{folder.count} password{folder.count === 1 ? '' : 's'} saved</p>
-                   </div>
-                 </div>
-                 <div className="flex items-center gap-3">
-                   {folder.count > 0 && (
-                     <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                       {folder.count}
-                     </span>
-                   )}
-                   <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
-                 </div>
-               </button>
-             ));
+             return (
+               <div className="space-y-3">
+                 {folders.map((folder) => {
+                   const isExpanded = expandedFolderIds.includes(folder.id);
+                   const folderItemIds = folder.items.map((i: any) => i.id);
+                   const allFolderSelected = folderItemIds.length > 0 && folderItemIds.every((id: string) => selectedItemIds.includes(id));
+                   const someFolderSelected = folderItemIds.some((id: string) => selectedItemIds.includes(id));
+
+                   const toggleExpand = (e: React.MouseEvent) => {
+                     e.stopPropagation();
+                     setExpandedFolderIds((prev) =>
+                       prev.includes(folder.id) ? prev.filter((id) => id !== folder.id) : [...prev, folder.id]
+                     );
+                   };
+
+                   const toggleFolderCheck = (e: React.MouseEvent) => {
+                     e.stopPropagation();
+                     if (allFolderSelected) {
+                       setSelectedItemIds((prev) => prev.filter((id) => !folderItemIds.includes(id)));
+                     } else {
+                       setSelectedItemIds((prev) => Array.from(new Set([...prev, ...folderItemIds])));
+                     }
+                   };
+
+                   return (
+                     <div key={folder.id} className="bg-[#16213e] border border-white/5 rounded-2xl overflow-hidden transition-all">
+                       {/* Folder Header Row */}
+                       <div
+                         onClick={toggleExpand}
+                         className="flex items-center justify-between p-4 cursor-pointer hover:bg-[#16213e]/80 transition-colors select-none group"
+                       >
+                         <div className="flex items-center gap-3 min-w-0 flex-1">
+                           <button
+                             type="button"
+                             onClick={toggleFolderCheck}
+                             className="text-cyan-400 p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0"
+                           >
+                             {allFolderSelected ? (
+                               <CheckSquare className="w-5 h-5 text-cyan-400" />
+                             ) : someFolderSelected ? (
+                               <div className="w-5 h-5 rounded bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 text-[10px] font-bold">
+                                 -
+                               </div>
+                             ) : (
+                               <Square className="w-5 h-5 text-gray-600" />
+                             )}
+                           </button>
+
+                           <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/20 group-hover:bg-cyan-500/20 transition-colors">
+                             <FolderHeart className="w-5 h-5" />
+                           </div>
+
+                           <div className="min-w-0 flex-1">
+                             <h3 className="text-white text-sm font-bold truncate group-hover:text-cyan-400 transition-colors">
+                               {folder.name}
+                             </h3>
+                             <p className="text-gray-500 text-[10px] mt-0.5">
+                               {folder.count} password{folder.count === 1 ? '' : 's'} saved
+                             </p>
+                           </div>
+                         </div>
+
+                         <div className="flex items-center gap-2 shrink-0">
+                           {folder.count > 0 && (
+                             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                               {folder.count}
+                             </span>
+                           )}
+                           <button
+                             type="button"
+                             onClick={toggleExpand}
+                             className="p-1 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+                           >
+                             {isExpanded ? <ChevronDown className="w-4 h-4 text-cyan-400" /> : <ChevronRight className="w-4 h-4" />}
+                           </button>
+                         </div>
+                       </div>
+
+                       {/* Nested Folder Items List */}
+                       {isExpanded && (
+                         <div className="px-4 pb-4 pt-1 border-t border-white/5 bg-[#121c36]/40 space-y-2">
+                           {folder.items.length === 0 ? (
+                             <p className="text-gray-500 text-xs py-2 text-center">No passwords in this folder.</p>
+                           ) : (
+                             folder.items.map((item: any) => {
+                               const isItemSelected = selectedItemIds.includes(item.id);
+                               const toggleItem = (e: React.MouseEvent) => {
+                                 e.stopPropagation();
+                                 setSelectedItemIds((prev) =>
+                                   prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
+                                 );
+                               };
+
+                               return (
+                                 <div
+                                   key={item.id}
+                                   onClick={toggleItem}
+                                   className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                                     isItemSelected
+                                       ? 'bg-cyan-500/15 border-cyan-500/50 text-white'
+                                       : 'bg-[#1a1a2e] border-white/5 text-gray-300 hover:border-white/20'
+                                   }`}
+                                 >
+                                   <div className="flex items-center gap-3 overflow-hidden">
+                                     <div className="text-cyan-400 shrink-0">
+                                       {isItemSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 text-gray-600" />}
+                                     </div>
+                                     <div className="overflow-hidden">
+                                       <h4 className="text-xs font-bold text-white truncate">{item.title || 'Untitled'}</h4>
+                                       <p className="text-[10px] text-gray-400 truncate mt-0.5">
+                                         {item.username || item.url || item.type || 'Login'}
+                                       </p>
+                                     </div>
+                                   </div>
+                                   <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-white/5 text-gray-400 uppercase shrink-0">
+                                     {item.type || 'Login'}
+                                   </span>
+                                 </div>
+                               );
+                             })
+                           )}
+                         </div>
+                       )}
+                     </div>
+                   );
+                 })}
+               </div>
+             );
            })()}
         </div>
+
+        {/* Floating Action Bar for Selected Passwords */}
+        {selectedItemIds.length > 0 && (
+          <div className="fixed bottom-6 left-4 right-4 z-40 bg-[#16213e]/90 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex items-center justify-between animate-in slide-in-from-bottom duration-300">
+            <div>
+              <p className="text-white text-xs font-bold">
+                {selectedItemIds.length} Password{selectedItemIds.length === 1 ? '' : 's'} Selected
+              </p>
+              <p className="text-cyan-400 text-[10px] font-medium mt-0.5">
+                Ready to package into zero-knowledge shared vault
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedItemIds([])}
+                className="px-3 py-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl text-xs font-bold transition-all"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const firstItem = vaultItems.find((i) => selectedItemIds.includes(i.id));
+                  const folderName = selectedItemIds.length === 1 ? (firstItem?.title || 'Shared Vault') : 'Selected Vault Items';
+                  setSelectedFolder({ id: 'custom_selection', name: folderName, type: 'category' });
+                }}
+                className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-cyan-500/20 flex items-center gap-1.5"
+              >
+                Share Selected Passwords
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

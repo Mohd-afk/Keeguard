@@ -1,11 +1,9 @@
 import {
     doc,
     setDoc,
-    getDoc,
     getDocFromServer,
     onSnapshot,
     serverTimestamp,
-    deleteDoc,
     writeBatch,
     type Unsubscribe,
 } from 'firebase/firestore';
@@ -13,6 +11,7 @@ import { getFirebaseDb } from './firebase';
 import type { EncryptedPayload } from './crypto';
 import type { AppSettings } from './store';
 import { createLogger } from './utils/logger';
+import { getDocOrNull, snapshotWith } from './firestore/helpers';
 
 const log = createLogger('FIRESTORE');
 
@@ -38,14 +37,23 @@ function registeredEmailDocRef(hash: string) {
     return doc(getFirebaseDb(), 'registered_emails', hash);
 }
 
+function categoriesDocRef(uid: string) {
+    return doc(getFirebaseDb(), 'users', uid, 'data', 'categories');
+}
+
+function fieldProfilesDocRef(uid: string) {
+    return doc(getFirebaseDb(), 'users', uid, 'data', 'field_profiles');
+}
+
 // ── Email registration (Option 3 for Enumeration Protection) ────────
 
+/** Hash an email with SHA-256 for privacy-safe Firestore lookups. */
 export async function hashEmailForLookup(email: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(email.trim().toLowerCase());
+    const data = new TextEncoder().encode(email.trim().toLowerCase());
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 }
 
 /**
@@ -55,9 +63,9 @@ export async function hashEmailForLookup(email: string): Promise<string> {
  */
 export async function checkEmailRegistered(email: string): Promise<boolean> {
     log.info('Checking if email is registered', { email });
-    const hash = await hashEmailForLookup(email.trim().toLowerCase());
-    const snap = await getDoc(registeredEmailDocRef(hash));
-    const exists = snap.exists();
+    const hash = await hashEmailForLookup(email); // already normalizes
+    const snap = await getDocOrNull(registeredEmailDocRef(hash));
+    const exists = snap !== null;
     log.info('Email registration check result', { isRegistered: exists });
     return exists;
 }
@@ -68,7 +76,7 @@ export async function checkEmailRegistered(email: string): Promise<boolean> {
  */
 export async function registerEmail(email: string): Promise<void> {
     log.info('Registering email hash in Firestore');
-    const hash = await hashEmailForLookup(email.trim().toLowerCase());
+    const hash = await hashEmailForLookup(email); // already normalizes
     await setDoc(registeredEmailDocRef(hash), { registeredAt: serverTimestamp() }, { merge: true });
     log.info('Email hash registered successfully');
 }
@@ -104,7 +112,6 @@ export async function loadVaultFromCloud(
         log.info('No vault document found in cloud', { uid });
         return null;
     }
-
     const data = snap.data() as CloudVaultData;
     log.info('Vault loaded from cloud', { uid, hasPayload: !!data.encryptedPayload });
     return {
@@ -120,10 +127,7 @@ export async function loadVaultFromCloud(
  */
 export function subscribeToVault(
     uid: string,
-    callback: (data: {
-        encryptedPayload: EncryptedPayload;
-        masterHash: string;
-    } | null) => void,
+    callback: (data: { encryptedPayload: EncryptedPayload; masterHash: string } | null) => void,
 ): Unsubscribe {
     log.info('Subscribing to realtime vault updates', { uid });
     return onSnapshot(vaultDocRef(uid), (snap) => {
@@ -148,18 +152,7 @@ export function subscribeToVault(
 
 // ── Settings operations ──────────────────────────────────────────────
 
-function categoriesDocRef(uid: string) {
-    return doc(getFirebaseDb(), 'users', uid, 'data', 'categories');
-}
-
-function fieldProfilesDocRef(uid: string) {
-    return doc(getFirebaseDb(), 'users', uid, 'data', 'field_profiles');
-}
-
-export async function saveFieldProfilesToCloud(
-    uid: string,
-    profiles: any[],
-): Promise<void> {
+export async function saveFieldProfilesToCloud(uid: string, profiles: any[]): Promise<void> {
     log.info('Saving field profiles to cloud', { uid });
     await setDoc(fieldProfilesDocRef(uid), {
         profiles: JSON.stringify(profiles),
@@ -168,28 +161,18 @@ export async function saveFieldProfilesToCloud(
     log.debug('Field profiles saved to cloud', { uid });
 }
 
-export async function loadFieldProfilesFromCloud(
-    uid: string,
-): Promise<any[] | null> {
+export async function loadFieldProfilesFromCloud(uid: string): Promise<any[] | null> {
     log.debug('Loading field profiles from cloud', { uid });
-    const snap = await getDoc(fieldProfilesDocRef(uid));
-    if (!snap.exists()) {
+    const data = await getDocOrNull<Record<string, any>>(fieldProfilesDocRef(uid));
+    if (!data) {
         log.debug('No field profiles document found in cloud', { uid });
         return null;
     }
-
-    const data = snap.data();
     log.info('Field profiles loaded from cloud', { uid });
-    if (data.profiles) {
-        return JSON.parse(data.profiles);
-    }
-    return null;
+    return data.profiles ? JSON.parse(data.profiles) : null;
 }
 
-export async function saveCategoriesToCloud(
-    uid: string,
-    categories: any[],
-): Promise<void> {
+export async function saveCategoriesToCloud(uid: string, categories: any[]): Promise<void> {
     log.info('Saving categories to cloud', { uid });
     await setDoc(categoriesDocRef(uid), {
         categories: JSON.stringify(categories),
@@ -198,50 +181,32 @@ export async function saveCategoriesToCloud(
     log.debug('Categories saved to cloud', { uid });
 }
 
-export async function loadCategoriesFromCloud(
-    uid: string,
-): Promise<any[] | null> {
+export async function loadCategoriesFromCloud(uid: string): Promise<any[] | null> {
     log.debug('Loading categories from cloud', { uid });
-    const snap = await getDoc(categoriesDocRef(uid));
-    if (!snap.exists()) {
+    const data = await getDocOrNull<Record<string, any>>(categoriesDocRef(uid));
+    if (!data) {
         log.debug('No categories document found in cloud', { uid });
         return null;
     }
-
-    const data = snap.data();
     log.info('Categories loaded from cloud', { uid });
-    if (data.categories) {
-        return JSON.parse(data.categories);
-    }
-    if (data.encryptedPayload) {
-        return JSON.parse(data.encryptedPayload);
-    }
+    if (data.categories) return JSON.parse(data.categories);
+    if (data.encryptedPayload) return JSON.parse(data.encryptedPayload);
     return null;
 }
 
-export async function saveSettingsToCloud(
-    uid: string,
-    settings: AppSettings,
-): Promise<void> {
+export async function saveSettingsToCloud(uid: string, settings: AppSettings): Promise<void> {
     log.info('Saving settings to cloud', { uid });
-    await setDoc(settingsDocRef(uid), {
-        ...settings,
-        updatedAt: serverTimestamp(),
-    });
+    await setDoc(settingsDocRef(uid), { ...settings, updatedAt: serverTimestamp() });
     log.debug('Settings saved to cloud', { uid });
 }
 
-export async function loadSettingsFromCloud(
-    uid: string,
-): Promise<AppSettings | null> {
+export async function loadSettingsFromCloud(uid: string): Promise<AppSettings | null> {
     log.debug('Loading settings from cloud', { uid });
-    const snap = await getDoc(settingsDocRef(uid));
-    if (!snap.exists()) {
+    const data = await getDocOrNull<Record<string, any>>(settingsDocRef(uid));
+    if (!data) {
         log.debug('No settings document found in cloud', { uid });
         return null;
     }
-
-    const data = snap.data();
     log.info('Settings loaded from cloud', { uid });
     return {
         autoLockTimeout: data.autoLockTimeout ?? 5,
@@ -273,8 +238,8 @@ export async function deleteCloudVault(uid: string): Promise<void> {
  */
 export async function checkUsernameAvailable(username: string): Promise<boolean> {
     log.debug('Checking username availability', { username });
-    const snap = await getDoc(usernameDocRef(username));
-    const available = !snap.exists();
+    const result = await getDocOrNull(usernameDocRef(username));
+    const available = result === null;
     log.debug('Username availability result', { username, available });
     return available;
 }
@@ -296,12 +261,12 @@ export async function claimUsername(uid: string, username: string): Promise<void
  */
 export async function getUsernameForUid(uid: string): Promise<string | null> {
     log.debug('Getting username for UID', { uid });
-    const snap = await getDoc(profileDocRef(uid));
-    if (!snap.exists()) {
+    const data = await getDocOrNull<{ username?: string }>(profileDocRef(uid));
+    if (!data) {
         log.debug('No profile document found for UID', { uid });
         return null;
     }
-    const username = snap.data().username ?? null;
+    const username = data.username ?? null;
     log.debug('Username found', { uid, username });
     return username;
 }
@@ -332,7 +297,7 @@ export async function publishPublicProfile(
     uid: string,
     username: string,
     displayName: string | null,
-    publicKeyB64: string
+    publicKeyB64: string,
 ): Promise<void> {
     log.info('Publishing public profile with ECDH key', { uid, username });
     const profileRef = doc(getFirebaseDb(), 'userProfiles', uid);

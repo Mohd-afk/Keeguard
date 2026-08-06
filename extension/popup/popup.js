@@ -608,7 +608,16 @@ function renderProfiles(container, profiles) {
 
     const user = document.createElement('span');
     user.className = 'item-user';
-    user.textContent = profile.url ? profile.url : `${(profile.fields || []).length} field(s)`;
+    const count = (profile.fields || []).length;
+    let domain = '';
+    if (profile.url) {
+      try {
+        domain = new URL(profile.url).hostname.replace('www.', '');
+      } catch(e) {
+        domain = profile.url;
+      }
+    }
+    user.textContent = `${count} field${count !== 1 ? 's' : ''}${domain ? ' · ' + domain : ''}`;
 
     info.appendChild(title);
     info.appendChild(user);
@@ -690,6 +699,16 @@ function renderProfiles(container, profiles) {
         if (row) details.appendChild(row);
       }
     });
+
+    // Big Auto-fill button at bottom of details
+    const bigFillBtn = document.createElement('button');
+    bigFillBtn.className = 'fill-page-btn';
+    bigFillBtn.innerHTML = '⚡ Auto-Fill Profile into Page';
+    bigFillBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      autofillProfileIntoPage(profile);
+    });
+    details.appendChild(bigFillBtn);
 
     card.appendChild(details);
     container.appendChild(card);
@@ -925,7 +944,10 @@ function showCaptureModal(fields, pageUrl) {
   let urlHost = '';
   try { urlHost = new URL(pageUrl).hostname; } catch(e) {}
   if (subtitle) subtitle.textContent = `${fields.length} fields found${urlHost ? ' · ' + urlHost : ''}`;
-  if (nameInput) { nameInput.value = urlHost ? urlHost.replace('www.', '') : ''; }
+  if (nameInput) {
+    nameInput.value = '';
+    nameInput.placeholder = urlHost ? `Profile name (e.g. ${urlHost.replace('www.', '')})` : 'Profile name (e.g. Flipkart Listing)';
+  }
 
   // Render field checkboxes
   fieldsList.innerHTML = '';
@@ -960,8 +982,10 @@ function showCaptureModal(fields, pageUrl) {
   // Save
   if (saveBtn) {
     saveBtn.onclick = async () => {
-      const name = (nameInput?.value || '').trim();
-      if (!name) { nameInput?.focus(); showToast('Enter a profile name first'); return; }
+      let name = (nameInput?.value || '').trim();
+      if (!name) {
+        name = urlHost ? urlHost.replace('www.', '') : 'Captured Profile';
+      }
       saveBtn.disabled = true;
       saveBtn.textContent = 'Saving…';
 

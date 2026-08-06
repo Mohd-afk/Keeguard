@@ -6,7 +6,7 @@ import { subscribeToMyCollections, subscribeToSharedCollection, type SharedColle
 import { createCollection } from '../../api/collections';
 import { getSessionCryptoKey } from '../../store';
 import { ensureDeviceKeyPair, loadDevicePrivateKey, wrapCollectionKey, generateCollectionKey } from '../../crypto/collectionCrypto';
-import { getSharedCollectionItems, isCollectionWaitingForKey } from '../../stores/syncStore';
+import { getSharedCollectionItems, isCollectionWaitingForKey, addSyncStoreListener, setCollectionKey } from '../../stores/syncStore';
 import { toast } from 'sonner';
 
 interface OutletContext {
@@ -97,6 +97,14 @@ export function CollectionListPage() {
     };
   }, [collectionIds]);
 
+  // Subscribe to syncStore updates to refresh item counts live
+  useEffect(() => {
+    const unsub = addSyncStoreListener(() => {
+      setCollections((prev) => ({ ...prev }));
+    });
+    return unsub;
+  }, []);
+
   const handleCreateCollection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newColName.trim()) {
@@ -133,6 +141,9 @@ export function CollectionListPage() {
           senderPublicKeyB64: pubKeyB64,
         },
       });
+
+      // 5. Pre-register key in syncStore so detail page is instantly unlocked
+      setCollectionKey(newCid, collectionKey);
 
       toast.success(`Shared Collection "${newColName}" created!`);
       setShowCreateModal(false);

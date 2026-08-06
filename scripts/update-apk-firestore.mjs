@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
-import admin from 'firebase-admin';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'));
@@ -15,11 +16,11 @@ if (!serviceAccountFile) {
 }
 
 const serviceAccount = JSON.parse(readFileSync(join(ROOT, serviceAccountFile), 'utf-8'));
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+initializeApp({
+  credential: cert(serviceAccount)
 });
 
-const db = admin.firestore();
+const db = getFirestore();
 await db.collection('app_config').doc('latest_version').set({
   min_apk_version: version,
   apk_download_url: `https://github.com/Mohd-afk/apk-releases/releases/download/v${version}/app-debug.apk`

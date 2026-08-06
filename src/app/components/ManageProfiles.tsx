@@ -613,7 +613,13 @@ function ProfileMetaSheet({ initial, onSave, onClose, title }: ProfileMetaSheetP
       toast.error('Profile name is required');
       return;
     }
-    onSave({ name: name.trim(), url: url.trim() || undefined, icon, color, fields: presetFields });
+    onSave({
+      name: name.trim(),
+      url: url.trim() || undefined,
+      icon,
+      color,
+      ...(presetFields !== undefined ? { fields: presetFields } : {}),
+    });
   };
 
   return (
@@ -744,6 +750,7 @@ interface ProfileDetailProps {
 }
 
 function ProfileDetail({ profile, onBack, onDelete }: ProfileDetailProps) {
+  const profileFields = profile.fields || [];
   const [showFieldSheet, setShowFieldSheet] = useState(false);
   const [editingField, setEditingField] = useState<CustomField | undefined>();
   const [showMetaSheet, setShowMetaSheet] = useState(false);
@@ -787,7 +794,7 @@ function ProfileDetail({ profile, onBack, onDelete }: ProfileDetailProps) {
   };
 
   const handleMoveField = async (index: number, direction: 'up' | 'down') => {
-    const fields = [...profile.fields];
+    const fields = [...profileFields];
     const targetIdx = direction === 'up' ? index - 1 : index + 1;
     if (targetIdx < 0 || targetIdx >= fields.length) return;
     [fields[index], fields[targetIdx]] = [fields[targetIdx], fields[index]];
@@ -837,7 +844,7 @@ function ProfileDetail({ profile, onBack, onDelete }: ProfileDetailProps) {
             <div>
               <h2 className="text-white font-semibold text-base leading-tight">{profile.name}</h2>
               <p className="text-gray-400 text-xs truncate">
-                {profile.url ? profile.url : `${profile.fields.length} field${profile.fields.length !== 1 ? 's' : ''}`}
+                {profile.url ? profile.url : `${profileFields.length} field${profileFields.length !== 1 ? 's' : ''}`}
               </p>
             </div>
           </div>
@@ -867,7 +874,7 @@ function ProfileDetail({ profile, onBack, onDelete }: ProfileDetailProps) {
 
       {/* Field List */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        {profile.fields.length === 0 && (
+        {profileFields.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
               <LayoutList className="w-8 h-8 text-gray-500" />
@@ -877,7 +884,7 @@ function ProfileDetail({ profile, onBack, onDelete }: ProfileDetailProps) {
           </div>
         )}
 
-        {profile.fields.map((field, idx) => {
+        {profileFields.map((field, idx) => {
           const isHidden = field.sensitive && !hiddenFields[field.id];
           const isCopied = copiedId === field.id;
           const isDeleting = deletingFieldId === field.id;
@@ -900,7 +907,7 @@ function ProfileDetail({ profile, onBack, onDelete }: ProfileDetailProps) {
                     </button>
                     <button
                       onClick={() => handleMoveField(idx, 'down')}
-                      disabled={idx === profile.fields.length - 1}
+                      disabled={idx === profileFields.length - 1}
                       className="p-1 rounded text-gray-600 hover:text-gray-300 disabled:opacity-20 transition-colors"
                     >
                       <ArrowDown className="w-3.5 h-3.5" />
@@ -980,6 +987,17 @@ function ProfileDetail({ profile, onBack, onDelete }: ProfileDetailProps) {
           );
         })}
 
+        {/* Danger Zone: Delete Profile */}
+        <div className="mt-8 pt-6 border-t border-white/5">
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="w-full flex items-center justify-center gap-2 p-3.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 active:scale-95 transition-all text-sm font-medium"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Profile
+          </button>
+        </div>
+
         {/* Spacer for FAB */}
         <div className="h-20" />
       </div>
@@ -1014,7 +1032,7 @@ function ProfileDetail({ profile, onBack, onDelete }: ProfileDetailProps) {
               <h3 className="text-white font-semibold text-lg">Delete Profile?</h3>
             </div>
             <p className="text-gray-400 text-sm mb-5">
-              This will permanently delete "{profile.name}" and all {profile.fields.length} field{profile.fields.length !== 1 ? 's' : ''} inside it.
+              This will permanently delete "{profile.name}" and all {profileFields.length} field{profileFields.length !== 1 ? 's' : ''} inside it.
             </p>
             <div className="flex gap-3">
               <button
@@ -1067,6 +1085,8 @@ export default function ManageProfiles() {
   const [profiles, setProfiles] = useState<FieldProfile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [showNewProfileSheet, setShowNewProfileSheet] = useState(false);
+  const [editingMetaProfile, setEditingMetaProfile] = useState<FieldProfile | null>(null);
+  const [deletingProfileTarget, setDeletingProfileTarget] = useState<FieldProfile | null>(null);
 
   useEffect(() => {
     const unsub = subscribeToFieldProfiles(setProfiles);
@@ -1090,7 +1110,7 @@ export default function ManageProfiles() {
   const handleDeleteProfile = async (id: string) => {
     try {
       await deleteFieldProfile(id);
-      setActiveProfileId(null);
+      if (activeProfileId === id) setActiveProfileId(null);
       toast.success('Profile deleted');
     } catch {
       toast.error('Failed to delete profile');
@@ -1197,6 +1217,7 @@ export default function ManageProfiles() {
         <div className="space-y-3">
           {profiles.map((profile) => {
             const accentColor = profile.color || '#06b6d4';
+            const profileFields = profile.fields || [];
             return (
               <div
                 key={profile.id}
@@ -1218,24 +1239,46 @@ export default function ManageProfiles() {
                     <p className="text-cyan-400/80 text-xs truncate mt-0.5">{profile.url}</p>
                   )}
                   <p className="text-gray-400 text-xs mt-0.5">
-                    {profile.fields.length === 0
+                    {profileFields.length === 0
                       ? 'No fields'
-                      : `${profile.fields.length} field${profile.fields.length !== 1 ? 's' : ''}`}
-                    {profile.fields.length > 0 && (
-                      <span className="text-gray-600"> · {profile.fields.slice(0, 2).map(f => f.name).join(', ')}{profile.fields.length > 2 ? '…' : ''}</span>
+                      : `${profileFields.length} field${profileFields.length !== 1 ? 's' : ''}`}
+                    {profileFields.length > 0 && (
+                      <span className="text-gray-600"> · {profileFields.slice(0, 2).map(f => f.name).join(', ')}{profileFields.length > 2 ? '…' : ''}</span>
                     )}
                   </p>
                 </div>
 
-                {/* Duplicate button */}
-                <button
-                  onClick={e => { e.stopPropagation(); handleDuplicateProfile(profile); }}
-                  title="Duplicate profile"
-                  className="p-2 rounded-lg text-gray-600 hover:text-cyan-400 hover:bg-cyan-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                >
-                  <Layers className="w-4 h-4" />
-                </button>
-                <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-gray-400 transition-colors" />
+                {/* Action Buttons: Rename, Duplicate, Delete */}
+                <div className="flex items-center gap-1 shrink-0">
+                  {/* Rename / Edit */}
+                  <button
+                    onClick={e => { e.stopPropagation(); setEditingMetaProfile(profile); }}
+                    title="Rename / Edit profile"
+                    className="p-2 rounded-lg text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+
+                  {/* Duplicate */}
+                  <button
+                    onClick={e => { e.stopPropagation(); handleDuplicateProfile(profile); }}
+                    title="Duplicate profile"
+                    className="p-2 rounded-lg text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all"
+                  >
+                    <Layers className="w-4 h-4" />
+                  </button>
+
+                  {/* Delete */}
+                  <button
+                    onClick={e => { e.stopPropagation(); setDeletingProfileTarget(profile); }}
+                    title="Delete profile"
+                    className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+
+                  <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-gray-400 transition-colors ml-1" />
+                </div>
               </div>
             );
           })}
@@ -1265,6 +1308,65 @@ export default function ManageProfiles() {
           onSave={handleCreateProfile}
           onClose={() => setShowNewProfileSheet(false)}
         />
+      )}
+
+      {/* Rename / Edit Profile Sheet */}
+      {editingMetaProfile && (
+        <ProfileMetaSheet
+          title="Rename / Edit Profile"
+          initial={{
+            name: editingMetaProfile.name,
+            url: editingMetaProfile.url,
+            icon: editingMetaProfile.icon,
+            color: editingMetaProfile.color,
+          }}
+          onSave={async (meta) => {
+            try {
+              await updateFieldProfile(editingMetaProfile.id, meta);
+              setEditingMetaProfile(null);
+              toast.success('Profile updated');
+            } catch {
+              toast.error('Failed to update profile');
+            }
+          }}
+          onClose={() => setEditingMetaProfile(null)}
+        />
+      )}
+
+      {/* Delete Profile Confirmation Dialog */}
+      {deletingProfileTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setDeletingProfileTarget(null)} />
+          <div className="relative bg-[#0f172a] border border-white/10 rounded-2xl p-6 mx-4 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <h3 className="text-white font-semibold text-lg">Delete Profile?</h3>
+            </div>
+            <p className="text-gray-400 text-sm mb-5 leading-relaxed">
+              This will permanently delete <span className="text-white font-medium">"{deletingProfileTarget.name}"</span> and all {(deletingProfileTarget.fields || []).length} field{(deletingProfileTarget.fields || []).length !== 1 ? 's' : ''} inside it.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeletingProfileTarget(null)}
+                className="flex-1 py-2.5 rounded-xl bg-white/5 text-gray-300 hover:bg-white/10 transition-colors font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const targetId = deletingProfileTarget.id;
+                  setDeletingProfileTarget(null);
+                  await handleDeleteProfile(targetId);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors font-medium text-sm"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

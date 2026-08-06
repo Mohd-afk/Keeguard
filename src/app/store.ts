@@ -1742,9 +1742,13 @@ export async function updateFieldProfile(
     log.warn('updateFieldProfile: profile not found', { id });
     return;
   }
+  const existingFields = profiles[idx].fields || [];
+  const fields = updates.fields !== undefined ? updates.fields : existingFields;
+
   profiles[idx] = {
     ...profiles[idx],
     ...updates,
+    fields,
     updatedAt: new Date().toISOString(),
   };
   await saveFieldProfilesEverywhere(profiles);

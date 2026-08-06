@@ -24,7 +24,11 @@ import {
   CheckSquare,
   Square,
   Layers,
-  FolderHeart
+  FolderHeart,
+  Search,
+  Fingerprint,
+  Wifi,
+  User as UserIcon
 } from 'lucide-react';
 import { type User } from 'firebase/auth';
 import {
@@ -71,6 +75,7 @@ export function CollectionDetailPage() {
   const [customCategories, setCustomCategories] = useState<any[]>([]);
   const [selectedVaultItemIds, setSelectedVaultItemIds] = useState<string[]>([]);
   const [pickerCategory, setPickerCategory] = useState<string>('all');
+  const [pickerSearch, setPickerSearch] = useState<string>('');
 
   // Item details expansion state
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
@@ -144,6 +149,7 @@ export function CollectionDetailPage() {
     setAddTab('vault');
     setSelectedVaultItemIds([]);
     setPickerCategory('all');
+    setPickerSearch('');
     setShowFormSheet(true);
   };
 
@@ -165,20 +171,68 @@ export function CollectionDetailPage() {
         const vItem = vaultItems.find((v) => v.id === id);
         if (!vItem) continue;
         const itemId = crypto.randomUUID();
-        const typeStr = (vItem.type || 'Website').toLowerCase() as any;
+        
+        const rawType = (vItem.type || '').toLowerCase();
+        let mappedType: 'login' | 'card' | 'note' | 'identity' | 'wifi' | 'other' = 'login';
+        if (rawType.includes('card')) mappedType = 'card';
+        else if (rawType.includes('note')) mappedType = 'note';
+        else if (rawType.includes('identity') || rawType.includes('passport') || rawType.includes('license') || rawType.includes('driver') || rawType.includes('aadhaar') || rawType.includes('employee')) mappedType = 'identity';
+        else if (rawType.includes('wifi')) mappedType = 'wifi';
+        else mappedType = 'login';
+
+        let payloadParts: string[] = [];
+        if (vItem.username && vItem.password) {
+          payloadParts.push(`Username: ${vItem.username}\nPassword: ${vItem.password}`);
+        } else if (vItem.username) {
+          payloadParts.push(`Username: ${vItem.username}`);
+        } else if (vItem.password) {
+          payloadParts.push(`Password: ${vItem.password}`);
+        }
+        if (vItem.url) payloadParts.push(`URL: ${vItem.url}`);
+
+        if (vItem.identityData) {
+          const id = vItem.identityData;
+          const name = [id.firstName, id.middleName, id.lastName].filter(Boolean).join(' ');
+          if (name) payloadParts.push(`Full Name: ${name}`);
+          if (id.email) payloadParts.push(`Email: ${id.email}`);
+          if (id.phone) payloadParts.push(`Phone: ${id.phone}`);
+          if (id.dateOfBirth) payloadParts.push(`DOB: ${id.dateOfBirth}`);
+          if (id.company) payloadParts.push(`Company: ${id.company}`);
+          if (id.ssn) payloadParts.push(`SSN/ID: ${id.ssn}`);
+        }
+
+        if (vItem.cardData) {
+          const card = vItem.cardData;
+          if (card.cardholderName) payloadParts.push(`Cardholder: ${card.cardholderName}`);
+          if (card.number) payloadParts.push(`Card Number: ${card.number}`);
+          if (card.expMonth && card.expYear) payloadParts.push(`Expiry: ${card.expMonth}/${card.expYear}`);
+          if (card.cvv) payloadParts.push(`CVV: ${card.cvv}`);
+        }
+
+        if (vItem.addressData) {
+          const addr = vItem.addressData;
+          const fullAddr = [addr.streetAddress, addr.streetAddress2, addr.city, addr.state, addr.postalCode, addr.country].filter(Boolean).join(', ');
+          if (fullAddr) payloadParts.push(`Address: ${fullAddr}`);
+        }
+
+        if (vItem.note) payloadParts.push(`Notes: ${vItem.note}`);
+
+        const payload = payloadParts.join('\n\n') || vItem.password || '';
+
         const result = await commitSharedItem(
           collectionId,
           itemId,
           vItem.title || 'Untitled Item',
-          vItem.password || '',
-          typeStr,
-          0
+          payload,
+          mappedType,
+          0,
+          vItem.id
         );
         if (result.success || !result.conflict) {
           count++;
         }
       }
-      toast.success(`Successfully added ${count} password(s) from your vault!`);
+      toast.success(`Successfully added ${count} item(s) from your vault!`);
       setShowFormSheet(false);
       setSelectedVaultItemIds([]);
     } catch (err: any) {
@@ -252,6 +306,10 @@ export function CollectionDetailPage() {
         return <CreditCard className="w-5 h-5 text-pink-400" />;
       case 'note':
         return <FileText className="w-5 h-5 text-amber-400" />;
+      case 'identity':
+        return <Fingerprint className="w-5 h-5 text-purple-400" />;
+      case 'wifi':
+        return <Wifi className="w-5 h-5 text-emerald-400" />;
       default:
         return <Key className="w-5 h-5 text-gray-400" />;
     }
@@ -553,6 +611,26 @@ export function CollectionDetailPage() {
 
             {addTab === 'vault' && !editingItem ? (
               <div className="flex flex-col gap-3 overflow-hidden flex-1">
+                {/* Search Bar */}
+                <div className="relative shrink-0">
+                  <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={pickerSearch}
+                    onChange={(e) => setPickerSearch(e.target.value)}
+                    placeholder="Search passwords by title, username, or URL..."
+                    className="w-full bg-[#1a1a2e] border border-white/5 rounded-xl py-2 pl-9 pr-3 text-white text-xs placeholder-gray-500 focus:outline-none focus:border-cyan-500/40"
+                  />
+                  {pickerSearch && (
+                    <button
+                      onClick={() => setPickerSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
                 {/* Category Picker Chips */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 shrink-0 no-scrollbar">
                   <button
@@ -606,17 +684,26 @@ export function CollectionDetailPage() {
                 {/* Items List */}
                 <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                   {(() => {
+                    const query = pickerSearch.trim().toLowerCase();
                     const filtered = vaultItems.filter((i) => {
                       if (i.deletedAt) return false;
-                      if (pickerCategory === 'all') return true;
-                      if (pickerCategory === '__uncategorized__') return !i.categoryId;
-                      return i.categoryId === pickerCategory;
+                      if (pickerCategory !== 'all') {
+                        if (pickerCategory === '__uncategorized__' && i.categoryId) return false;
+                        if (pickerCategory !== '__uncategorized__' && i.categoryId !== pickerCategory) return false;
+                      }
+                      if (query) {
+                        const matchesTitle = (i.title || '').toLowerCase().includes(query);
+                        const matchesUsername = (i.username || '').toLowerCase().includes(query);
+                        const matchesUrl = (i.url || '').toLowerCase().includes(query);
+                        return matchesTitle || matchesUsername || matchesUrl;
+                      }
+                      return true;
                     });
 
                     if (filtered.length === 0) {
                       return (
                         <div className="text-center py-8 text-gray-500 text-xs">
-                          No passwords found in this category.
+                          {query ? `No passwords matching "${pickerSearch}"` : 'No passwords found in this category.'}
                         </div>
                       );
                     }

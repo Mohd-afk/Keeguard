@@ -11,11 +11,13 @@ import {
   onSnapshot,
   updateDoc,
   getDocs,
+  writeBatch,
   serverTimestamp,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '../firebase';
 import { createLogger } from '../utils/logger';
+import { snapsToDocs, querySnapshotWith } from './helpers';
 
 const log = createLogger('FIRESTORE_NOTIFICATIONS');
 
@@ -68,21 +70,11 @@ export function subscribeToNotifications(
   callback: (notifications: AppNotification[]) => void,
 ): Unsubscribe {
   log.info('Subscribing to notifications', { userId });
-  const q = query(
-    notificationsRef(userId),
-    orderBy('created_at', 'desc')
-  );
-
-  return onSnapshot(q, (snap) => {
-    const notifications: AppNotification[] = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    } as AppNotification));
+  const q = query(notificationsRef(userId), orderBy('created_at', 'desc'));
+  return querySnapshotWith<AppNotification>(q, (notifications) => {
     log.debug('Notifications snapshot received', { userId, count: notifications.length });
     callback(notifications);
-  }, (err) => {
-    log.error('Notifications snapshot error', { userId, err });
-  });
+  }, log, 'Notifications');
 }
 
 /**
@@ -90,8 +82,7 @@ export function subscribeToNotifications(
  */
 export async function markNotificationRead(userId: string, notificationId: string): Promise<void> {
   log.info('Marking notification as read', { userId, notificationId });
-  const ref = notificationRef(userId, notificationId);
-  await updateDoc(ref, {
+  await updateDoc(notificationRef(userId, notificationId), {
     status: 'read',
     read_at: serverTimestamp(),
   });
@@ -103,21 +94,14 @@ export async function markNotificationRead(userId: string, notificationId: strin
  */
 export async function markAllNotificationsRead(userId: string): Promise<void> {
   log.info('Marking all notifications as read', { userId });
-  const q = query(notificationsRef(userId), where('status', '==', 'pending'));
-  const snap = await getDocs(q);
-  
+  const snap = await getDocs(query(notificationsRef(userId), where('status', '==', 'pending')));
+
   if (snap.empty) return;
 
-  const { writeBatch } = await import('firebase/firestore');
   const batch = writeBatch(getFirebaseDb());
-  
   snap.docs.forEach((d) => {
-    batch.update(d.ref, {
-      status: 'read',
-      read_at: serverTimestamp(),
-    });
+    batch.update(d.ref, { status: 'read', read_at: serverTimestamp() });
   });
-
   await batch.commit();
   log.info('All notifications marked as read', { count: snap.size });
 }
@@ -128,21 +112,13 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
  */
 export async function getUnreadActionableCount(userId: string): Promise<number> {
   log.debug('Fetching unread actionable count', { userId });
-  const q = query(notificationsRef(userId), where('status', '==', 'pending'));
-  const snap = await getDocs(q);
-
-  let count = 0;
-  snap.docs.forEach((d) => {
+  const snap = await getDocs(query(notificationsRef(userId), where('status', '==', 'pending')));
+  return snap.docs.reduce((count, d) => {
     const notif = d.data() as Omit<AppNotification, 'id'>;
     const isActionable =
       notif.priority === 'high' ||
       notif.priority === 'urgent' ||
       (notif.type_category === 'collaboration' && notif.status === 'pending');
-    
-    if (isActionable) {
-      count++;
-    }
-  });
-
-  return count;
+    return isActionable ? count + 1 : count;
+  }, 0);
 }
