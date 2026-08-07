@@ -195,14 +195,14 @@ function initContentScript() {
     if ((message.type === 'AUTOFILL_CREDENTIAL' || message.type === 'AUTOFILL_PROFILE') && (message.credential || message.profile)) {
       const data = message.credential || message.profile;
       let count = 0;
-      const forms = window.scanPageForms ? window.scanPageForms() : [];
-      if (forms && forms.length > 0) {
-        forms.forEach(form => {
-          count += (window.fillFormFields ? window.fillFormFields(form, data) : 0);
-        });
-      }
-      if (count === 0 && window.fillAllPageFields) {
+      if (window.fillAllPageFields) {
         count = window.fillAllPageFields(data, document);
+      }
+      if (count === 0 && window.fillFormFields) {
+        const forms = window.scanPageForms ? window.scanPageForms() : [];
+        forms.forEach(form => {
+          count += window.fillFormFields(form, data);
+        });
       }
 
       // Fallback: direct input fill if scanPageForms missed elements

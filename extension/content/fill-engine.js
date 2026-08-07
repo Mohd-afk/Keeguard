@@ -29,11 +29,11 @@ function setSelectValue(selectEl, value) {
   }
 
   // 3. Word match fallback
-  if (matchedIdx === -1 && targetToken.length > 2) {
+  if (matchedIdx === -1 && targetToken.length >= 2) {
     matchedIdx = options.findIndex(opt => {
       const txtToken = normalizeToken(opt.text || opt.textContent);
       const words = targetToken.split(' ');
-      return words.some(w => w.length > 2 && txtToken.includes(w));
+      return words.some(w => w.length >= 2 && txtToken.includes(w));
     });
   }
 
@@ -55,9 +55,9 @@ function setSelectValue(selectEl, value) {
       selectEl.value = options[matchedIdx].value;
     }
 
-    selectEl.dispatchEvent(new Event('input', { bubbles: true }));
-    selectEl.dispatchEvent(new Event('change', { bubbles: true }));
-    selectEl.dispatchEvent(new Event('blur', { bubbles: true }));
+    selectEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    selectEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    selectEl.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
     return true;
   }
 
@@ -72,30 +72,70 @@ function setFieldValue(element, value) {
     return;
   }
 
-  // Handle custom combobox dropdowns (e.g. role="combobox")
   const role = element.getAttribute('role')?.toLowerCase() || '';
-  if (role === 'combobox' || element.getAttribute('aria-haspopup') === 'listbox') {
+  const ariaHasPopup = element.getAttribute('aria-haspopup')?.toLowerCase() || '';
+  const isCustomDropdown = role === 'combobox' || role === 'listbox' || ariaHasPopup === 'listbox' || ariaHasPopup === 'true' || element.classList.contains('select') || !!element.closest('[class*="select"]');
+
+  // Handle standard text inputs & textareas
+  if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+    element.focus();
+
+    // React 16+ _valueTracker workaround
+    const tracker = element._valueTracker;
+    if (tracker) {
+      tracker.setValue(element.value);
+    }
+
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      element.tagName === 'INPUT' ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype,
+      'value'
+    )?.set;
+
+    if (valueSetter) {
+      valueSetter.call(element, value);
+    } else {
+      element.value = value;
+    }
+
+    element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+
+    // If this input is also a custom combobox/dropdown trigger, open and select option
+    if (isCustomDropdown) {
+      try { element.click(); } catch (e) {}
+      triggerCustomDropdownSelect(value);
+    }
+    return;
+  }
+
+  // Handle custom div/span dropdown elements
+  if (isCustomDropdown) {
     element.focus();
     try { element.click(); } catch (e) {}
+    triggerCustomDropdownSelect(value);
   }
+}
 
-  const valueSetter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype, 'value'
-  )?.set || Object.getOwnPropertyDescriptor(
-    window.HTMLTextAreaElement.prototype, 'value'
-  )?.set;
+function triggerCustomDropdownSelect(value) {
+  setTimeout(() => {
+    const targetToken = normalizeToken(String(value));
+    if (!targetToken) return;
 
-  element.focus();
-  if (valueSetter) {
-    valueSetter.call(element, value);
-  } else {
-    element.value = value;
-  }
+    const selector = '[role="option"], .select-option, .dropdown-item, li[class*="option"], div[class*="option"], div[class*="select-dropdown"] div, div[class*="menu-item"]';
+    const options = document.querySelectorAll(selector);
 
-  // Dispatch events to trigger JS state updates in SPA frameworks
-  element.dispatchEvent(new Event('input', { bubbles: true }));
-  element.dispatchEvent(new Event('change', { bubbles: true }));
-  element.dispatchEvent(new Event('blur', { bubbles: true }));
+    for (const opt of options) {
+      const optText = normalizeToken(opt.innerText || opt.textContent || '');
+      if (optText && (optText === targetToken || optText.includes(targetToken) || targetToken.includes(optText))) {
+        try {
+          opt.focus();
+          opt.click();
+        } catch (e) {}
+        break;
+      }
+    }
+  }, 150);
 }
 
 function normalizeToken(str) {
@@ -111,78 +151,81 @@ function collectAllKeyValuePairs(data) {
   const kvPairs = [];
   if (!data) return kvPairs;
 
-  // 1. Direct custom fields array (from FieldProfile or VaultItem)
-  if (Array.isArray(data.fields)) {
-    data.fields.forEach(f => {
-      if (f && f.name && f.value) {
-        kvPairs.push({ key: f.name, value: f.value });
+  const addPair = (k, v) => {
+    if (k && v !== undefined && v !== null && String(v).trim() !== '') {
+      kvPairs.push({ key: String(k).trim(), value: String(v).trim() });
+    }
+  };
+
+  // 1. Direct fields array (e.g. [{ name: '...', value: '...' }] or [{ label: '...', value: '...' }])
+  const fieldsArr = data.fields || data.customFields || data.capturedFields;
+  if (Array.isArray(fieldsArr)) {
+    fieldsArr.forEach(f => {
+      if (f) {
+        addPair(f.name || f.label || f.key, f.value);
       }
     });
   }
 
-  // 2. Parsed template fields in note (e.g. __template__:...)
+  // 2. Direct object key-values (e.g. data.values = { "Net Weight": "450" })
+  if (data.values && typeof data.values === 'object') {
+    Object.entries(data.values).forEach(([k, v]) => addPair(k, v));
+  }
+
+  // 3. Parsed template fields in note (e.g. __template__:...)
   if (data.note && typeof data.note === 'string' && data.note.startsWith('__template__:')) {
     const lines = data.note.split('\n').slice(1);
     lines.forEach(line => {
       const idx = line.indexOf(':');
       if (idx !== -1) {
-        const k = line.substring(0, idx).trim();
-        const v = line.substring(idx + 1).trim();
-        if (k && v) kvPairs.push({ key: k, value: v });
+        addPair(line.substring(0, idx), line.substring(idx + 1));
       }
     });
   }
 
-  // 3. Username / Email / Password
+  // 4. Username / Email / Password
   if (data.username) {
-    kvPairs.push({ key: 'username', value: data.username });
-    kvPairs.push({ key: 'user', value: data.username });
-    kvPairs.push({ key: 'email', value: data.username });
-    kvPairs.push({ key: 'login', value: data.username });
-    kvPairs.push({ key: 'handle', value: data.username });
+    ['username', 'user', 'email', 'login', 'handle'].forEach(k => addPair(k, data.username));
   }
   if (data.password) {
-    kvPairs.push({ key: 'password', value: data.password });
-    kvPairs.push({ key: 'passwd', value: data.password });
-    kvPairs.push({ key: 'pwd', value: data.password });
-    kvPairs.push({ key: 'pin', value: data.password });
+    ['password', 'passwd', 'pwd', 'pin'].forEach(k => addPair(k, data.password));
   }
 
-  // 4. Address Data
+  // 5. Address Data
   if (data.addressData) {
     const a = data.addressData;
-    if (a.fullName) kvPairs.push({ key: 'full name', value: a.fullName }, { key: 'name', value: a.fullName });
-    if (a.streetAddress) kvPairs.push({ key: 'street address', value: a.streetAddress }, { key: 'address', value: a.streetAddress });
-    if (a.city) kvPairs.push({ key: 'city', value: a.city }, { key: 'town', value: a.city });
-    if (a.state) kvPairs.push({ key: 'state', value: a.state }, { key: 'province', value: a.state });
-    if (a.postalCode) kvPairs.push({ key: 'zip code', value: a.postalCode }, { key: 'pincode', value: a.postalCode }, { key: 'postal code', value: a.postalCode });
-    if (a.country) kvPairs.push({ key: 'country', value: a.country });
-    if (a.phone) kvPairs.push({ key: 'phone', value: a.phone }, { key: 'mobile', value: a.phone });
-    if (a.email) kvPairs.push({ key: 'email', value: a.email });
+    addPair('full name', a.fullName); addPair('name', a.fullName);
+    addPair('street address', a.streetAddress); addPair('address', a.streetAddress);
+    addPair('city', a.city); addPair('town', a.city);
+    addPair('state', a.state); addPair('province', a.state);
+    addPair('zip code', a.postalCode); addPair('pincode', a.postalCode); addPair('postal code', a.postalCode);
+    addPair('country', a.country);
+    addPair('phone', a.phone); addPair('mobile', a.phone);
+    addPair('email', a.email);
   }
 
-  // 5. Card Data
+  // 6. Card Data
   if (data.cardData) {
     const c = data.cardData;
-    if (c.number) kvPairs.push({ key: 'card number', value: c.number }, { key: 'credit card', value: c.number });
-    if (c.cardholderName) kvPairs.push({ key: 'cardholder name', value: c.cardholderName }, { key: 'name on card', value: c.cardholderName });
-    if (c.cvv) kvPairs.push({ key: 'cvv', value: c.cvv }, { key: 'cvc', value: c.cvv }, { key: 'security code', value: c.cvv });
-    if (c.expMonth && c.expYear) kvPairs.push({ key: 'expiry', value: `${c.expMonth}/${c.expYear}` });
-    if (c.expMonth) kvPairs.push({ key: 'exp month', value: c.expMonth });
-    if (c.expYear) kvPairs.push({ key: 'exp year', value: c.expYear });
+    addPair('card number', c.number); addPair('credit card', c.number);
+    addPair('cardholder name', c.cardholderName); addPair('name on card', c.cardholderName);
+    addPair('cvv', c.cvv); addPair('security code', c.cvv);
+    if (c.expMonth && c.expYear) addPair('expiry', `${c.expMonth}/${c.expYear}`);
+    addPair('exp month', c.expMonth);
+    addPair('exp year', c.expYear);
   }
 
-  // 6. Identity Data
+  // 7. Identity Data
   if (data.identityData) {
     const i = data.identityData;
-    if (i.firstName) kvPairs.push({ key: 'first name', value: i.firstName });
-    if (i.lastName) kvPairs.push({ key: 'last name', value: i.lastName });
-    if (i.dateOfBirth) kvPairs.push({ key: 'date of birth', value: i.dateOfBirth }, { key: 'dob', value: i.dateOfBirth });
-    if (i.email) kvPairs.push({ key: 'email', value: i.email });
-    if (i.phone) kvPairs.push({ key: 'phone', value: i.phone });
-    if (i.ssn) kvPairs.push({ key: 'ssn', value: i.ssn }, { key: 'social security', value: i.ssn });
-    if (i.licenseNumber) kvPairs.push({ key: 'license', value: i.licenseNumber });
-    if (i.passportNumber) kvPairs.push({ key: 'passport', value: i.passportNumber });
+    addPair('first name', i.firstName);
+    addPair('last name', i.lastName);
+    addPair('date of birth', i.dateOfBirth); addPair('dob', i.dateOfBirth);
+    addPair('email', i.email);
+    addPair('phone', i.phone);
+    addPair('ssn', i.ssn); addPair('social security', i.ssn);
+    addPair('license', i.licenseNumber);
+    addPair('passport', i.passportNumber);
   }
 
   return kvPairs;
@@ -191,23 +234,76 @@ function collectAllKeyValuePairs(data) {
 function getElementHints(el) {
   if (!el) return '';
   const hints = [];
+
+  // Attributes
   if (el.name) hints.push(el.name);
   if (el.id) hints.push(el.id);
   if (el.placeholder) hints.push(el.placeholder);
   if (el.getAttribute('aria-label')) hints.push(el.getAttribute('aria-label'));
   if (el.getAttribute('autocomplete')) hints.push(el.getAttribute('autocomplete'));
+  if (el.getAttribute('title')) hints.push(el.getAttribute('title'));
 
+  // Data attributes
+  ['data-label', 'data-fieldname', 'data-name', 'data-id', 'data-testid', 'data-placeholder'].forEach(attr => {
+    const val = el.getAttribute(attr);
+    if (val) hints.push(val);
+  });
+
+  // 1. Explicit aria-labelledby
+  const ariaLabelledBy = el.getAttribute('aria-labelledby');
+  if (ariaLabelledBy) {
+    ariaLabelledBy.split(/\s+/).forEach(id => {
+      const lblNode = document.getElementById(id);
+      if (lblNode && (lblNode.innerText || lblNode.textContent)) {
+        hints.push(lblNode.innerText || lblNode.textContent);
+      }
+    });
+  }
+
+  // 2. Explicit label[for="id"]
   if (el.id) {
     try {
       const labelEl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-      if (labelEl && labelEl.innerText) hints.push(labelEl.innerText);
+      if (labelEl && (labelEl.innerText || labelEl.textContent)) {
+        hints.push(labelEl.innerText || labelEl.textContent);
+      }
     } catch (e) {}
   }
-  const parentLabel = el.closest('label');
-  if (parentLabel && parentLabel.innerText) hints.push(parentLabel.innerText);
 
-  const prevSibling = el.previousElementSibling;
-  if (prevSibling && prevSibling.innerText) hints.push(prevSibling.innerText);
+  // 3. Parent label
+  const parentLabel = el.closest('label');
+  if (parentLabel && (parentLabel.innerText || parentLabel.textContent)) {
+    hints.push(parentLabel.innerText || parentLabel.textContent);
+  }
+
+  // 4. Preceding siblings
+  let prev = el.previousElementSibling;
+  let count = 0;
+  while (prev && count < 3) {
+    const txt = (prev.innerText || prev.textContent || '').trim();
+    if (txt && txt.length < 100) hints.push(txt);
+    prev = prev.previousElementSibling;
+    count++;
+  }
+
+  // 5. Ancestor container text extraction (for React / SPA forms like Meesho)
+  let curr = el.parentElement;
+  let depth = 0;
+  while (curr && depth < 4) {
+    const isContainer = curr.matches('[class*="field"], [class*="form"], [class*="item"], [class*="group"], [class*="input"], [class*="row"], [class*="col"], td, th, div');
+    if (isContainer) {
+      try {
+        const clone = curr.cloneNode(true);
+        clone.querySelectorAll('input, select, textarea, button, script, style, [role="combobox"]').forEach(n => n.remove());
+        const text = (clone.innerText || clone.textContent || '').trim();
+        if (text && text.length < 150) {
+          hints.push(text);
+        }
+      } catch (e) {}
+    }
+    curr = curr.parentElement;
+    depth++;
+  }
 
   return normalizeToken(hints.join(' '));
 }
@@ -216,7 +312,8 @@ function fillAllPageFields(data, scopeElement = document) {
   const kvPairs = collectAllKeyValuePairs(data);
   if (kvPairs.length === 0) return 0;
 
-  const inputs = scopeElement.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]), select, textarea, [role="combobox"]');
+  const selector = 'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="file"]), select, textarea, [role="combobox"], [role="listbox"], [aria-haspopup="listbox"], [aria-haspopup="true"], [class*="select"]';
+  const inputs = scopeElement.querySelectorAll(selector);
   let filledCount = 0;
   const filledElements = new Set();
 
@@ -237,28 +334,34 @@ function fillAllPageFields(data, scopeElement = document) {
       }
     }
 
-    // 2. Fuzzy match key against input hints
+    // 2. Match key against input hints
     let bestMatch = null;
     let bestScore = 0;
 
     for (const pair of kvPairs) {
-      if (!pair.value) continue;
+      if (pair.value === undefined || pair.value === null || String(pair.value).trim() === '') continue;
       const normKey = normalizeToken(pair.key);
       if (!normKey) continue;
 
       if (elHints.includes(normKey)) {
-        const score = normKey.length * 2;
+        const score = normKey.length * 3;
         if (score > bestScore) {
           bestScore = score;
           bestMatch = pair;
         }
       } else {
-        const keyWords = normKey.split(' ').filter(w => w.length > 2);
+        const keyWords = normKey.split(' ').filter(w => w.length >= 2);
         let matchWords = 0;
         keyWords.forEach(w => {
           if (elHints.includes(w)) matchWords++;
         });
-        if (matchWords > 0) {
+        if (matchWords > 0 && matchWords === keyWords.length) {
+          const score = matchWords * 2;
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = pair;
+          }
+        } else if (matchWords > 0) {
           const score = matchWords;
           if (score > bestScore) {
             bestScore = score;
@@ -279,7 +382,6 @@ function fillAllPageFields(data, scopeElement = document) {
 }
 
 function fillFormFields(form, data) {
-  // First run typed form fill (login/card/address)
   if (form && form.fields) {
     const fields = form.fields;
     for (const field of fields) {
@@ -321,10 +423,10 @@ function fillFormFields(form, data) {
     }
   }
 
-  // Then run smart all-field match for custom fields & profiles!
-  return fillAllPageFields(data, (form && form.element) ? form.element : document);
+  return fillAllPageFields(data, document);
 }
 
 window.setFieldValue = setFieldValue;
 window.fillFormFields = fillFormFields;
 window.fillAllPageFields = fillAllPageFields;
+
