@@ -158,9 +158,69 @@ function initContentScript() {
         return `Field ${fallbackIdx} (${fieldType})`;
       }
 
-      const elements = document.querySelectorAll(
-        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, [role="combobox"]'
-      );
+      // Helper to extract text value from native SELECT, input, or custom dropdown triggers
+      function extractFieldValue(el) {
+        if (!el) return '';
+
+        if (el.tagName === 'SELECT') {
+          if (el.options && el.options.length > 0 && el.selectedIndex >= 0) {
+            const opt = el.options[el.selectedIndex];
+            return (opt.text || opt.textContent || opt.value || '').trim();
+          }
+          return (el.value || '').trim();
+        }
+
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+          let val = (el.value || '').trim();
+          if (val) return val;
+          // Check if inside a custom dropdown container
+          const container = el.closest('[role="combobox"], [role="listbox"], [aria-haspopup], [class*="select"], [class*="Select"], [class*="dropdown"], [class*="Dropdown"]');
+          if (container) {
+            const selValEl = container.querySelector('[class*="singleValue"], [class*="selection-item"], [class*="selected"], [class*="value"], [class*="rendered"], [class*="label"], [class*="text"]');
+            if (selValEl) {
+              val = (selValEl.innerText || selValEl.textContent || '').trim();
+              if (val) return val;
+            }
+            const clone = container.cloneNode(true);
+            clone.querySelectorAll('input, script, style, svg, button').forEach(n => n.remove());
+            val = (clone.innerText || clone.textContent || '').trim();
+            if (val && val.length < 80) return val;
+          }
+          return '';
+        }
+
+        // Div / Button / Span custom dropdown triggers
+        let val = (el.getAttribute('data-value') || el.getAttribute('aria-valuenow') || el.value || '').trim();
+        if (val) return val;
+
+        const selValEl = el.querySelector('[class*="singleValue"], [class*="selection-item"], [class*="selected"], [class*="value"], [class*="rendered"], [class*="label"], [class*="text"]');
+        if (selValEl) {
+          val = (selValEl.innerText || selValEl.textContent || '').trim();
+          if (val) return val;
+        }
+
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('input, script, style, svg, button').forEach(n => n.remove());
+        val = (clone.innerText || clone.textContent || '').trim();
+        if (val && val.length < 80) return val;
+
+        return '';
+      }
+
+      const elements = document.querySelectorAll([
+        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])',
+        'select',
+        'textarea',
+        '[role="combobox"]',
+        '[role="listbox"]',
+        '[role="select"]',
+        '[aria-haspopup="listbox"]',
+        '[aria-haspopup="true"]',
+        '[aria-haspopup="menu"]',
+        'div[class*="select-selection"]',
+        'div[class*="Select-control"]',
+        'div[class*="dropdown-toggle"]',
+      ].join(', '));
 
       // Also find tag/chip input containers (they have chip elements + a plain text input)
       const tagContainerSelector = [
@@ -178,17 +238,18 @@ function initContentScript() {
       elements.forEach(el => {
         if (el.disabled) return;
 
-        // Check computed style / bounding rect instead of offsetParent (which breaks in fixed modals!)
-        const style = window.getComputedStyle(el);
-        if (style.display === 'none' || style.visibility === 'hidden') return;
-        const rect = el.getBoundingClientRect();
-        if (rect.width === 0 && rect.height === 0) return;
+        // Allow <select> elements even if styled hidden (e.g. Select2 plugin)
+        if (el.tagName !== 'SELECT') {
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') return;
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) return;
+        }
 
-        globalInputIdx++; // increment for EVERY visible input (skipped or not)
+        globalInputIdx++; // increment for EVERY input
         const currentGlobalIdx = globalInputIdx;
 
         // ── Tag/chip input handling ──────────────────────────────────────────
-        // Check if this element is a tag input (contains chip siblings or hint text)
         const isTagEl = (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') &&
           (() => {
             let parent = el.parentElement;
@@ -203,7 +264,6 @@ function initContentScript() {
           })();
 
         if (isTagEl) {
-          // Find the topmost container and only capture once per container
           let container = el.parentElement;
           for (let d = 0; d < 5 && container && container.tagName !== 'BODY'; d++) {
             const chipSel = '[class*="chip"],[class*="tag"]:not(input),[class*="pill"],[class*="Token"],[class*="badge"],[class*="MultiValue"],[class*="keyword"]';
@@ -215,7 +275,6 @@ function initContentScript() {
           if (capturedTagContainers.has(containerKey)) return;
           capturedTagContainers.add(containerKey);
 
-          // Read all existing chips
           const chipSel = '[class*="chip"],[class*="tag"]:not(input),[class*="pill"],[class*="Token"],[class*="badge"],[class*="MultiValue"],[class*="keyword"]';
           const chips = Array.from((container || el.parentElement).querySelectorAll(chipSel))
             .map(chip => {
@@ -232,7 +291,6 @@ function initContentScript() {
           const key = label.toLowerCase();
           if (seen.has(key)) return;
           seen.add(key);
-          // Mark as tagInput so fill engine knows how to refill it
           captured.push({ label, value: chipValue, sensitive: false, tagInput: true, pageIndex: currentGlobalIdx });
           return;
         }
@@ -241,17 +299,11 @@ function initContentScript() {
         const label = extractFieldLabel(el, index++);
         if (!label) return;
 
-        let value = '';
-        if (el.tagName === 'SELECT') {
-          value = el.options[el.selectedIndex]?.text?.trim() || el.value || '';
-        } else {
-          value = (el.value || '').trim();
-        }
+        const value = extractFieldValue(el);
 
         const key = label.toLowerCase();
         if (seen.has(key)) return;
         seen.add(key);
-        // pageIndex = position of this input among ALL visible inputs (1-based)
         captured.push({ label, value, sensitive: el.type === 'password', pageIndex: currentGlobalIdx });
       });
 

@@ -126,6 +126,17 @@ function setSelectValue(selectEl, value) {
   ['input', 'change', 'blur'].forEach(evType =>
     selectEl.dispatchEvent(new Event(evType, { bubbles: true, composed: true }))
   );
+
+  // If selectEl is wrapped inside or next to a custom dropdown UI, try to update label display
+  const container = selectEl.closest('[class*="select"], [class*="Select"], [class*="dropdown"], [class*="Dropdown"]') || selectEl.parentElement;
+  if (container && container !== selectEl) {
+    try {
+      const selTxt = options[matchedIdx].text || options[matchedIdx].textContent;
+      const valSpan = container.querySelector('[class*="value"], [class*="rendered"], [class*="selection"], [class*="label"]');
+      if (valSpan && selTxt) valSpan.textContent = selTxt;
+    } catch (e) {}
+  }
+
   return true;
 }
 
@@ -160,15 +171,50 @@ function setInputValue(element, value) {
  * Attempts to open a custom dropdown element and pick the right option.
  * Uses a polling loop (up to ~2 seconds) waiting for dropdown options to appear.
  */
+function openDropdownEvents(el) {
+  if (!el) return;
+  try { el.focus(); } catch (e) {}
+  ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(type => {
+    try {
+      el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    } catch (e) {}
+  });
+  ['keydown', 'keyup'].forEach(type => {
+    try {
+      el.dispatchEvent(new KeyboardEvent(type, { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true }));
+    } catch (e) {}
+  });
+}
+
 function fillCustomDropdown(triggerElement, value) {
   const targetToken = normalizeToken(String(value));
   if (!targetToken) return;
 
-  try { triggerElement.focus(); } catch (e) {}
-  try { triggerElement.click(); } catch (e) {}
+  // Open dropdown on trigger and parent container
+  openDropdownEvents(triggerElement);
+  const container = triggerElement.closest('[role="combobox"], [role="listbox"], [aria-haspopup], [class*="select"], [class*="Select"], [class*="dropdown"], [class*="Dropdown"]');
+  if (container && container !== triggerElement) {
+    openDropdownEvents(container);
+  }
+
+  // If triggerElement is an INPUT or TEXTAREA, type target value to trigger search filtering
+  if (triggerElement.tagName === 'INPUT' || triggerElement.tagName === 'TEXTAREA') {
+    try {
+      const tracker = triggerElement._valueTracker;
+      if (tracker) tracker.setValue(triggerElement.value);
+      const proto = triggerElement.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+      if (setter) setter.call(triggerElement, String(value));
+      else triggerElement.value = String(value);
+
+      ['input', 'change'].forEach(evType =>
+        triggerElement.dispatchEvent(new Event(evType, { bubbles: true, composed: true }))
+      );
+    } catch (e) {}
+  }
 
   let attempts = 0;
-  const maxAttempts = 16; // 16 × 120ms = ~2s
+  const maxAttempts = 16; // 16 x 120ms = ~2s
 
   function tryPickOption() {
     attempts++;
@@ -179,6 +225,9 @@ function fillCustomDropdown(triggerElement, value) {
       '.select__option',
       '.Select-option',
       '.dropdown-item',
+      '.ant-select-item-option',
+      '.MuiMenuItem-root',
+      '.mat-option',
       'li[class*="option"]',
       'li[class*="item"]',
       'div[class*="option"]:not([class*="container"]):not([class*="wrapper"])',
@@ -186,6 +235,9 @@ function fillCustomDropdown(triggerElement, value) {
       'div[class*="MenuItem"]',
       'div[class*="selectOption"]',
       'div[class*="SelectItem"]',
+      'div[class*="item"]',
+      'span[class*="option"]',
+      'span[class*="item"]',
     ].join(', ');
 
     const options = document.querySelectorAll(optionSelector);
@@ -200,7 +252,11 @@ function fillCustomDropdown(triggerElement, value) {
       if (optText === targetToken ||
           optText.includes(targetToken) ||
           targetToken.includes(optText)) {
-        try { opt.focus(); opt.click(); } catch (e) {}
+        ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(type => {
+          try {
+            opt.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+          } catch (e) {}
+        });
         picked = true;
         break;
       }
@@ -208,10 +264,19 @@ function fillCustomDropdown(triggerElement, value) {
 
     if (!picked && attempts < maxAttempts) {
       setTimeout(tryPickOption, 120);
+    } else if (!picked) {
+      // Fallback: press Enter on input in case search filtering highlighted the item
+      try {
+        ['keydown', 'keypress', 'keyup'].forEach(evType => {
+          triggerElement.dispatchEvent(new KeyboardEvent(evType, {
+            key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, composed: true, cancelable: true
+          }));
+        });
+      } catch(e){}
     }
   }
 
-  setTimeout(tryPickOption, 80);
+  setTimeout(tryPickOption, 100);
 }
 
 // ─── Tag / Chip input fill ─────────────────────────────────────────────────
@@ -278,12 +343,17 @@ function setFieldValue(element, value) {
   // Detect custom dropdown triggers
   const role = (element.getAttribute('role') || '').toLowerCase();
   const ariaHasPopup = (element.getAttribute('aria-haspopup') || '').toLowerCase();
+  const className = (element.className || '').toString().toLowerCase();
+
   const isDropdownTrigger =
     role === 'combobox' ||
     role === 'listbox' ||
+    role === 'select' ||
     ariaHasPopup === 'listbox' ||
     ariaHasPopup === 'true' ||
-    ariaHasPopup === 'menu';
+    ariaHasPopup === 'menu' ||
+    className.includes('select') ||
+    className.includes('dropdown');
 
   // Standard input / textarea
   if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
@@ -296,7 +366,7 @@ function setFieldValue(element, value) {
     return;
   }
 
-  // Pure custom dropdown trigger (div/span with role)
+  // Pure custom dropdown trigger (div/span/button with role or dropdown class)
   if (isDropdownTrigger) {
     fillCustomDropdown(element, strValue);
     return;
@@ -548,22 +618,58 @@ function doFillAllPageFields(data, scopeElement) {
 
   if (kvPairs.length === 0) return 0;
 
-  // Single correct selector (all in one string so :not chains all apply together)
-  const allEls = Array.from(scopeElement.querySelectorAll(
-    'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]), select, textarea, [role="combobox"], [role="listbox"], [aria-haspopup="listbox"], [aria-haspopup="true"], [aria-haspopup="menu"], [contenteditable="true"]'
-  ));
+  const FILL_SELECTOR = 'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]), select, textarea, [role="combobox"], [role="listbox"], [aria-haspopup="listbox"], [aria-haspopup="true"], [aria-haspopup="menu"], [contenteditable="true"]';
 
-  // Filter to only visible elements (NOT filtering readOnly — some SPAs mark inputs readOnly temporarily)
-  const inputs = allEls.filter(el => {
+  // ─── Collect elements: normal DOM + shadow DOM pierce ──────────────────────
+  const collected = [];
+
+  function collectFromNode(root) {
+    try {
+      const els = Array.from(root.querySelectorAll(FILL_SELECTOR));
+      collected.push(...els);
+      // Pierce shadow roots recursively
+      root.querySelectorAll('*').forEach(el => {
+        if (el.shadowRoot) collectFromNode(el.shadowRoot);
+      });
+    } catch (e) {}
+  }
+
+  collectFromNode(scopeElement);
+
+  // Debug: log raw counts BEFORE filtering
+  const rawCount = collected.length;
+  console.log('[KeeGuard] Raw elements from querySelectorAll (incl. shadow):', rawCount);
+  if (rawCount === 0) {
+    // Help diagnose: is this an iframe context?
+    console.log('[KeeGuard] frameContext:', {
+      isTopFrame: window === window.top,
+      location: window.location.href,
+      bodyChildCount: document.body ? document.body.children.length : 'no body',
+      allInputs: document.querySelectorAll('input').length,
+      allSelects: document.querySelectorAll('select').length,
+      allTextareas: document.querySelectorAll('textarea').length,
+      allWithRole: document.querySelectorAll('[role]').length,
+    });
+  }
+
+  // Deduplicate
+  const uniqueEls = [...new Set(collected)];
+
+  // Filter to only visible elements
+  const inputs = uniqueEls.filter(el => {
     if (el.disabled) return false;
+    if (el.tagName === 'SELECT') return true; // ALWAYS include native <select> elements even if styled hidden
     const style = window.getComputedStyle(el);
     if (style.display === 'none' || style.visibility === 'hidden') return false;
-    const rect = el.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return false;
     return true;
   });
 
   console.log('[KeeGuard] fillAllPageFields - visible inputs found:', inputs.length);
+  if (inputs.length > 0) {
+    console.log('[KeeGuard] First 5 inputs:', inputs.slice(0, 5).map(el =>
+      `${el.tagName}[type=${el.type}][name=${el.name}][id=${el.id}][role=${el.getAttribute('role')}]`
+    ));
+  }
 
   let filledCount = 0;
   const filledElements = new Set();
