@@ -143,26 +143,50 @@ function setSelectValue(selectEl, value) {
 // ─── React / SPA input fill ─────────────────────────────────────────────────
 
 function setInputValue(element, value) {
-  element.focus();
+  if (!element || value === undefined || value === null) return;
+  let strVal = String(value).trim();
 
-  // React 16+ internal tracker — set OLD value so React notices the change
-  const tracker = element._valueTracker;
-  if (tracker) tracker.setValue(element.value);
+  // If element is type="number", sanitize value to numeric string to prevent DOMException
+  if (element.type === 'number') {
+    const numMatch = strVal.replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+    if (numMatch) {
+      strVal = numMatch[0];
+    } else {
+      // Cannot parse non-numeric text into a number input
+      return;
+    }
+  }
 
-  const proto = element.tagName === 'TEXTAREA'
-    ? window.HTMLTextAreaElement.prototype
-    : window.HTMLInputElement.prototype;
-  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-  if (setter) setter.call(element, value);
-  else element.value = value;
+  try { element.focus(); } catch (e) {}
 
-  ['input', 'change', 'blur'].forEach(evType =>
-    element.dispatchEvent(new Event(evType, { bubbles: true, composed: true }))
-  );
+  // React 16+ internal tracker
+  try {
+    const tracker = element._valueTracker;
+    if (tracker) tracker.setValue(element.value);
+  } catch (e) {}
+
+  try {
+    const proto = element.tagName === 'TEXTAREA'
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    if (setter) setter.call(element, strVal);
+    else element.value = strVal;
+  } catch (e) {
+    try { element.value = strVal; } catch (err) {}
+  }
+
+  ['input', 'change', 'blur'].forEach(evType => {
+    try {
+      element.dispatchEvent(new Event(evType, { bubbles: true, composed: true }));
+    } catch (e) {}
+  });
   // Also fire keydown/keyup for Angular / Vue
-  ['keydown', 'keyup'].forEach(evType =>
-    element.dispatchEvent(new KeyboardEvent(evType, { bubbles: true, composed: true }))
-  );
+  ['keydown', 'keyup'].forEach(evType => {
+    try {
+      element.dispatchEvent(new KeyboardEvent(evType, { bubbles: true, composed: true }));
+    } catch (e) {}
+  });
 }
 
 // ─── Custom dropdown (React/SPA) fill ──────────────────────────────────────
@@ -562,11 +586,16 @@ function getElementHints(el) {
 
 // ─── Score a (kvPair, elementHints) match ──────────────────────────────────
 
-function scoreMatch(normKey, elHints) {
+function scoreMatch(normKey, elHints, el, pair) {
   if (!normKey || !elHints) return 0;
 
   // Ignore default fallback label keys like "field 1 text" when matching by label
   if (/^field\s+\d+(\s*\(?[a-z0-9]+\)?)?$/i.test(normKey)) return 0;
+
+  // Type safety: don't match non-numeric text values (like brand names) to number inputs
+  if (el && el.type === 'number' && pair && pair.value) {
+    if (!/\d/.test(String(pair.value))) return 0;
+  }
 
   // 1. Exact string match or full substring match
   if (elHints === normKey) return normKey.length * 5 + 20;
@@ -708,7 +737,7 @@ function doFillAllPageFields(data, scopeElement) {
     let bestScore = 0;
 
     for (const pair of kvPairs) {
-      const score = scoreMatch(pair.normKey, elHints);
+      const score = scoreMatch(pair.normKey, elHints, el, pair);
       if (score > bestScore) {
         bestScore = score;
         bestPair = pair;
