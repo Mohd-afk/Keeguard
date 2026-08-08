@@ -1000,8 +1000,10 @@ function showCaptureModal(fields, pageUrl) {
         id: 'field_' + Date.now() + '_' + i,
         name: f.label,
         value: f.value || '',
-        type: f.sensitive ? 'password' : 'text',
+        type: f.sensitive ? 'password' : (f.tagInput ? 'tagInput' : 'text'),
         sensitive: f.sensitive || false,
+        pageIndex: f.pageIndex || null,   // capture-time DOM index (1-based)
+        tagInput: f.tagInput || false,    // true = chip/tag multi-value input
       }));
 
       // Send to service worker to save via the vault

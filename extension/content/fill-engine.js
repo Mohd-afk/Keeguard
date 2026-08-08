@@ -334,7 +334,24 @@ function collectAllKeyValuePairs(data) {
   const fieldsArr = data.fields || data.customFields || data.capturedFields;
   if (Array.isArray(fieldsArr)) {
     fieldsArr.forEach(f => {
-      if (f) addPair(f.name || f.label || f.key, f.value);
+      if (f) {
+        const k = f.name || f.label || f.key;
+        const v = f.value;
+        if (!k) return;
+        const kStr = String(k).trim();
+        const vStr = v !== undefined && v !== null ? String(v).trim() : '';
+        if (!kStr || !vStr) return;
+        const key = kStr.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        kvPairs.push({
+          key: kStr,
+          value: vStr,
+          normKey: normalizeToken(kStr),
+          pageIndex: typeof f.pageIndex === 'number' ? f.pageIndex : null,
+          tagInput: f.tagInput || f.type === 'tagInput' || false,
+        });
+      }
     });
   }
 
@@ -498,9 +515,32 @@ function scoreMatch(normKey, elHints) {
   return 0;
 }
 
+// ─── Positional field name detection ───────────────────────────────────────
+
+/**
+ * Returns true if 60%+ of kvPair keys are positional fallbacks like "Field 4 (TEXT)",
+ * OR if most fields have numeric pageIndex stored (reliable positional data).
+ */
+function isPositionalProfile(kvPairs) {
+  if (!kvPairs.length) return false;
+  // If fields have explicit pageIndex stored, always use positional strategy
+  const withPageIndex = kvPairs.filter(p => p.pageIndex !== null && p.pageIndex !== undefined).length;
+  if (withPageIndex >= Math.ceil(kvPairs.length * 0.6)) return true;
+  // Otherwise detect from fallback label pattern
+  const positionalPattern = /^field\s+\d+(\s*\(?(text|number|select|textarea|email|tel|url|password)?\)?)?$/i;
+  const positionalCount = kvPairs.filter(p => positionalPattern.test(p.key.trim())).length;
+  return positionalCount >= Math.ceil(kvPairs.length * 0.6);
+}
+
+/** Extract the original capture index from a name like "Field 4 (TEXT)" -> 4 */
+function extractFieldIndex(fieldName) {
+  const m = String(fieldName).match(/^field\s+(\d+)/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 // ─── Main fill function ─────────────────────────────────────────────────────
 
-function fillAllPageFields(data, scopeElement) {
+function doFillAllPageFields(data, scopeElement) {
   if (!scopeElement) scopeElement = document;
   const kvPairs = collectAllKeyValuePairs(data);
 
@@ -528,47 +568,96 @@ function fillAllPageFields(data, scopeElement) {
   let filledCount = 0;
   const filledElements = new Set();
 
-  for (const el of inputs) {
-    if (filledElements.has(el)) continue;
+  // ── STRATEGY A: Positional fill ────────────────────────────────────────────
+  // When profile fields have fallback names like "Field 4 (TEXT)" (capture couldn't
+  // read labels), or when pageIndex is stored, use the index to target the Nth input.
+  if (isPositionalProfile(kvPairs)) {
+    console.log('[KeeGuard] Using POSITIONAL fill strategy');
 
-    const type = (el.type || '').toLowerCase();
+    // Build positional pairs: prefer stored pageIndex, fall back to extracted index from name
+    const positionalPairs = kvPairs
+      .map(p => ({
+        ...p,
+        idx: (p.pageIndex !== null && p.pageIndex !== undefined)
+          ? p.pageIndex
+          : extractFieldIndex(p.key)
+      }))
+      .filter(p => p.idx !== null)
+      .sort((a, b) => a.idx - b.idx);
 
-    // Password fields: only fill if we have a password key
-    if (type === 'password') {
-      const pwdPair = kvPairs.find(p =>
-        ['password', 'passwd', 'pwd', 'pin'].includes(p.key.toLowerCase())
-      );
-      if (pwdPair) {
-        setFieldValue(el, pwdPair.value);
+    // All non-password inputs in DOM order
+    const fillableInputs = inputs.filter(el => (el.type || '').toLowerCase() !== 'password');
+
+    for (const pair of positionalPairs) {
+      // idx is 1-based from capture (Field 1 = first input)
+      const targetInput = fillableInputs[pair.idx - 1];
+      if (targetInput && !filledElements.has(targetInput)) {
+        console.log(`[KeeGuard][POS] fillableInputs[${pair.idx - 1}] tag=${targetInput.tagName} name=${targetInput.name || targetInput.id || '?'} <- "${pair.value}"`);
+        setFieldValue(targetInput, pair.value);
+        filledElements.add(targetInput);
+        filledCount++;
+      }
+    }
+
+    // Handle any non-positional pairs (e.g. password) via normal matching
+    const nonPositional = kvPairs.filter(p => extractFieldIndex(p.key) === null);
+    for (const el of inputs) {
+      if (filledElements.has(el)) continue;
+      if ((el.type || '').toLowerCase() === 'password') {
+        const pwdPair = nonPositional.find(p => ['password', 'passwd', 'pwd', 'pin'].includes(p.key.toLowerCase()));
+        if (pwdPair) { setFieldValue(el, pwdPair.value); filledElements.add(el); filledCount++; }
+      }
+    }
+
+  } else {
+    // ── STRATEGY B: Label-based fill ──────────────────────────────────────────
+    console.log('[KeeGuard] Using LABEL-BASED fill strategy');
+
+    for (const el of inputs) {
+      if (filledElements.has(el)) continue;
+      const type = (el.type || '').toLowerCase();
+
+      if (type === 'password') {
+        const pwdPair = kvPairs.find(p => ['password', 'passwd', 'pwd', 'pin'].includes(p.key.toLowerCase()));
+        if (pwdPair) { setFieldValue(el, pwdPair.value); filledElements.add(el); filledCount++; }
+        continue;
+      }
+
+      const elHints = getElementHints(el);
+      let bestPair = null;
+      let bestScore = 0;
+
+      for (const pair of kvPairs) {
+        const score = scoreMatch(pair.normKey, elHints);
+        if (score > bestScore) { bestScore = score; bestPair = pair; }
+      }
+
+      if (bestPair && bestScore > 0) {
+        console.log(`[KeeGuard] Filling "${el.tagName}[${el.name || el.id || el.placeholder || el.getAttribute('role')}]" <- key="${bestPair.key}" score=${bestScore}`);
+        setFieldValue(el, bestPair.value);
         filledElements.add(el);
         filledCount++;
       }
-      continue;
-    }
-
-    const elHints = getElementHints(el);
-
-    let bestPair = null;
-    let bestScore = 0;
-
-    for (const pair of kvPairs) {
-      const score = scoreMatch(pair.normKey, elHints);
-      if (score > bestScore) {
-        bestScore = score;
-        bestPair = pair;
-      }
-    }
-
-    if (bestPair && bestScore > 0) {
-      console.log(`[KeeGuard] Filling "${el.tagName}[${el.name || el.id || el.placeholder || el.getAttribute('role')}]" with key="${bestPair.key}" score=${bestScore}`);
-      setFieldValue(el, bestPair.value);
-      filledElements.add(el);
-      filledCount++;
     }
   }
 
   console.log('[KeeGuard] fillAllPageFields - filled:', filledCount);
   return filledCount;
+}
+
+/**
+ * Public entry point.
+ * Retries once after 700ms if 0 inputs found (SPA lazy-rendering race).
+ */
+function fillAllPageFields(data, scopeElement) {
+  const count = doFillAllPageFields(data, scopeElement || document);
+  if (count === 0) {
+    setTimeout(() => {
+      const retry = doFillAllPageFields(data, document);
+      console.log('[KeeGuard] Retry fill result:', retry);
+    }, 700);
+  }
+  return count;
 }
 
 // ─── Typed form fill (login / card / address) ──────────────────────────────

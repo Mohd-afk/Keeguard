@@ -173,7 +173,8 @@ function initContentScript() {
       // Track which tag-input containers we've already captured
       const capturedTagContainers = new Set();
 
-      let index = 1;
+      let index = 1;           // 1-based label fallback counter
+      let globalInputIdx = 0;   // 1-based position counter across ALL visible inputs
       elements.forEach(el => {
         if (el.disabled) return;
 
@@ -182,6 +183,9 @@ function initContentScript() {
         if (style.display === 'none' || style.visibility === 'hidden') return;
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) return;
+
+        globalInputIdx++; // increment for EVERY visible input (skipped or not)
+        const currentGlobalIdx = globalInputIdx;
 
         // ── Tag/chip input handling ──────────────────────────────────────────
         // Check if this element is a tag input (contains chip siblings or hint text)
@@ -229,7 +233,7 @@ function initContentScript() {
           if (seen.has(key)) return;
           seen.add(key);
           // Mark as tagInput so fill engine knows how to refill it
-          captured.push({ label, value: chipValue, sensitive: false, tagInput: true });
+          captured.push({ label, value: chipValue, sensitive: false, tagInput: true, pageIndex: currentGlobalIdx });
           return;
         }
         // ── End tag input handling ───────────────────────────────────────────
@@ -247,7 +251,8 @@ function initContentScript() {
         const key = label.toLowerCase();
         if (seen.has(key)) return;
         seen.add(key);
-        captured.push({ label, value, sensitive: el.type === 'password' });
+        // pageIndex = position of this input among ALL visible inputs (1-based)
+        captured.push({ label, value, sensitive: el.type === 'password', pageIndex: currentGlobalIdx });
       });
 
       sendResponse({ success: true, fields: captured, url: window.location.href });
