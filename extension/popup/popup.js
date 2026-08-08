@@ -773,172 +773,27 @@ async function capturePageFields() {
       return;
     }
 
-    // Try sending message to content script first
-    chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE_FIELDS' }, async (res) => {
-      if (chrome.runtime.lastError) { const _ = chrome.runtime.lastError; }
+    // Ensure content scripts are dynamically injected into all frames first
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: true },
+        files: ['content/fill-engine.js', 'content/content.js']
+      });
+    } catch (e) {
+      console.warn('[KeeGuard] Dynamic injection note:', e);
+    }
 
-      if (res && res.success && res.fields && res.fields.length > 0) {
-        if (captureBtn) { captureBtn.textContent = '📷 Capture'; captureBtn.disabled = false; }
-        capturedFields = res.fields;
-        showCaptureModal(res.fields, res.url || tab.url);
-        return;
+    // Send CAPTURE_PAGE_FIELDS to tab
+    chrome.tabs.sendMessage(tab.id, { type: 'CAPTURE_PAGE_FIELDS' }, (res) => {
+      if (captureBtn) { captureBtn.textContent = '📷 Capture'; captureBtn.disabled = false; }
+      if (chrome.runtime.lastError) {
+        console.warn('[KeeGuard] Capture message note:', chrome.runtime.lastError);
       }
 
-      // Fallback: executeScript across all frames in parallel
-      try {
-        const results = await chrome.scripting.executeScript({
-          target: { tabId: tab.id, allFrames: true },
-          func: () => {
-            const captured = [];
-            const seen = new Set();
-
-            function cleanLabelText(str) {
-              if (!str) return '';
-              return String(str)
-                .replace(/[\n\r\t]+/g, ' ')
-                .replace(/[*ℹ️?]+/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-            }
-
-            function extractFieldLabel(el, fallbackIdx) {
-              if (!el) return `Field ${fallbackIdx}`;
-              if (el.id) {
-                try {
-                  const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-                  if (lbl) { const t = cleanLabelText(lbl.innerText); if (t) return t; }
-                } catch(e) {}
-              }
-              const enclosingLabel = el.closest('label');
-              if (enclosingLabel) {
-                const clone = enclosingLabel.cloneNode(true);
-                clone.querySelectorAll('input, select, textarea, button, script, style').forEach(n => n.remove());
-                const t = cleanLabelText(clone.innerText);
-                if (t) return t;
-              }
-              const ariaLabel = el.getAttribute('aria-label');
-              if (ariaLabel?.trim()) return cleanLabelText(ariaLabel);
-              const ariaLabelledBy = el.getAttribute('aria-labelledby');
-              if (ariaLabelledBy) {
-                try {
-                  const lbl = document.getElementById(ariaLabelledBy);
-                  if (lbl && lbl.innerText?.trim()) return cleanLabelText(lbl.innerText);
-                } catch(e) {}
-              }
-              if (el.placeholder?.trim() && !/^[.\s•*]+$/.test(el.placeholder)) {
-                return cleanLabelText(el.placeholder);
-              }
-              const td = el.closest('td');
-              if (td) {
-                const prevTd = td.previousElementSibling;
-                if (prevTd && prevTd.innerText?.trim()) {
-                  const t = cleanLabelText(prevTd.innerText);
-                  if (t) return t;
-                }
-                const tr = td.closest('tr');
-                if (tr) {
-                  const th = tr.querySelector('th, td:not(:last-child)');
-                  if (th && th !== td && th.innerText?.trim()) {
-                    const t = cleanLabelText(th.innerText);
-                    if (t) return t;
-                  }
-                }
-              }
-              let parent = el.parentElement;
-              for (let depth = 0; depth < 4 && parent && parent.tagName !== 'BODY' && parent.tagName !== 'FORM'; depth++) {
-                const textNodes = [];
-                const children = Array.from(parent.children);
-                for (const child of children) {
-                  if (child.contains(el)) break;
-                  if (['SCRIPT', 'STYLE', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(child.tagName)) continue;
-                  const txt = child.innerText?.trim();
-                  if (txt && txt.length > 1 && txt.length < 100) textNodes.push(txt);
-                }
-                if (textNodes.length > 0) {
-                  const cleaned = cleanLabelText(textNodes.join(' '));
-                  if (cleaned) return cleaned;
-                }
-                parent = parent.parentElement;
-              }
-              let sib = el.previousElementSibling;
-              while (sib) {
-                if (!['SCRIPT', 'STYLE', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(sib.tagName)) {
-                  const t = sib.innerText?.trim();
-                  if (t && t.length > 1 && t.length < 100) {
-                    const cleaned = cleanLabelText(t);
-                    if (cleaned) return cleaned;
-                  }
-                }
-                sib = sib.previousElementSibling;
-              }
-              const nameAttr = el.getAttribute('name') || el.getAttribute('id');
-              if (nameAttr?.trim()) return cleanLabelText(nameAttr.replace(/[-_]/g, ' '));
-              return `Field ${fallbackIdx} (${(el.type || el.tagName || 'field').toUpperCase()})`;
-            }
-
-            const elements = document.querySelectorAll(
-              'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, [role="combobox"]'
-            );
-
-            let index = 1;
-            elements.forEach(el => {
-              if (el.disabled) return;
-              const style = window.getComputedStyle(el);
-              if (style.display === 'none' || style.visibility === 'hidden') return;
-              const rect = el.getBoundingClientRect();
-              if (rect.width === 0 && rect.height === 0) return;
-
-              const label = extractFieldLabel(el, index++);
-              if (!label) return;
-
-              let value = '';
-              if (el.tagName === 'SELECT') {
-                value = el.options[el.selectedIndex]?.text?.trim() || el.value || '';
-              } else {
-                value = (el.value || '').trim();
-              }
-
-              const key = label.toLowerCase();
-              if (seen.has(key)) return;
-              seen.add(key);
-              captured.push({ label, value, sensitive: el.type === 'password' });
-            });
-
-            return { fields: captured, url: window.location.href };
-          }
-        });
-
-        if (captureBtn) { captureBtn.textContent = '📷 Capture'; captureBtn.disabled = false; }
-
-        let allCaptured = [];
-        if (results && results.length > 0) {
-          results.forEach(r => {
-            if (r.result && r.result.fields && r.result.fields.length > 0) {
-              allCaptured = allCaptured.concat(r.result.fields);
-            }
-          });
-        }
-
-        // Deduplicate across frames
-        const uniqueFields = [];
-        const seenKeys = new Set();
-        allCaptured.forEach(f => {
-          const k = f.label.toLowerCase();
-          if (!seenKeys.has(k)) {
-            seenKeys.add(k);
-            uniqueFields.push(f);
-          }
-        });
-
-        if (uniqueFields.length > 0) {
-          capturedFields = uniqueFields;
-          showCaptureModal(uniqueFields, tab.url);
-        } else {
-          showToast('No form fields found on this page');
-        }
-      } catch (execErr) {
-        if (captureBtn) { captureBtn.textContent = '📷 Capture'; captureBtn.disabled = false; }
-        console.error('[Capture] executeScript fallback failed:', execErr);
+      if (res && res.success && res.fields && res.fields.length > 0) {
+        capturedFields = res.fields;
+        showCaptureModal(res.fields, res.url || tab.url);
+      } else {
         showToast('No form fields found on this page');
       }
     });
