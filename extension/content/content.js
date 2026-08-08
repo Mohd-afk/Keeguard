@@ -63,97 +63,141 @@ function initContentScript() {
       function extractFieldLabel(el, fallbackIdx) {
         if (!el) return `Field ${fallbackIdx}`;
 
-        // 1. <label for="id">
+        // 1. Explicit <label for="id">
         if (el.id) {
           try {
             const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-            if (lbl) { const t = cleanLabelText(lbl.innerText); if (t) return t; }
+            if (lbl) {
+              const t = cleanLabelText(lbl.innerText || lbl.textContent);
+              if (t && t.length >= 2) return t;
+            }
           } catch(e) {}
         }
 
         // 2. Enclosing <label>
-        const enclosingLabel = el.closest('label');
-        if (enclosingLabel) {
-          const clone = enclosingLabel.cloneNode(true);
+        const encLabel = el.closest('label');
+        if (encLabel) {
+          const clone = encLabel.cloneNode(true);
           clone.querySelectorAll('input, select, textarea, button, script, style').forEach(n => n.remove());
-          const t = cleanLabelText(clone.innerText);
-          if (t) return t;
+          const t = cleanLabelText(clone.innerText || clone.textContent);
+          if (t && t.length >= 2) return t;
         }
 
-        // 3. Explicit attributes (aria-label, aria-labelledby, placeholder, title, name)
+        // 3. Explicit label attributes on the element itself
         const ariaLabel = el.getAttribute('aria-label');
-        if (ariaLabel?.trim()) return cleanLabelText(ariaLabel);
+        if (ariaLabel?.trim()) {
+          const t = cleanLabelText(ariaLabel);
+          if (t && t.length >= 2) return t;
+        }
 
         const ariaLabelledBy = el.getAttribute('aria-labelledby');
         if (ariaLabelledBy) {
           try {
-            const lbl = document.getElementById(ariaLabelledBy);
-            if (lbl && lbl.innerText?.trim()) return cleanLabelText(lbl.innerText);
+            const parts = ariaLabelledBy.split(/\s+/).map(id => {
+              const node = document.getElementById(id);
+              return node ? (node.innerText || node.textContent || '').trim() : '';
+            }).filter(Boolean);
+            const t = cleanLabelText(parts.join(' '));
+            if (t && t.length >= 2) return t;
           } catch(e) {}
         }
 
-        if (el.placeholder?.trim() && !/^[.\s•*]+$/.test(el.placeholder)) {
-          return cleanLabelText(el.placeholder);
+        const dataLabel = el.getAttribute('data-label') ||
+                          el.getAttribute('data-fieldname') ||
+                          el.getAttribute('data-name') ||
+                          el.getAttribute('data-title') ||
+                          el.getAttribute('data-testid');
+        if (dataLabel?.trim()) {
+          const t = cleanLabelText(dataLabel.replace(/[-_.]/g, ' '));
+          if (t && t.length >= 2) return t;
         }
 
-        // 4. Table cell label (if inside <td>, check preceding <td> or <th> in same <tr>)
-        const td = el.closest('td');
-        if (td) {
-          const prevTd = td.previousElementSibling;
-          if (prevTd && prevTd.innerText?.trim()) {
-            const t = cleanLabelText(prevTd.innerText);
-            if (t) return t;
-          }
-          const tr = td.closest('tr');
-          if (tr) {
-            const th = tr.querySelector('th, td:not(:last-child)');
-            if (th && th !== td && th.innerText?.trim()) {
-              const t = cleanLabelText(th.innerText);
-              if (t) return t;
-            }
+        if (el.placeholder?.trim() && !/^[.\s•*ℹ️?-]+$/.test(el.placeholder)) {
+          const t = cleanLabelText(el.placeholder);
+          if (t && t.length >= 2) return t;
+        }
+
+        if (el.title?.trim()) {
+          const t = cleanLabelText(el.title);
+          if (t && t.length >= 2) return t;
+        }
+
+        // 4. Name or ID attribute formatted nicely (e.g. selling_price -> Selling Price, mrp -> MRP)
+        const nameAttr = el.getAttribute('name') || el.getAttribute('id');
+        if (nameAttr?.trim()) {
+          const formatted = nameAttr
+            .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase to words
+            .replace(/[-_.]/g, ' ')            // snake_case/kebab-case to words
+            .replace(/\s+/g, ' ')
+            .trim();
+          const t = cleanLabelText(formatted);
+          if (t && t.length >= 2 && !/^(input|field|text|select|textarea|val|value|num|number)\d*$/i.test(t)) {
+            return t;
           }
         }
 
-        // 5. Parent row / container text search (look up to 4 parent elements)
-        let parent = el.parentElement;
-        for (let depth = 0; depth < 4 && parent && parent.tagName !== 'BODY' && parent.tagName !== 'FORM'; depth++) {
-          const textNodes = [];
+        // 5. Ancestor search: walk up 6 parent levels to find label / title / header elements
+        let curr = el;
+        for (let depth = 0; depth < 6; depth++) {
+          const parent = curr.parentElement;
+          if (!parent || parent.tagName === 'BODY' || parent.tagName === 'FORM' || parent.tagName === 'HTML') break;
+
+          // Check if parent contains a dedicated label/title child element
+          const labelChild = parent.querySelector(
+            '[class*="label"], [class*="title"], [class*="name"], [class*="header"], [class*="caption"], legend, label'
+          );
+          if (labelChild && !labelChild.contains(el)) {
+            const t = cleanLabelText(labelChild.innerText || labelChild.textContent);
+            if (t && t.length >= 2 && t.length <= 100) return t;
+          }
+
+          // Collect text from preceding siblings at this parent level
           const children = Array.from(parent.children);
-          for (const child of children) {
-            if (child.contains(el)) break;
-            if (['SCRIPT', 'STYLE', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(child.tagName)) continue;
-            const txt = child.innerText?.trim();
-            if (txt && txt.length > 1 && txt.length < 100) {
-              textNodes.push(txt);
+          const currIdx = children.indexOf(curr);
+          const textParts = [];
+          for (let i = 0; i < currIdx; i++) {
+            const sib = children[i];
+            if (['SCRIPT', 'STYLE', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'SVG'].includes(sib.tagName)) continue;
+            const txt = (sib.innerText || sib.textContent || '').trim();
+            if (txt && txt.length >= 2 && txt.length < 120) {
+              textParts.push(txt);
             }
           }
-          if (textNodes.length > 0) {
-            const cleaned = cleanLabelText(textNodes.join(' '));
-            if (cleaned) return cleaned;
+          if (textParts.length > 0) {
+            const t = cleanLabelText(textParts.join(' '));
+            if (t && t.length >= 2) return t;
           }
-          parent = parent.parentElement;
+
+          // Direct text nodes of parent
+          const textNodes = [];
+          Array.from(parent.childNodes).forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE) {
+              const txt = (node.textContent || '').trim();
+              if (txt && txt.length >= 2 && txt.length < 120) textNodes.push(txt);
+            }
+          });
+          if (textNodes.length > 0) {
+            const t = cleanLabelText(textNodes.join(' '));
+            if (t && t.length >= 2) return t;
+          }
+
+          curr = parent;
         }
 
-        // 6. Previous sibling text
+        // 6. Preceding sibling search on the element itself
         let sib = el.previousElementSibling;
         while (sib) {
-          if (!['SCRIPT', 'STYLE', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(sib.tagName)) {
-            const t = sib.innerText?.trim();
-            if (t && t.length > 1 && t.length < 100) {
-              const cleaned = cleanLabelText(t);
-              if (cleaned) return cleaned;
+          if (!['SCRIPT', 'STYLE', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'SVG'].includes(sib.tagName)) {
+            const txt = (sib.innerText || sib.textContent || '').trim();
+            if (txt && txt.length >= 2 && txt.length < 120) {
+              const t = cleanLabelText(txt);
+              if (t && t.length >= 2) return t;
             }
           }
           sib = sib.previousElementSibling;
         }
 
-        // 7. Fallback to name or id formatted nicely
-        const nameAttr = el.getAttribute('name') || el.getAttribute('id');
-        if (nameAttr?.trim()) {
-          return cleanLabelText(nameAttr.replace(/[-_]/g, ' '));
-        }
-
-        // 8. Ultimate fallback so NO field is EVER missed
+        // 7. Ultimate fallback so NO field is EVER missed
         const fieldType = (el.type || el.tagName || 'field').toUpperCase();
         return `Field ${fallbackIdx} (${fieldType})`;
       }

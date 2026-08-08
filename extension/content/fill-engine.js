@@ -565,23 +565,39 @@ function getElementHints(el) {
 function scoreMatch(normKey, elHints) {
   if (!normKey || !elHints) return 0;
 
-  // Perfect substring: the entire normalized field name appears in hints
+  // Ignore default fallback label keys like "field 1 text" when matching by label
+  if (/^field\s+\d+(\s*\(?[a-z0-9]+\)?)?$/i.test(normKey)) return 0;
+
+  // 1. Exact string match or full substring match
+  if (elHints === normKey) return normKey.length * 5 + 20;
   if (elHints.includes(normKey)) return normKey.length * 4 + 10;
+  if (normKey.includes(elHints) && elHints.length >= 4) return elHints.length * 3 + 5;
 
-  const words = normKey.split(' ').filter(w => w.length >= 2);
-  if (words.length === 0) return 0;
+  // 2. Word-level matching
+  const keyWords = normKey.split(' ').filter(w => w.length >= 2);
+  if (keyWords.length === 0) return 0;
 
-  let matchedWords = 0;
-  for (const w of words) {
-    // Word-boundary match using space delimiters (elHints is already normalized/lowercased)
-    if (elHints === w || elHints.startsWith(w + ' ') || elHints.endsWith(' ' + w) || elHints.includes(' ' + w + ' ')) {
-      matchedWords++;
+  const hintWords = elHints.split(' ').filter(w => w.length >= 2);
+  let matchedCount = 0;
+
+  for (const kw of keyWords) {
+    if (hintWords.includes(kw)) {
+      matchedCount++;
     }
   }
 
-  if (matchedWords === 0) return 0;
-  if (matchedWords === words.length) return matchedWords * 3 + 5;
-  if (matchedWords >= Math.ceil(words.length * 0.7)) return matchedWords * 2;
+  if (matchedCount === 0) return 0;
+
+  // All words matched
+  if (matchedCount === keyWords.length) {
+    return matchedCount * 4 + 10;
+  }
+
+  // 60%+ words matched
+  if (matchedCount / keyWords.length >= 0.6) {
+    return matchedCount * 2 + 2;
+  }
+
   return 0;
 }
 
@@ -674,76 +690,36 @@ function doFillAllPageFields(data, scopeElement) {
   let filledCount = 0;
   const filledElements = new Set();
 
-  // ── STRATEGY A: Positional fill ────────────────────────────────────────────
-  // When profile fields have fallback names like "Field 4 (TEXT)" (capture couldn't
-  // read labels), or when pageIndex is stored, use the index to target the Nth input.
-  if (isPositionalProfile(kvPairs)) {
-    console.log('[KeeGuard] Using POSITIONAL fill strategy');
+  console.log('[KeeGuard] Running Label-Based Match Fill on', inputs.length, 'inputs');
 
-    // Build positional pairs: prefer stored pageIndex, fall back to extracted index from name
-    const positionalPairs = kvPairs
-      .map(p => ({
-        ...p,
-        idx: (p.pageIndex !== null && p.pageIndex !== undefined)
-          ? p.pageIndex
-          : extractFieldIndex(p.key)
-      }))
-      .filter(p => p.idx !== null)
-      .sort((a, b) => a.idx - b.idx);
+  for (const el of inputs) {
+    if (filledElements.has(el)) continue;
+    const type = (el.type || '').toLowerCase();
 
-    // All non-password inputs in DOM order
-    const fillableInputs = inputs.filter(el => (el.type || '').toLowerCase() !== 'password');
+    // Password fields
+    if (type === 'password') {
+      const pwdPair = kvPairs.find(p => ['password', 'passwd', 'pwd', 'pin'].includes(p.key.toLowerCase()));
+      if (pwdPair) { setFieldValue(el, pwdPair.value, pwdPair); filledElements.add(el); filledCount++; }
+      continue;
+    }
 
-    for (const pair of positionalPairs) {
-      // idx is 1-based from capture (Field 1 = first input)
-      const targetInput = fillableInputs[pair.idx - 1];
-      if (targetInput && !filledElements.has(targetInput)) {
-        console.log(`[KeeGuard][POS] fillableInputs[${pair.idx - 1}] tag=${targetInput.tagName} name=${targetInput.name || targetInput.id || '?'} <- "${pair.value}"`);
-        setFieldValue(targetInput, pair.value);
-        filledElements.add(targetInput);
-        filledCount++;
+    const elHints = getElementHints(el);
+    let bestPair = null;
+    let bestScore = 0;
+
+    for (const pair of kvPairs) {
+      const score = scoreMatch(pair.normKey, elHints);
+      if (score > bestScore) {
+        bestScore = score;
+        bestPair = pair;
       }
     }
 
-    // Handle any non-positional pairs (e.g. password) via normal matching
-    const nonPositional = kvPairs.filter(p => extractFieldIndex(p.key) === null);
-    for (const el of inputs) {
-      if (filledElements.has(el)) continue;
-      if ((el.type || '').toLowerCase() === 'password') {
-        const pwdPair = nonPositional.find(p => ['password', 'passwd', 'pwd', 'pin'].includes(p.key.toLowerCase()));
-        if (pwdPair) { setFieldValue(el, pwdPair.value); filledElements.add(el); filledCount++; }
-      }
-    }
-
-  } else {
-    // ── STRATEGY B: Label-based fill ──────────────────────────────────────────
-    console.log('[KeeGuard] Using LABEL-BASED fill strategy');
-
-    for (const el of inputs) {
-      if (filledElements.has(el)) continue;
-      const type = (el.type || '').toLowerCase();
-
-      if (type === 'password') {
-        const pwdPair = kvPairs.find(p => ['password', 'passwd', 'pwd', 'pin'].includes(p.key.toLowerCase()));
-        if (pwdPair) { setFieldValue(el, pwdPair.value); filledElements.add(el); filledCount++; }
-        continue;
-      }
-
-      const elHints = getElementHints(el);
-      let bestPair = null;
-      let bestScore = 0;
-
-      for (const pair of kvPairs) {
-        const score = scoreMatch(pair.normKey, elHints);
-        if (score > bestScore) { bestScore = score; bestPair = pair; }
-      }
-
-      if (bestPair && bestScore > 0) {
-        console.log(`[KeeGuard] Filling "${el.tagName}[${el.name || el.id || el.placeholder || el.getAttribute('role')}]" <- key="${bestPair.key}" score=${bestScore}`);
-        setFieldValue(el, bestPair.value);
-        filledElements.add(el);
-        filledCount++;
-      }
+    if (bestPair && bestScore > 0) {
+      console.log(`[KeeGuard] Fill "${el.tagName}[name=${el.name || el.id || '?'}]" <- key="${bestPair.key}" score=${bestScore}`);
+      setFieldValue(el, bestPair.value, bestPair);
+      filledElements.add(el);
+      filledCount++;
     }
   }
 
