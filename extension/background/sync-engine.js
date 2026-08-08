@@ -74,18 +74,55 @@ export async function syncVault() {
       }
     }
 
-    // Sync field profiles
+    // Sync field profiles with local-first timestamp merge
     try {
       const profilesUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/data/field_profiles`;
       const pResponse = await fetch(profilesUrl, {
         headers: { 'Authorization': `Bearer ${idToken}` }
       });
+
+      const localProfiles = await getLocalProfiles();
+
       if (pResponse.ok) {
         const pDoc = await pResponse.json();
         if (pDoc.fields && pDoc.fields.profiles) {
-          const profilesList = JSON.parse(pDoc.fields.profiles.stringValue);
-          await chrome.storage.local.set({ fieldProfiles: profilesList });
-          console.log('[Sync] Field profiles synced successfully. Count:', profilesList.length);
+          const remoteProfiles = JSON.parse(pDoc.fields.profiles.stringValue);
+
+          // Merge local and remote profiles by ID, preserving whichever is newer
+          const profileMap = new Map();
+          remoteProfiles.forEach(p => profileMap.set(p.id, p));
+
+          localProfiles.forEach(lp => {
+            const rp = profileMap.get(lp.id);
+            if (!rp) {
+              profileMap.set(lp.id, lp); // Local only profile -> keep
+            } else {
+              const lTime = new Date(lp.updatedAt || lp.createdAt || 0).getTime();
+              const rTime = new Date(rp.updatedAt || rp.createdAt || 0).getTime();
+              if (lTime >= rTime) {
+                profileMap.set(lp.id, lp); // Local is newer or equal -> keep
+              }
+            }
+          });
+
+          const mergedProfiles = Array.from(profileMap.values());
+          await chrome.storage.local.set({ fieldProfiles: mergedProfiles });
+
+          // If local had changes not in remote, push merged back to Firestore
+          if (JSON.stringify(mergedProfiles) !== JSON.stringify(remoteProfiles)) {
+            const patchUrl = `${profilesUrl}?updateMask.fieldPaths=profiles&updateMask.fieldPaths=updatedAt`;
+            fetch(patchUrl, {
+              method: 'PATCH',
+              headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fields: {
+                  profiles: { stringValue: JSON.stringify(mergedProfiles) },
+                  updatedAt: { stringValue: new Date().toISOString() },
+                }
+              })
+            }).catch(e => console.warn('[Sync] Push merged profiles failed:', e));
+          }
+          console.log('[Sync] Field profiles synced successfully. Count:', mergedProfiles.length);
         }
       }
     } catch (pe) {
@@ -113,12 +150,12 @@ export async function saveProfileToCloud(newProfile) {
   const updated = [...existing, profile];
   await chrome.storage.local.set({ fieldProfiles: updated });
 
-  // Push to Firestore
+  // Push to Firestore with updateMask.fieldPaths
   try {
     const uid = (await chrome.storage.local.get('uid')).uid;
     const idToken = await getValidIdToken();
     if (uid && idToken) {
-      const profilesUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/data/field_profiles`;
+      const profilesUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/data/field_profiles?updateMask.fieldPaths=profiles&updateMask.fieldPaths=updatedAt`;
       await fetch(profilesUrl, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
@@ -135,4 +172,32 @@ export async function saveProfileToCloud(newProfile) {
   }
 
   return profile;
+}
+
+/** Delete a profile from local storage and update Firestore */
+export async function deleteProfileFromCloud(profileId) {
+  const existing = await getLocalProfiles();
+  const updated = existing.filter(p => p.id !== profileId);
+  const now = new Date().toISOString();
+  await chrome.storage.local.set({ fieldProfiles: updated });
+
+  try {
+    const uid = (await chrome.storage.local.get('uid')).uid;
+    const idToken = await getValidIdToken();
+    if (uid && idToken) {
+      const profilesUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/data/field_profiles?updateMask.fieldPaths=profiles&updateMask.fieldPaths=updatedAt`;
+      await fetch(profilesUrl, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            profiles: { stringValue: JSON.stringify(updated) },
+            updatedAt: { stringValue: now },
+          }
+        })
+      });
+    }
+  } catch (e) {
+    console.warn('[Sync] Could not sync profile delete to Firestore:', e);
+  }
 }

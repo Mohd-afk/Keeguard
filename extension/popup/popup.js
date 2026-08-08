@@ -636,6 +636,23 @@ function renderProfiles(container, profiles) {
     });
 
     actions.appendChild(fillBtn);
+
+    // Delete Profile button
+    const delProfileBtn = document.createElement('button');
+    delProfileBtn.className = 'action-btn-sm';
+    delProfileBtn.style.padding = '4px 8px';
+    delProfileBtn.innerHTML = '🗑️';
+    delProfileBtn.title = 'Delete profile';
+    delProfileBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm(`Delete profile "${profile.name}"?`)) {
+        chrome.runtime.sendMessage({ type: 'DELETE_PROFILE', profileId: profile.id }, () => {
+          showToast('Profile deleted');
+          loadProfiles();
+        });
+      }
+    });
+    actions.appendChild(delProfileBtn);
     header.appendChild(info);
     header.appendChild(actions);
     card.appendChild(header);

@@ -1,6 +1,6 @@
 import { db, auth } from './firebase-init.js';
 import { decryptVault, encryptVault, deriveKeys } from './vault-crypto.js';
-import { syncVault, getLocalVault, getLocalProfiles, getSessionKey, setSessionKey, saveProfileToCloud } from './sync-engine.js';
+import { syncVault, getLocalVault, getLocalProfiles, getSessionKey, setSessionKey, saveProfileToCloud, deleteProfileFromCloud } from './sync-engine.js';
 
 // Main message listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -57,6 +57,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'SAVE_CAPTURED_PROFILE':
       saveProfileToCloud(message.profile)
         .then(profile => sendResponse({ success: true, profile }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
+    case 'DELETE_PROFILE':
+      deleteProfileFromCloud(message.profileId)
+        .then(() => sendResponse({ success: true }))
         .catch(err => sendResponse({ success: false, error: err.message }));
       return true;
 
