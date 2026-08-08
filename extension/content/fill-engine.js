@@ -589,9 +589,6 @@ function getElementHints(el) {
 function scoreMatch(normKey, elHints, el, pair) {
   if (!normKey || !elHints) return 0;
 
-  // Ignore default fallback label keys like "field 1 text" when matching by label
-  if (/^field\s+\d+(\s*\(?[a-z0-9]+\)?)?$/i.test(normKey)) return 0;
-
   // Type safety: don't match non-numeric text values (like brand names) to number inputs
   if (el && el.type === 'number' && pair && pair.value) {
     if (!/\d/.test(String(pair.value))) return 0;
@@ -663,7 +660,21 @@ function doFillAllPageFields(data, scopeElement) {
 
   if (kvPairs.length === 0) return 0;
 
-  const FILL_SELECTOR = 'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]), select, textarea, [role="combobox"], [role="listbox"], [aria-haspopup="listbox"], [aria-haspopup="true"], [aria-haspopup="menu"], [contenteditable="true"]';
+  const FILL_SELECTOR = [
+    'input:not([type="hidden"]):not([type="submit"]):not([type="image"]):not([type="file"]):not([type="checkbox"]):not([type="radio"])',
+    'select',
+    'textarea',
+    'button[role="combobox"]',
+    'button[id*="select"]',
+    'button[class*="select"]',
+    '[role="combobox"]',
+    '[role="listbox"]',
+    '[role="select"]',
+    '[aria-haspopup="listbox"]',
+    '[aria-haspopup="true"]',
+    '[aria-haspopup="menu"]',
+    '[contenteditable="true"]',
+  ].join(', ');
 
   // ─── Collect elements: normal DOM + shadow DOM pierce ──────────────────────
   const collected = [];
@@ -681,22 +692,6 @@ function doFillAllPageFields(data, scopeElement) {
 
   collectFromNode(scopeElement);
 
-  // Debug: log raw counts BEFORE filtering
-  const rawCount = collected.length;
-  console.log('[KeeGuard] Raw elements from querySelectorAll (incl. shadow):', rawCount);
-  if (rawCount === 0) {
-    // Help diagnose: is this an iframe context?
-    console.log('[KeeGuard] frameContext:', {
-      isTopFrame: window === window.top,
-      location: window.location.href,
-      bodyChildCount: document.body ? document.body.children.length : 'no body',
-      allInputs: document.querySelectorAll('input').length,
-      allSelects: document.querySelectorAll('select').length,
-      allTextareas: document.querySelectorAll('textarea').length,
-      allWithRole: document.querySelectorAll('[role]').length,
-    });
-  }
-
   // Deduplicate
   const uniqueEls = [...new Set(collected)];
 
@@ -710,16 +705,13 @@ function doFillAllPageFields(data, scopeElement) {
   });
 
   console.log('[KeeGuard] fillAllPageFields - visible inputs found:', inputs.length);
-  if (inputs.length > 0) {
-    console.log('[KeeGuard] First 5 inputs:', inputs.slice(0, 5).map(el =>
-      `${el.tagName}[type=${el.type}][name=${el.name}][id=${el.id}][role=${el.getAttribute('role')}]`
-    ));
-  }
 
   let filledCount = 0;
   const filledElements = new Set();
+  const filledPairs = new Set();
 
-  console.log('[KeeGuard] Running Label-Based Match Fill on', inputs.length, 'inputs');
+  // ── PASS 1: Label-Based Score Matching (for fields with real human names) ──
+  console.log('[KeeGuard] Pass 1: Label-Based Match Fill on', inputs.length, 'inputs');
 
   for (const el of inputs) {
     if (filledElements.has(el)) continue;
@@ -727,8 +719,13 @@ function doFillAllPageFields(data, scopeElement) {
 
     // Password fields
     if (type === 'password') {
-      const pwdPair = kvPairs.find(p => ['password', 'passwd', 'pwd', 'pin'].includes(p.key.toLowerCase()));
-      if (pwdPair) { setFieldValue(el, pwdPair.value, pwdPair); filledElements.add(el); filledCount++; }
+      const pwdPair = kvPairs.find(p => !filledPairs.has(p) && ['password', 'passwd', 'pwd', 'pin'].includes(p.key.toLowerCase()));
+      if (pwdPair) {
+        setFieldValue(el, pwdPair.value, pwdPair);
+        filledElements.add(el);
+        filledPairs.add(pwdPair);
+        filledCount++;
+      }
       continue;
     }
 
@@ -737,6 +734,10 @@ function doFillAllPageFields(data, scopeElement) {
     let bestScore = 0;
 
     for (const pair of kvPairs) {
+      if (filledPairs.has(pair)) continue;
+      // Skip fallback "Field N" keys in Pass 1 label matching
+      if (/^field\s+\d+(\s*\(?[a-z0-9]+\)?)?$/i.test(pair.normKey)) continue;
+
       const score = scoreMatch(pair.normKey, elHints, el, pair);
       if (score > bestScore) {
         bestScore = score;
@@ -745,14 +746,41 @@ function doFillAllPageFields(data, scopeElement) {
     }
 
     if (bestPair && bestScore > 0) {
-      console.log(`[KeeGuard] Fill "${el.tagName}[name=${el.name || el.id || '?'}]" <- key="${bestPair.key}" score=${bestScore}`);
+      console.log(`[KeeGuard] [Label Match] Fill "${el.tagName}[id=${el.id || el.name || '?'}]" <- key="${bestPair.key}" score=${bestScore}`);
       setFieldValue(el, bestPair.value, bestPair);
       filledElements.add(el);
+      filledPairs.add(bestPair);
       filledCount++;
     }
   }
 
-  console.log('[KeeGuard] fillAllPageFields - filled:', filledCount);
+  // ── PASS 2: Positional Index Fallback (for legacy profiles or Field N fallback pairs) ──
+  const remainingPairs = kvPairs.filter(p => !filledPairs.has(p));
+  if (remainingPairs.length > 0) {
+    console.log('[KeeGuard] Pass 2: Positional Fallback on remaining', remainingPairs.length, 'unmatched fields');
+    const fillableInputs = inputs.filter(el => (el.type || '').toLowerCase() !== 'password');
+
+    for (const pair of remainingPairs) {
+      let targetIdx = pair.pageIndex;
+      if (targetIdx === null || targetIdx === undefined) {
+        const m = String(pair.key).match(/^field\s+(\d+)/i);
+        if (m) targetIdx = parseInt(m[1], 10);
+      }
+
+      if (typeof targetIdx === 'number' && targetIdx >= 1) {
+        const targetEl = fillableInputs[targetIdx - 1];
+        if (targetEl && !filledElements.has(targetEl)) {
+          console.log(`[KeeGuard] [Positional Fallback] Fill input[${targetIdx - 1}] tag=${targetEl.tagName} id=${targetEl.id || '?'} <- key="${pair.key}" val="${pair.value}"`);
+          setFieldValue(targetEl, pair.value, pair);
+          filledElements.add(targetEl);
+          filledPairs.add(pair);
+          filledCount++;
+        }
+      }
+    }
+  }
+
+  console.log('[KeeGuard] fillAllPageFields - total filled:', filledCount);
   return filledCount;
 }
 

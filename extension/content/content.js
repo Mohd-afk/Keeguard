@@ -122,21 +122,8 @@ function initContentScript() {
           if (t && t.length >= 2) return t;
         }
 
-        // 4. Name or ID attribute formatted nicely (e.g. selling_price -> Selling Price, mrp -> MRP)
-        const nameAttr = el.getAttribute('name') || el.getAttribute('id');
-        if (nameAttr?.trim()) {
-          const formatted = nameAttr
-            .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase to words
-            .replace(/[-_.]/g, ' ')            // snake_case/kebab-case to words
-            .replace(/\s+/g, ' ')
-            .trim();
-          const t = cleanLabelText(formatted);
-          if (t && t.length >= 2 && !/^(input|field|text|select|textarea|val|value|num|number)\d*$/i.test(t)) {
-            return t;
-          }
-        }
-
-        // 5. Ancestor search: walk up 6 parent levels to find label / title / header elements
+        // 4. Ancestor search: walk up 6 parent levels to find label / title / header elements
+        // (Ran BEFORE raw ID/name fallback so generic IDs like "trigger-single-select" don't override real labels!)
         let curr = el;
         for (let depth = 0; depth < 6; depth++) {
           const parent = curr.parentElement;
@@ -184,7 +171,7 @@ function initContentScript() {
           curr = parent;
         }
 
-        // 6. Preceding sibling search on the element itself
+        // 5. Preceding sibling search on the element itself
         let sib = el.previousElementSibling;
         while (sib) {
           if (!['SCRIPT', 'STYLE', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'SVG'].includes(sib.tagName)) {
@@ -195,6 +182,20 @@ function initContentScript() {
             }
           }
           sib = sib.previousElementSibling;
+        }
+
+        // 6. Name or ID attribute formatted nicely (excluding generic framework component IDs)
+        const nameAttr = el.getAttribute('name') || el.getAttribute('id');
+        if (nameAttr?.trim()) {
+          const formatted = nameAttr
+            .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase to words
+            .replace(/[-_.]/g, ' ')            // snake_case/kebab-case to words
+            .replace(/\s+/g, ' ')
+            .trim();
+          const t = cleanLabelText(formatted);
+          if (t && t.length >= 2 && !/^(input|field|text|select|textarea|val|value|num|number|trigger|single|bar|search)\d*$/i.test(t) && !t.toLowerCase().includes('trigger')) {
+            return t;
+          }
         }
 
         // 7. Ultimate fallback so NO field is EVER missed
@@ -235,18 +236,18 @@ function initContentScript() {
 
         // Div / Button / Span custom dropdown triggers
         let val = (el.getAttribute('data-value') || el.getAttribute('aria-valuenow') || el.value || '').trim();
-        if (val) return val;
+        if (val && !/^(select|choose|pick|search)/i.test(val)) return val;
 
-        const selValEl = el.querySelector('[class*="singleValue"], [class*="selection-item"], [class*="selected"], [class*="value"], [class*="rendered"], [class*="label"], [class*="text"]');
+        const selValEl = el.querySelector('[class*="singleValue"], [class*="selection-item"], [class*="selected"], [class*="value"], [class*="rendered"], [class*="label"], [class*="text"], span, div');
         if (selValEl) {
           val = (selValEl.innerText || selValEl.textContent || '').trim();
-          if (val) return val;
+          if (val && !/^(select|choose|pick|search)/i.test(val)) return val;
         }
 
         const clone = el.cloneNode(true);
-        clone.querySelectorAll('input, script, style, svg, button').forEach(n => n.remove());
+        clone.querySelectorAll('input, script, style, svg').forEach(n => n.remove());
         val = (clone.innerText || clone.textContent || '').trim();
-        if (val && val.length < 80) return val;
+        if (val && val.length < 80 && !/^(select|choose|pick|search)/i.test(val)) return val;
 
         return '';
       }
