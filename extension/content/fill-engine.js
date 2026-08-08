@@ -1,5 +1,5 @@
 // content/fill-engine.js
-// v5.0.5 – Complete rewrite of autofill engine with robust dropdown support
+// v5.0.6 – Added tag/chip input capture and fill support
 
 // ─── Utilities ─────────────────────────────────────────────────────────────
 
@@ -10,6 +10,81 @@ function normalizeToken(str) {
     .replace(/[^a-z0-9]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// ─── Tag / Chip input detection ────────────────────────────────────────────
+// These are inputs where pressing Enter/comma creates a chip/pill/tag.
+// Examples: Flipkart Search Keywords, Key Features, etc.
+
+const TAG_INPUT_CHIP_SELECTORS = [
+  '[class*="chip"]',
+  '[class*="tag"]:not(input)',
+  '[class*="pill"]',
+  '[class*="Token"]',
+  '[class*="badge"]',
+  '[class*="MultiValue"]',
+  '[class*="multi-value"]',
+  '[class*="react-tagsinput-tag"]',
+  '[class*="input-tag"]',
+  '[class*="keyword"]',
+].join(', ');
+
+/**
+ * Returns true if the given input element lives inside a tag/chip container.
+ */
+function isTagInput(el) {
+  if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return false;
+
+  // Check for hint text nearby ("Press Enter" or "after each value")
+  let parent = el.parentElement;
+  for (let d = 0; d < 5 && parent && parent.tagName !== 'BODY'; d++) {
+    // If the container already contains chip elements, it's a tag input
+    if (parent.querySelector(TAG_INPUT_CHIP_SELECTORS)) return true;
+
+    // Check sibling/descendant hint text
+    const hint = (parent.innerText || parent.textContent || '').toLowerCase();
+    if (
+      hint.includes('press enter') ||
+      hint.includes('after each value') ||
+      hint.includes('press ","') ||
+      hint.includes('press comma')
+    ) return true;
+
+    // Check class names of the container
+    const cls = (parent.className || '').toLowerCase();
+    if (
+      cls.includes('tag') || cls.includes('chip') || cls.includes('pill') ||
+      cls.includes('token') || cls.includes('multiinput') ||
+      cls.includes('multi-input') || cls.includes('tagsinput') ||
+      cls.includes('keywordsInput') || cls.includes('featuresinput')
+    ) return true;
+
+    parent = parent.parentElement;
+  }
+  return false;
+}
+
+/**
+ * Reads all existing chip/tag texts from the container of a tag input.
+ */
+function readTagInputValues(el) {
+  const chips = [];
+  let parent = el.parentElement;
+  for (let d = 0; d < 5 && parent && parent.tagName !== 'BODY'; d++) {
+    const found = parent.querySelectorAll(TAG_INPUT_CHIP_SELECTORS);
+    if (found.length > 0) {
+      found.forEach(chip => {
+        // Clone and strip close/delete buttons before reading text
+        const clone = chip.cloneNode(true);
+        clone.querySelectorAll('button, [aria-label*="remove"], [aria-label*="delete"], [title*="remove"], svg').forEach(n => n.remove());
+        const txt = (clone.innerText || clone.textContent || '').trim();
+        if (txt && txt.length > 0) chips.push(txt);
+      });
+      break;
+    }
+    parent = parent.parentElement;
+  }
+  return chips;
 }
 
 // ─── Native SELECT fill ─────────────────────────────────────────────────────
@@ -158,6 +233,70 @@ function fillCustomDropdown(triggerElement, value) {
   setTimeout(tryPickOption, 80);
 }
 
+// ─── Tag / Chip input fill ─────────────────────────────────────────────────
+
+/**
+ * Fills a tag/chip input by typing each comma-separated value and pressing Enter.
+ * Handles: React tag inputs, MUI chip inputs, custom multi-value inputs.
+ * @param {HTMLElement} inputEl - the raw <input> inside the tag container
+ * @param {string} value - comma/newline separated tags e.g. "Travel handbag, Everyday handbag"
+ */
+function fillTagInput(inputEl, value) {
+  if (!inputEl || !value) return;
+
+  // Split on comma or newline, filter empty
+  const tags = String(value)
+    .split(/[,\n]+/)
+    .map(t => t.trim())
+    .filter(t => t.length > 0);
+
+  if (tags.length === 0) return;
+
+  // Read already-existing chips so we don't duplicate
+  const existingTags = readTagInputValues(inputEl).map(t => t.toLowerCase());
+
+  const newTags = tags.filter(t => !existingTags.includes(t.toLowerCase()));
+  if (newTags.length === 0) return;
+
+  inputEl.focus();
+  let i = 0;
+
+  function typeNextTag() {
+    if (i >= newTags.length) return;
+    const tag = newTags[i++];
+
+    // React tracker reset
+    const tracker = inputEl._valueTracker;
+    if (tracker) tracker.setValue(inputEl.value);
+
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    if (setter) setter.call(inputEl, tag);
+    else inputEl.value = tag;
+
+    // Fire input events so React/Vue registers the new text
+    inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+    // Fire Enter keydown → keypress → keyup to create the chip
+    ['keydown', 'keypress', 'keyup'].forEach(evType => {
+      inputEl.dispatchEvent(new KeyboardEvent(evType, {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }));
+    });
+
+    // Small delay between each tag so the DOM can update
+    setTimeout(typeNextTag, 200);
+  }
+
+  typeNextTag();
+}
+
 // ─── setFieldValue (main entry point) ──────────────────────────────────────
 
 function setFieldValue(element, value) {
@@ -182,6 +321,11 @@ function setFieldValue(element, value) {
 
   // Standard input / textarea
   if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+    // Tag/chip input → use special Enter-per-value filling
+    if (isTagInput(element)) {
+      fillTagInput(element, strValue);
+      return;
+    }
     setInputValue(element, strValue);
     // If this input is ALSO a combobox trigger, fire custom dropdown too
     if (isDropdownTrigger) fillCustomDropdown(element, strValue);

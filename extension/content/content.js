@@ -162,6 +162,17 @@ function initContentScript() {
         'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea, [role="combobox"]'
       );
 
+      // Also find tag/chip input containers (they have chip elements + a plain text input)
+      const tagContainerSelector = [
+        '[class*="chip"] input', '[class*="tag"] input', '[class*="pill"] input',
+        '[class*="token"] input', '[class*="MultiValue"] input', '[class*="tagsinput"] input',
+        '[class*="keyword"] input',
+      ].join(', ');
+      const tagInputEls = Array.from(document.querySelectorAll(tagContainerSelector));
+
+      // Track which tag-input containers we've already captured
+      const capturedTagContainers = new Set();
+
       let index = 1;
       elements.forEach(el => {
         if (el.disabled) return;
@@ -171,6 +182,57 @@ function initContentScript() {
         if (style.display === 'none' || style.visibility === 'hidden') return;
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) return;
+
+        // ── Tag/chip input handling ──────────────────────────────────────────
+        // Check if this element is a tag input (contains chip siblings or hint text)
+        const isTagEl = (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') &&
+          (() => {
+            let parent = el.parentElement;
+            for (let d = 0; d < 5 && parent && parent.tagName !== 'BODY'; d++) {
+              const chipSel = '[class*="chip"],[class*="tag"]:not(input),[class*="pill"],[class*="Token"],[class*="badge"],[class*="MultiValue"],[class*="keyword"]';
+              if (parent.querySelector(chipSel)) return true;
+              const hint = (parent.innerText || '').toLowerCase();
+              if (hint.includes('press enter') || hint.includes('after each value') || hint.includes('press ","')) return true;
+              parent = parent.parentElement;
+            }
+            return false;
+          })();
+
+        if (isTagEl) {
+          // Find the topmost container and only capture once per container
+          let container = el.parentElement;
+          for (let d = 0; d < 5 && container && container.tagName !== 'BODY'; d++) {
+            const chipSel = '[class*="chip"],[class*="tag"]:not(input),[class*="pill"],[class*="Token"],[class*="badge"],[class*="MultiValue"],[class*="keyword"]';
+            if (container.querySelector(chipSel) || (container.innerText || '').toLowerCase().includes('press enter')) break;
+            container = container.parentElement;
+          }
+
+          const containerKey = container || el;
+          if (capturedTagContainers.has(containerKey)) return;
+          capturedTagContainers.add(containerKey);
+
+          // Read all existing chips
+          const chipSel = '[class*="chip"],[class*="tag"]:not(input),[class*="pill"],[class*="Token"],[class*="badge"],[class*="MultiValue"],[class*="keyword"]';
+          const chips = Array.from((container || el.parentElement).querySelectorAll(chipSel))
+            .map(chip => {
+              const clone = chip.cloneNode(true);
+              clone.querySelectorAll('button, svg, [aria-label*="remove"], [aria-label*="delete"]').forEach(n => n.remove());
+              return (clone.innerText || clone.textContent || '').trim();
+            })
+            .filter(t => t.length > 0);
+
+          const label = extractFieldLabel(el, index++);
+          if (!label) return;
+
+          const chipValue = chips.join(', ');
+          const key = label.toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          // Mark as tagInput so fill engine knows how to refill it
+          captured.push({ label, value: chipValue, sensitive: false, tagInput: true });
+          return;
+        }
+        // ── End tag input handling ───────────────────────────────────────────
 
         const label = extractFieldLabel(el, index++);
         if (!label) return;
