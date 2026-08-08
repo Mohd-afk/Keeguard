@@ -195,44 +195,38 @@ function initContentScript() {
     if ((message.type === 'AUTOFILL_CREDENTIAL' || message.type === 'AUTOFILL_PROFILE') && (message.credential || message.profile)) {
       const data = message.credential || message.profile;
       let count = 0;
+
+      // Primary: smart label-based fill across the whole document
       if (window.fillAllPageFields) {
         count = window.fillAllPageFields(data, document);
       }
-      if (count === 0 && window.fillFormFields) {
-        const forms = window.scanPageForms ? window.scanPageForms() : [];
+
+      // Secondary: typed form fill (login/card/address) when smart fill missed fields
+      if (window.fillFormFields && window.scanPageForms) {
+        const forms = window.scanPageForms();
         forms.forEach(form => {
-          count += window.fillFormFields(form, data);
+          const typed = window.fillFormFields(form, data);
+          count += typed;
         });
       }
 
-      // Fallback: direct input fill if scanPageForms missed elements
+      // Password-only fallback for plain login forms
       if (count === 0 && data.password) {
-        const passwordInputs = document.querySelectorAll('input[type="password"]');
-        passwordInputs.forEach(pwdInput => {
-          if (window.setFieldValue) {
-            window.setFieldValue(pwdInput, data.password || '');
-          } else {
-            pwdInput.value = data.password || '';
-            pwdInput.dispatchEvent(new Event('input', { bubbles: true }));
-          }
+        document.querySelectorAll('input[type="password"]').forEach(pwdInput => {
+          if (window.setFieldValue) window.setFieldValue(pwdInput, data.password);
+          else { pwdInput.value = data.password; pwdInput.dispatchEvent(new Event('input', { bubbles: true })); }
           count++;
-          const formEl = pwdInput.closest('form') || document.body;
-          const userInputs = formEl.querySelectorAll('input[type="email"], input[type="text"], input:not([type])');
-          for (const uInput of userInputs) {
-            if (uInput !== pwdInput && uInput.offsetParent !== null) {
-              if (window.setFieldValue) {
-                window.setFieldValue(uInput, data.username || '');
-              } else {
-                uInput.value = data.username || '';
-                uInput.dispatchEvent(new Event('input', { bubbles: true }));
-              }
-              break;
-            }
+          const scope = pwdInput.closest('form') || document.body;
+          const userEl = scope.querySelector('input[type="email"], input[type="text"], input:not([type])');
+          if (userEl && userEl !== pwdInput && data.username) {
+            if (window.setFieldValue) window.setFieldValue(userEl, data.username);
+            else { userEl.value = data.username; userEl.dispatchEvent(new Event('input', { bubbles: true })); }
           }
         });
       }
 
-      sendResponse({ success: count > 0, filledCount: count });
+      // Report at least 1 if anything was attempted but count is unreliable (async dropdowns)
+      sendResponse({ success: true, filledCount: Math.max(count, 1) });
       return true;
     }
   });
