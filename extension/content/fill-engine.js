@@ -1,5 +1,5 @@
 // content/fill-engine.js
-// v5.0.6 – Added tag/chip input capture and fill support
+// v5.0.7 – Fix selector split bug, add debug logging, fix readOnly skip, fix scoreMatch
 
 // ─── Utilities ─────────────────────────────────────────────────────────────
 
@@ -13,7 +13,7 @@ function normalizeToken(str) {
 }
 
 // ─── Tag / Chip input detection ────────────────────────────────────────────
-// These are inputs where pressing Enter/comma creates a chip/pill/tag.
+// Inputs where pressing Enter/comma creates a chip/pill/tag.
 // Examples: Flipkart Search Keywords, Key Features, etc.
 
 const TAG_INPUT_CHIP_SELECTORS = [
@@ -29,19 +29,12 @@ const TAG_INPUT_CHIP_SELECTORS = [
   '[class*="keyword"]',
 ].join(', ');
 
-/**
- * Returns true if the given input element lives inside a tag/chip container.
- */
+/** Returns true if the given input element lives inside a tag/chip container. */
 function isTagInput(el) {
   if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return false;
-
-  // Check for hint text nearby ("Press Enter" or "after each value")
   let parent = el.parentElement;
   for (let d = 0; d < 5 && parent && parent.tagName !== 'BODY'; d++) {
-    // If the container already contains chip elements, it's a tag input
     if (parent.querySelector(TAG_INPUT_CHIP_SELECTORS)) return true;
-
-    // Check sibling/descendant hint text
     const hint = (parent.innerText || parent.textContent || '').toLowerCase();
     if (
       hint.includes('press enter') ||
@@ -49,24 +42,18 @@ function isTagInput(el) {
       hint.includes('press ","') ||
       hint.includes('press comma')
     ) return true;
-
-    // Check class names of the container
     const cls = (parent.className || '').toLowerCase();
     if (
       cls.includes('tag') || cls.includes('chip') || cls.includes('pill') ||
       cls.includes('token') || cls.includes('multiinput') ||
-      cls.includes('multi-input') || cls.includes('tagsinput') ||
-      cls.includes('keywordsInput') || cls.includes('featuresinput')
+      cls.includes('multi-input') || cls.includes('tagsinput')
     ) return true;
-
     parent = parent.parentElement;
   }
   return false;
 }
 
-/**
- * Reads all existing chip/tag texts from the container of a tag input.
- */
+/** Reads all existing chip/tag texts from the container of a tag input. */
 function readTagInputValues(el) {
   const chips = [];
   let parent = el.parentElement;
@@ -74,7 +61,6 @@ function readTagInputValues(el) {
     const found = parent.querySelectorAll(TAG_INPUT_CHIP_SELECTORS);
     if (found.length > 0) {
       found.forEach(chip => {
-        // Clone and strip close/delete buttons before reading text
         const clone = chip.cloneNode(true);
         clone.querySelectorAll('button, [aria-label*="remove"], [aria-label*="delete"], [title*="remove"], svg').forEach(n => n.remove());
         const txt = (clone.innerText || clone.textContent || '').trim();
@@ -91,16 +77,14 @@ function readTagInputValues(el) {
 
 function setSelectValue(selectEl, value) {
   if (!selectEl || selectEl.tagName !== 'SELECT') return false;
-
   const targetVal = String(value).trim().toLowerCase();
   const targetToken = normalizeToken(targetVal);
-
   const options = Array.from(selectEl.options || []);
   if (options.length === 0) return false;
 
   let matchedIdx = -1;
 
-  // 1. Exact match
+  // 1. Exact value or text match
   matchedIdx = options.findIndex(opt => {
     const val = (opt.value || '').trim().toLowerCase();
     const txt = (opt.text || opt.textContent || '').trim().toLowerCase();
@@ -180,7 +164,6 @@ function fillCustomDropdown(triggerElement, value) {
   const targetToken = normalizeToken(String(value));
   if (!targetToken) return;
 
-  // Open the dropdown
   try { triggerElement.focus(); } catch (e) {}
   try { triggerElement.click(); } catch (e) {}
 
@@ -203,19 +186,17 @@ function fillCustomDropdown(triggerElement, value) {
       'div[class*="MenuItem"]',
       'div[class*="selectOption"]',
       'div[class*="SelectItem"]',
-      '[class*="dropdown"] li',
-      '[class*="dropdown"] div[role]',
     ].join(', ');
 
     const options = document.querySelectorAll(optionSelector);
     let picked = false;
 
     for (const opt of options) {
-      if (!opt.offsetParent && opt.getBoundingClientRect().width === 0) continue; // Not visible
+      const rect = opt.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) continue;
       const optText = normalizeToken(opt.innerText || opt.textContent || '');
       if (!optText) continue;
 
-      // Exact token match first, then containment
       if (optText === targetToken ||
           optText.includes(targetToken) ||
           targetToken.includes(optText)) {
@@ -237,14 +218,10 @@ function fillCustomDropdown(triggerElement, value) {
 
 /**
  * Fills a tag/chip input by typing each comma-separated value and pressing Enter.
- * Handles: React tag inputs, MUI chip inputs, custom multi-value inputs.
- * @param {HTMLElement} inputEl - the raw <input> inside the tag container
- * @param {string} value - comma/newline separated tags e.g. "Travel handbag, Everyday handbag"
  */
 function fillTagInput(inputEl, value) {
   if (!inputEl || !value) return;
 
-  // Split on comma or newline, filter empty
   const tags = String(value)
     .split(/[,\n]+/)
     .map(t => t.trim())
@@ -252,9 +229,7 @@ function fillTagInput(inputEl, value) {
 
   if (tags.length === 0) return;
 
-  // Read already-existing chips so we don't duplicate
   const existingTags = readTagInputValues(inputEl).map(t => t.toLowerCase());
-
   const newTags = tags.filter(t => !existingTags.includes(t.toLowerCase()));
   if (newTags.length === 0) return;
 
@@ -265,7 +240,6 @@ function fillTagInput(inputEl, value) {
     if (i >= newTags.length) return;
     const tag = newTags[i++];
 
-    // React tracker reset
     const tracker = inputEl._valueTracker;
     if (tracker) tracker.setValue(inputEl.value);
 
@@ -273,24 +247,16 @@ function fillTagInput(inputEl, value) {
     if (setter) setter.call(inputEl, tag);
     else inputEl.value = tag;
 
-    // Fire input events so React/Vue registers the new text
     inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
     inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
-    // Fire Enter keydown → keypress → keyup to create the chip
     ['keydown', 'keypress', 'keyup'].forEach(evType => {
       inputEl.dispatchEvent(new KeyboardEvent(evType, {
-        key: 'Enter',
-        code: 'Enter',
-        keyCode: 13,
-        which: 13,
-        bubbles: true,
-        composed: true,
-        cancelable: true,
+        key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
+        bubbles: true, composed: true, cancelable: true,
       }));
     });
 
-    // Small delay between each tag so the DOM can update
     setTimeout(typeNextTag, 200);
   }
 
@@ -321,13 +287,11 @@ function setFieldValue(element, value) {
 
   // Standard input / textarea
   if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
-    // Tag/chip input → use special Enter-per-value filling
     if (isTagInput(element)) {
       fillTagInput(element, strValue);
       return;
     }
     setInputValue(element, strValue);
-    // If this input is ALSO a combobox trigger, fire custom dropdown too
     if (isDropdownTrigger) fillCustomDropdown(element, strValue);
     return;
   }
@@ -361,7 +325,7 @@ function collectAllKeyValuePairs(data) {
     const vStr = v !== undefined && v !== null ? String(v).trim() : '';
     if (!kStr || !vStr) return;
     const key = kStr.toLowerCase();
-    if (seen.has(key)) return; // First definition wins
+    if (seen.has(key)) return;
     seen.add(key);
     kvPairs.push({ key: kStr, value: vStr, normKey: normalizeToken(kStr) });
   };
@@ -374,7 +338,7 @@ function collectAllKeyValuePairs(data) {
     });
   }
 
-  // 2. Flat key-value map (data.values = { "Field Label": "value" })
+  // 2. Flat key-value map
   if (data.values && typeof data.values === 'object' && !Array.isArray(data.values)) {
     Object.entries(data.values).forEach(([k, v]) => addPair(k, v));
   }
@@ -387,7 +351,7 @@ function collectAllKeyValuePairs(data) {
     });
   }
 
-  // 4. Username / Email / Password
+  // 4. Username / Email / Password (vault credentials)
   if (data.username) {
     ['username', 'user', 'email', 'login', 'handle'].forEach(k => addPair(k, data.username));
   }
@@ -442,7 +406,7 @@ function getElementHints(el) {
   const rawHints = [];
 
   // 1. Element own attributes
-  const own = [
+  [
     el.getAttribute('aria-label'),
     el.getAttribute('placeholder'),
     el.getAttribute('title'),
@@ -453,8 +417,7 @@ function getElementHints(el) {
     el.getAttribute('data-testid'),
     el.getAttribute('data-field'),
     el.getAttribute('data-fieldname'),
-  ];
-  own.forEach(v => { if (v && v.trim()) rawHints.push(v.trim()); });
+  ].forEach(v => { if (v && v.trim()) rawHints.push(v.trim()); });
 
   // 2. aria-labelledby
   const ariaLabelledBy = el.getAttribute('aria-labelledby');
@@ -481,14 +444,12 @@ function getElementHints(el) {
     rawHints.push((clone.innerText || clone.textContent || '').trim());
   }
 
-  // 5. Walk up to 5 parent levels, collect text from sibling nodes that come
-  //    BEFORE the element (they are usually the label container)
+  // 5. Walk up to 5 parent levels, collect text from preceding siblings
   let curr = el;
   for (let depth = 0; depth < 5; depth++) {
     const parent = curr.parentElement;
     if (!parent || parent.tagName === 'BODY' || parent.tagName === 'HTML') break;
 
-    // Text in siblings BEFORE this branch
     const children = Array.from(parent.children);
     const currIdx = children.indexOf(curr);
     for (let i = 0; i < currIdx; i++) {
@@ -498,8 +459,7 @@ function getElementHints(el) {
       if (txt && txt.length > 1 && txt.length < 120) rawHints.push(txt);
     }
 
-    // Parent own text that's not inherited from child elements
-    const parentClone = parent.cloneNode(false); // shallow
+    // Direct text nodes of parent
     Array.from(parent.childNodes).forEach(node => {
       if (node.nodeType === Node.TEXT_NODE) {
         const t = (node.textContent || '').trim();
@@ -510,7 +470,6 @@ function getElementHints(el) {
     curr = parent;
   }
 
-  // Normalize and concatenate all hints into one searchable string
   return normalizeToken(rawHints.join(' '));
 }
 
@@ -519,7 +478,7 @@ function getElementHints(el) {
 function scoreMatch(normKey, elHints) {
   if (!normKey || !elHints) return 0;
 
-  // Perfect substring: the entire field name appears inside hints
+  // Perfect substring: the entire normalized field name appears in hints
   if (elHints.includes(normKey)) return normKey.length * 4 + 10;
 
   const words = normKey.split(' ').filter(w => w.length >= 2);
@@ -527,15 +486,16 @@ function scoreMatch(normKey, elHints) {
 
   let matchedWords = 0;
   for (const w of words) {
-    // Must match as a whole "word" (preceded / followed by space or string boundary)
-    const re = new RegExp(`(^| )${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}( |$)`);
-    if (re.test(elHints)) matchedWords++;
+    // Word-boundary match using space delimiters (elHints is already normalized/lowercased)
+    if (elHints === w || elHints.startsWith(w + ' ') || elHints.endsWith(' ' + w) || elHints.includes(' ' + w + ' ')) {
+      matchedWords++;
+    }
   }
 
   if (matchedWords === 0) return 0;
-  if (matchedWords === words.length) return matchedWords * 3 + 5; // All words matched
-  if (matchedWords >= Math.ceil(words.length * 0.7)) return matchedWords * 2; // 70%+ matched
-  return 0; // Partial match below 70% → reject (avoids spurious fills)
+  if (matchedWords === words.length) return matchedWords * 3 + 5;
+  if (matchedWords >= Math.ceil(words.length * 0.7)) return matchedWords * 2;
+  return 0;
 }
 
 // ─── Main fill function ─────────────────────────────────────────────────────
@@ -543,33 +503,27 @@ function scoreMatch(normKey, elHints) {
 function fillAllPageFields(data, scopeElement) {
   if (!scopeElement) scopeElement = document;
   const kvPairs = collectAllKeyValuePairs(data);
+
+  console.log('[KeeGuard] fillAllPageFields - kvPairs count:', kvPairs.length, kvPairs.map(p => p.key));
+
   if (kvPairs.length === 0) return 0;
 
-  // Collect candidate elements
-  const SELECTOR = [
-    'input:not([type="hidden"]):not([type="submit"]):not([type="button"])',
-    'input:not([type="image"]):not([type="file"]):not([type="checkbox"]):not([type="radio"])',
-    'select',
-    'textarea',
-    '[role="combobox"]',
-    '[role="listbox"]',
-    '[aria-haspopup="listbox"]',
-    '[aria-haspopup="true"]',
-    '[aria-haspopup="menu"]',
-    '[contenteditable="true"]',
-  ].join(', ');
+  // Single correct selector (all in one string so :not chains all apply together)
+  const allEls = Array.from(scopeElement.querySelectorAll(
+    'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]), select, textarea, [role="combobox"], [role="listbox"], [aria-haspopup="listbox"], [aria-haspopup="true"], [aria-haspopup="menu"], [contenteditable="true"]'
+  ));
 
-  const allEls = Array.from(scopeElement.querySelectorAll(SELECTOR));
-
-  // Filter to only visible, enabled elements
+  // Filter to only visible elements (NOT filtering readOnly — some SPAs mark inputs readOnly temporarily)
   const inputs = allEls.filter(el => {
-    if (el.disabled || el.readOnly) return false;
+    if (el.disabled) return false;
     const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return false;
     return true;
   });
+
+  console.log('[KeeGuard] fillAllPageFields - visible inputs found:', inputs.length);
 
   let filledCount = 0;
   const filledElements = new Set();
@@ -606,12 +560,14 @@ function fillAllPageFields(data, scopeElement) {
     }
 
     if (bestPair && bestScore > 0) {
+      console.log(`[KeeGuard] Filling "${el.tagName}[${el.name || el.id || el.placeholder || el.getAttribute('role')}]" with key="${bestPair.key}" score=${bestScore}`);
       setFieldValue(el, bestPair.value);
       filledElements.add(el);
       filledCount++;
     }
   }
 
+  console.log('[KeeGuard] fillAllPageFields - filled:', filledCount);
   return filledCount;
 }
 
@@ -648,7 +604,6 @@ function fillFormFields(form, data) {
     }
   }
 
-  // Always run smart fill on top of typed fill
   return fillAllPageFields(data, document);
 }
 

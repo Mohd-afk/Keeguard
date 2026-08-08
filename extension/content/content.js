@@ -288,7 +288,7 @@ function initContentScript() {
       }
 
       // Report at least 1 if anything was attempted but count is unreliable (async dropdowns)
-      sendResponse({ success: true, filledCount: Math.max(count, 1) });
+      sendResponse({ success: count > 0 || true, filledCount: count });
       return true;
     }
   });
