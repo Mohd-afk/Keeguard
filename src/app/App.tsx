@@ -142,8 +142,8 @@ export default function App() {
         console.log('[BOOT] Firebase initialized');
       } catch (err: any) {
         _bm('BOOT_MARK_5_firebase_FAILED_OR_TIMEOUT: ' + String(err));
-        console.warn('[BOOT] Firebase init failed or timed out (falling back to offline-first):', err);
-        // Do NOT block render on Firebase failure
+        console.warn('[BOOT] Firebase init failed or timed out:', err);
+        setBootError(err.message || 'Failed to initialize Firebase. Please check your network and environment variables.');
       }
 
       // ─────────────────────────────────────────────────────────────────

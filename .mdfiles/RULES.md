@@ -67,3 +67,16 @@
 4. **UI & Design Boundaries**:
    - Strictly follow **Figma SDS** tokens (`src/tokens/`) and CSS variable classes.
    - Banned: inline hardcoded Hex colors where design system color variables exist.
+
+---
+
+## 🚨 4. Known Pitfalls & Common Errors
+
+### Error: `[Firebase] Auth not initialized. Call initFirebase() first.` (React White Screen of Death)
+- **Cause 1**: Vercel/Production deployment does not have the `VITE_FIREBASE_*` environment variables loaded, causing initialization to fail.
+- **Cause 2**: Fast-Refresh / HMR (Hot Module Replacement) causes `firebase.ts` state to clear, but Firebase's global registry retains the app. `initializeApp()` throws a `duplicate-app` error, causing `_auth` to remain null.
+- **Why it crashes**: When `initFirebase()` fails or times out in `App.tsx`, it throws an error. If that error is swallowed, `App.tsx` sets `bootComplete(true)` and renders the routing tree. The UI then invokes `getFirebaseAuth()` (e.g. inside `AppShell`'s `useEffect`), which throws synchronously because `_auth` is null.
+- **Prevention Rule**: 
+  1. **NEVER** silently swallow `initFirebase()` errors in `App.tsx`. Always call `setBootError()` to freeze the UI gracefully.
+  2. Always check `if (getApps().length > 0) { _app = getApp(); }` instead of blindly calling `initializeApp()` in `firebase.ts`.
+  3. **NEVER** call `getFirebaseAuth()`, `getFirebaseDb()`, or `getFirebaseApp()` at the top-level scope of ANY module (during file import).

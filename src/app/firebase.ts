@@ -3,7 +3,7 @@
  * Provides lazy, idempotent initialization of Firebase App, Auth (with IndexedDB persistence on native Android), Firestore, and Functions.
  */
 
-import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { initializeApp, getApp, getApps, type FirebaseApp } from 'firebase/app';
 import {
     getAuth,
     initializeAuth,
@@ -80,7 +80,13 @@ export async function initFirebase(): Promise<void> {
 
 
     // 1. Init app
-    _app  = initializeApp(firebaseConfig);
+    if (getApps().length > 0) {
+        _app = getApp();
+        console.log('[Firebase] Using existing Firebase app instance');
+    } else {
+        _app = initializeApp(firebaseConfig);
+        console.log('[Firebase] Created new Firebase app instance');
+    }
 
     // 2. Init Auth with appropriate persistence
     if (Capacitor.isNativePlatform()) {
