@@ -1,15 +1,8 @@
 #!/usr/bin/env node
-// ─── OTA Release Script ────────────────────────────────────────────
-// Zips the dist/ folder, deploys to Firebase Hosting, and updates
-// the Firestore latest_version document all in one step.
-// Run after `vite build`: node scripts/release-ota.mjs
-//
-// FIX HISTORY:
-// - Removed archiver import (unused — we use capgo CLI for bundling)
-// - Added idempotency: skip bundling if zip already exists for this version
-// - Added pre-flight: verify Firestore URL matches actual hosted path
-// - Added explicit checksum re-calculation from the final zip that was deployed
-// ─────────────────────────────────────────────────────────────────────
+/**
+ * Automated OTA Release Script (`npm run release`)
+ * Packages `dist/` using @capgo/cli, deploys bundle zip to Firebase Hosting, calculates SHA-256 checksum, and updates Firestore `app_config/latest_version`.
+ */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, renameSync } from 'fs';
 import { join, resolve } from 'path';

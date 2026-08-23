@@ -1,3 +1,8 @@
+/**
+ * Core Application State Store Module
+ * Manages zero-knowledge vault items (CRUD, trash, favorites), Argon2id session keys, IndexedDB caching, cloud sync, settings, and native Android bridge integration.
+ */
+
 import {
   deriveEncryptionKey,
   deriveTotpKey,

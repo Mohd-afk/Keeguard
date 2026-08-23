@@ -1,3 +1,8 @@
+/**
+ * Capacitor Configuration File
+ * Defines Android native package ID (com.mohdj.securevault), web dist directory, and plugin settings for CapacitorUpdater and Firebase Authentication.
+ */
+
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {

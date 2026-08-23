@@ -1,12 +1,7 @@
-// ─── Self-Hosted OTA Update Service ─────────────────────────────────
-// Checks Firebase for new versions on app boot, downloads update bundles
-// from Firebase Hosting, and applies them silently or with a force-screen.
-// Uses @capgo/capacitor-updater for native bundle swapping.
-//
-// NOTE: notifyAppReady() is NOT called here.
-// It is called DIRECTLY in App.tsx boot() BEFORE this service is invoked.
-// This guarantees the ready signal fires even if Firebase init fails.
-// ─────────────────────────────────────────────────────────────────────
+/**
+ * Self-Hosted OTA Update Engine
+ * Checks Firestore ('app_config/latest_version') for web updates, downloads zip bundles via @capgo/capacitor-updater, handles migration guards & rollback verification.
+ */
 
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { doc, getDoc } from 'firebase/firestore';

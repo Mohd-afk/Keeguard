@@ -1,0 +1,13 @@
+{
+  "codeConnect": {
+    "importPaths": {
+      "@/ui/primitives/*": "src/ui/primitives/*",
+      "@/ui/compositions/*": "src/ui/compositions/*",
+      "@/ui/layout/*": "src/ui/layout/*",
+      "@/ui/icons/*": "src/ui/icons/*"
+    },
+    "documentUrlSubstitutions": {
+      "FIGMA_FILE_URL": "https://www.figma.com/design/sds-library"
+    }
+  }
+}

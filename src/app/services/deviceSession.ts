@@ -1,3 +1,8 @@
+/**
+ * Active Device Management & Remote Session Revocation Service
+ * Parses user-agent, fetches IP-based geolocation, tracks heartbeat activity in Firestore, and listens for remote session revocation events.
+ */
+
 import { UAParser } from 'ua-parser-js';
 import { 
   doc, setDoc, deleteDoc, onSnapshot, 

@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "description": "Deterministic Documentation Manifest mapping codebase subsystems to authoritative documentation and drift-check rules.",
+  "subsystems": {
+    "core_app": {
+      "name": "Core State & Business Logic",
+      "paths": [
+        "src/app/store.ts",
+        "src/app/stores/*",
+        "src/app/idb.ts",
+        "src/app/secureMemory.ts"
+      ],
+      "docs": [
+        ".mdfiles/FEATURES.md",
+        ".mdfiles/ARCHITECTURE.md"
+      ],
+      "impact": "feature"
+    },
+    "cryptography": {
+      "name": "Zero-Knowledge Cryptography Engine",
+      "paths": [
+        "src/app/crypto.ts",
+        "src/app/crypto/*",
+        "android/app/src/main/java/com/mohdj/securevault/security/*"
+      ],
+      "docs": [
+        ".mdfiles/ARCHITECTURE.md",
+        ".mdfiles/RULES.md",
+        ".mdfiles/SECURITY_AUDIT.md"
+      ],
+      "impact": "security"
+    },
+    "firestore_database": {
+      "name": "Firestore Cloud Database & Rules",
+      "paths": [
+        "src/app/firestore.ts",
+        "src/app/firestore/*",
+        "firestore.rules",
+        "firestore.indexes.json"
+      ],
+      "docs": [
+        ".mdfiles/ARCHITECTURE.md",
+        ".mdfiles/RULES.md"
+      ],
+      "impact": "data_model"
+    },
+    "android_autofill": {
+      "name": "Android Native Autofill & SQLCipher",
+      "paths": [
+        "android/app/src/main/java/com/mohdj/securevault/autofill/*",
+        "android/app/src/main/java/com/mohdj/securevault/vault/*",
+        "android/app/src/main/java/com/mohdj/securevault/bridge/*"
+      ],
+      "docs": [
+        ".mdfiles/ARCHITECTURE.md",
+        ".mdfiles/FEATURES.md",
+        ".mdfiles/AUTOFILL_ARCHITECTURE.md"
+      ],
+      "impact": "architectural"
+    },
+    "ui_system": {
+      "name": "Figma SDS Component & Layout System",
+      "paths": [
+        "src/ui/*",
+        "src/tokens/*"
+      ],
+      "docs": [
+        ".mdfiles/DESIGN.md"
+      ],
+      "impact": "cosmetic"
+    },
+    "ota_release": {
+      "name": "Self-Hosted OTA Update & Deployment",
+      "paths": [
+        "scripts/release-ota.mjs",
+        "src/app/services/updater.ts",
+        "package.json",
+        "capacitor.config.ts"
+      ],
+      "docs": [
+        ".mdfiles/RELEASES.md",
+        ".mdfiles/RULES.md"
+      ],
+      "impact": "deployment"
+    }
+  }
+}

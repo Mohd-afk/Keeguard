@@ -1,3 +1,8 @@
+/**
+ * Vite Configuration File
+ * Configures React plugin, Tailwind CSS v4, base relative paths, and '@' import path alias resolution.
+ */
+
 import { defineConfig } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'

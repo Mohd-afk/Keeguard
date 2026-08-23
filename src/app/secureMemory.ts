@@ -1,7 +1,7 @@
-// Keeguard Secure Memory Module ────────────────────────────────
-// Provides Uint8Array-based password handling with explicit zeroing
-// to minimize plaintext password exposure in RAM.
-// ─────────────────────────────────────────────────────────────────────
+/**
+ * Secure Memory Hygiene Helper
+ * Provides Uint8Array byte-level password encoding and immediate zero-fill buffer scrubbing (`scrub()`) to minimize plaintext RAM leaks.
+ */
 
 import { createLogger } from './utils/logger';
 

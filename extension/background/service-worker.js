@@ -1,4 +1,4 @@
-import { db, auth } from './firebase-init.js';
+import { db, auth, firebaseConfig } from './firebase-init.js';
 import { decryptVault, encryptVault, deriveKeys } from './vault-crypto.js';
 import { syncVault, getLocalVault, getLocalProfiles, getSessionKey, setSessionKey, saveProfileToCloud, deleteProfileFromCloud } from './sync-engine.js';
 
@@ -258,12 +258,6 @@ function normalizeDomain(urlStr) {
   }
 }
 
-// Config injected globally
-const firebaseConfig = {
-  apiKey: 'AIzaSyDsAH9mhH9IFYLyEjqKfy7uTnNRbU7Mg00',
-  authDomain: 'vault-app-ba6e2.firebaseapp.com',
-  projectId: 'vault-app-ba6e2',
-  storageBucket: 'vault-app-ba6e2.firebasestorage.app',
-  messagingSenderId: '1087322543080',
-  appId: '1:1087322543080:web:a1fa522bdcb3e3518b8a5d'
-};
+
+// firebaseConfig is imported transitively via sync-engine.js → firebase-init.js
+

@@ -13,10 +13,10 @@ import {
   removeMember
 } from '../../stores/accessStore';
 import { subscribeToSharedCollection, type SharedCollection } from '../../firestore/collections';
-import { InviteByUsernameInput } from '../../components/collections/InviteByUsernameInput';
-import { RoleSelect } from '../../components/collections/RoleSelect';
-import { MemberRow } from '../../components/collections/MemberRow';
-import { StepUpAuthModal } from '../../components/auth/StepUpAuthModal';
+import { InviteByUsernameInput } from '@/ui/compositions/InviteByUsernameInput';
+import { RoleSelect } from '@/ui/compositions/RoleSelect';
+import { MemberRow } from '@/ui/compositions/MemberRow';
+import { StepUpAuthModal } from '@/ui/compositions/StepUpAuthModal';
 import { type UserSearchResult } from '../../api/users';
 import { toast } from 'sonner';
 

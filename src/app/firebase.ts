@@ -1,8 +1,7 @@
-// ─── Firebase Initialization ─────────────────────────────────────────
-// Firebase is NOT initialized at module load time.
-// Call initFirebase() explicitly in the boot sequence AFTER notifyAppReady().
-// This prevents module-level crashes from blocking the OTA ready signal.
-// ─────────────────────────────────────────────────────────────────────
+/**
+ * Firebase Client SDK Initialization Module
+ * Provides lazy, idempotent initialization of Firebase App, Auth (with IndexedDB persistence on native Android), Firestore, and Functions.
+ */
 
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import {
@@ -67,13 +66,18 @@ export async function initFirebase(): Promise<void> {
     console.log('[Firebase] Starting initialization...');
 
     const firebaseConfig = {
-        apiKey:            import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDsAH9mhH9IFYLyEjqKfy7uTnNRbU7Mg00',
-        authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'vault-app-ba6e2.firebaseapp.com',
-        projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID || 'vault-app-ba6e2',
-        storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'vault-app-ba6e2.firebasestorage.app',
-        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '1087322543080',
-        appId:             import.meta.env.VITE_FIREBASE_APP_ID || '1:1087322543080:web:a1fa522bdcb3e3518b8a5d',
+        apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+        authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+        projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+        storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+        appId:             import.meta.env.VITE_FIREBASE_APP_ID,
     };
+
+    if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+        throw new Error('[Firebase] Missing required VITE_FIREBASE_* environment variables. Copy .env.example to .env and fill in values.');
+    }
+
 
     // 1. Init app
     _app  = initializeApp(firebaseConfig);

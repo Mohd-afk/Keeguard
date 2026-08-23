@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { onAuthChange, getCurrentUser } from '../auth';
+import { getFirebaseDb } from '../firebase';
 import { getSessionCryptoKey } from '../store';
 import {
   subscribeToMyCollections,

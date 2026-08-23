@@ -1,3 +1,8 @@
+/**
+ * Core Application Container Component
+ * Initializes Firebase Auth listeners, self-hosted OTA updates, Android Autofill bridge, routing provider, and toast notifications.
+ */
+
 import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router';
 import { Toaster, toast } from 'sonner';
@@ -7,10 +12,10 @@ import { router } from './routes';
 import { initFirebase } from './firebase';
 import { initUpdater, OTA_JUST_UPDATED_KEY, compareVersions } from './services/updater';
 import { checkApkUpdateRequired } from './services/apk-update-checker';
-import CriticalUpdateScreen from './components/CriticalUpdateScreen';
-import ApkUpdateBanner from './components/ApkUpdateBanner';
+import CriticalUpdateScreen from '@/ui/compositions/CriticalUpdateScreen';
+import ApkUpdateBanner from '@/ui/compositions/ApkUpdateBanner';
 import { AutofillBridge, type AutofillSaveEvent } from './services/autofillBridge';
-import { AutofillSaveBottomSheet } from './components/AutofillSaveBottomSheet';
+import { AutofillSaveBottomSheet } from '@/ui/compositions/AutofillSaveBottomSheet';
 
 export default function App() {
   const [criticalUpdate, setCriticalUpdate] = useState(false);

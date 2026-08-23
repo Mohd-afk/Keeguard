@@ -1,19 +1,48 @@
 node_modules/
 dist/
 pdfs_info/
+
+# Environment variables — NEVER commit real secrets
 .env
-.env.local
+.env.*
+!.env.example
+
+# Firebase Admin SDK service account key files
 *-firebase-adminsdk-*.json
-vault-app-ba6e2-firebase-adminsdk-fbsvc-6c4a261f81.json
+vault-app-ba6e2-*.json
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# OTA bundles
 ota-updates/bundles/*.zip
 
 # Builds and releases
 /releases/
 *.apk
+build/
+bin/
+.gradle/
+.kotlin/
+.idea/
+android/app/build/
+android/.gradle/
+android/.kotlin/
+android/app/release/
 
-# Backups and archives
+# Sensitive User Data & PII exports
+User Data and emails/
+user_emails.txt
+user_emails.csv
+
+# Backups, archives, scratch work
 /backups/
 /archive/
+/scratch/
+*.log
+*.tmp
 
 # IDE and Local settings
 .vscode/settings.json

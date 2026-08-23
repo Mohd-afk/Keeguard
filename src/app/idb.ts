@@ -1,8 +1,7 @@
-// ─── Keeguard IndexedDB Helper ───────────────────────────────────────
-// Thin, promise-based wrapper around IndexedDB for storing encrypted
-// vault data and settings. Replaces localStorage for better performance
-// and isolation from casual JS access.
-// ─────────────────────────────────────────────────────────────────────
+/**
+ * IndexedDB Async Key-Value Persistence Helper
+ * Provides a lightweight promise-based wrapper around IndexedDB ('SecureVaultDB') for storing encrypted vault payloads and app settings.
+ */
 
 import { createLogger } from './utils/logger';
 

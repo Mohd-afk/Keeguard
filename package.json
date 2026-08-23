@@ -1,12 +1,13 @@
 {
   "name": "@figma/my-make-file",
   "private": true,
-  "version": "5.0.3",
+  "version": "5.1.0",
   "type": "module",
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "release": "vite build && node scripts/release-ota.mjs"
+    "release": "vite build && node scripts/release-ota.mjs",
+    "doc:check": "node scripts/verify-docs.mjs"
   },
   "dependencies": {
     "@capacitor-firebase/authentication": "^8.2.0",

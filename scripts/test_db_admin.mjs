@@ -1,10 +1,21 @@
+import 'dotenv/config';
 import admin from 'firebase-admin';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 
-const sa = JSON.parse(readFileSync(join(import.meta.dirname, '../vault-app-ba6e2-firebase-adminsdk-fbsvc-6c4a261f81.json'), 'utf-8'));
+const projectId = process.env.FIREBASE_PROJECT_ID;
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+if (!projectId || !clientEmail || !privateKey) {
+  console.error('❌ Missing FIREBASE_* environment variables in .env');
+  process.exit(1);
+}
+
 admin.initializeApp({
-  credential: admin.credential.cert(sa)
+  credential: admin.credential.cert({
+    projectId,
+    clientEmail,
+    privateKey,
+  })
 });
 
 const db = admin.firestore();

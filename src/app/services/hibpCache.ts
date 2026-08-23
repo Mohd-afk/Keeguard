@@ -1,14 +1,7 @@
-// ── HIBP k-Anonymity Cache Service ───────────────────────────────────
-//
-// Implements privacy-preserving HaveIBeenPwned checks with:
-//   • IndexedDB caching of prefix→suffixes map (24h TTL)
-//   • AbortController per-request timeout (3000ms)
-//   • 350ms inter-request rate limiting (HIBP's own guideline)
-//   • 1 retry with 500ms backoff on transient network errors
-//   • Graceful offline fallback (returns null, not false)
-//
-// SECURITY: Only the first 5 hex chars of SHA-1(password) leave the device.
-// ─────────────────────────────────────────────────────────────────────
+/**
+ * HaveIBeenPwned (HIBP) k-Anonymity Breach Checking Service
+ * Implements 5-character SHA-1 prefix k-anonymity API queries with 24-hour IndexedDB caching, 350ms rate-limiting, and offline fallback.
+ */
 
 import { idbGet, idbSet } from '../idb';
 import { createLogger } from '../utils/logger';

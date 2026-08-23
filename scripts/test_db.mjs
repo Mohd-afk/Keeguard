@@ -1,16 +1,23 @@
+import 'dotenv/config';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 
-const firebaseConfig = {
-    apiKey:            'AIzaSyDsAH9mhH9IFYLyEjqKfy7uTnNRbU7Mg00',
-    authDomain:        'vault-app-ba6e2.firebaseapp.com',
-    projectId:         'vault-app-ba6e2',
-    storageBucket:     'vault-app-ba6e2.firebasestorage.app',
-    messagingSenderId: '1087322543080',
-    appId:             '1:1087322543080:web:a1fa522bdcb3e3518b8a5d',
-};
+const { VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID,
+        VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID } = process.env;
 
-const app = initializeApp(firebaseConfig);
+if (!VITE_FIREBASE_API_KEY || !VITE_FIREBASE_PROJECT_ID) {
+  console.error('❌ Missing VITE_FIREBASE_* env vars. Copy .env.example to .env.');
+  process.exit(1);
+}
+
+const app = initializeApp({
+    apiKey: VITE_FIREBASE_API_KEY,
+    authDomain: VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: VITE_FIREBASE_PROJECT_ID,
+    storageBucket: VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: VITE_FIREBASE_APP_ID,
+});
 const db = getFirestore(app);
 
 async function inspect() {

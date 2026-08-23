@@ -26,8 +26,8 @@ import {
   Lock,
 } from 'lucide-react';
 import { type User } from 'firebase/auth';
-import { InviteByUsernameInput } from '../../components/collections/InviteByUsernameInput';
-import { RoleSelect } from '../../components/collections/RoleSelect';
+import { InviteByUsernameInput } from '@/ui/compositions/InviteByUsernameInput';
+import { RoleSelect } from '@/ui/compositions/RoleSelect';
 import {
   setActiveCollectionId,
   getActiveCollectionMembers,

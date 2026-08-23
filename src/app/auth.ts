@@ -1,10 +1,7 @@
-// Keeguard Auth Module ─────────────────────────────────────────
-// Wraps Firebase Auth for email logic (passwordless + derived keys).
-// Contains native Capacitor Google Sign-In support.
-//
-// NOTE: All functions call getFirebaseAuth() lazily each time.
-// This ensures Firebase is always initialized before use.
-// ─────────────────────────────────────────────────────────────────────
+/**
+ * Firebase & Native Capacitor Authentication Engine
+ * Wraps Firebase Auth for passwordless magic links, derived master-password auth keys, and native Android @capacitor-firebase Google Sign-In.
+ */
 
 import {
     signInWithEmailAndPassword,

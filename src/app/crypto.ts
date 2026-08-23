@@ -1,9 +1,7 @@
-// Keeguard Crypto Module ───────────────────────────────────────
-// Uses:
-//   • Argon2id (via hash-wasm WASM) for key derivation
-//   • AES-GCM (256-bit) for vault encryption/decryption
-//   • Explicit Uint8Array scrubbing for sensitive key material
-// ─────────────────────────────────────────────────────────────────────
+/**
+ * Cryptography Core Engine
+ * Implements Argon2id WASM key derivation (64MB memory, 3 iterations), AES-256-GCM vault encryption/decryption, TOTP subkey isolation, and DEK import/export.
+ */
 
 import { argon2id } from 'hash-wasm';
 import { passwordToBytes, scrub, withScrubbing } from './secureMemory';
