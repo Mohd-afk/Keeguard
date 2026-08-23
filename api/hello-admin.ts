@@ -1,50 +1,41 @@
+// api/hello-admin.ts — minimal test endpoint using dynamic import
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { adminAuth } from './lib/firebase-admin';
 
-export default async function handler(
-  request: VercelRequest,
-  response: VercelResponse
-) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    // --- 1. TOKEN VERIFICATION LAYER ---
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.warn("API Auth Warning: Missing or malformed Authorization header.");
-      return response.status(401).json({ error: 'Unauthorized: No token provided' });
+    const { initializeApp, cert, getApps, getApp } = await import('firebase-admin/app');
+    const { getAuth } = await import('firebase-admin/auth');
+
+    let app: any;
+    if (getApps().length > 0) {
+      app = getApp();
+    } else {
+      let privateKey = process.env.FIREBASE_PRIVATE_KEY ?? '';
+      privateKey = privateKey.trim().replace(/^["']|["']$/g, '').replace(/\\n/g, '\n');
+      app = initializeApp({
+        credential: cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey,
+        }),
+      });
     }
 
-    const idToken = authHeader.split('Bearer ')[1];
-    let decodedToken;
-    try {
-      decodedToken = await adminAuth.verifyIdToken(idToken);
-      console.info(`API Auth Success: Token verified securely for UID: ${decodedToken.uid}`);
-    } catch (tokenError: any) {
-      console.error(`API Auth Error: Token verification failed: ${tokenError.message}`);
-      return response.status(403).json({ error: 'Unauthorized: Invalid or expired token' });
-    }
+    const auth = getAuth(app);
+    const result = await auth.listUsers(1);
 
-    // --- 2. SECURE BACKEND ACTION ---
-    console.info(`API Action Executing: Fetching user summary triggered by authenticated user ${decodedToken.uid}`);
-    // This is an Admin-only action: Listing the metadata of the last 10 users
-    const listUsersResult = await adminAuth.listUsers(10);
-    
-    const userSummary = listUsersResult.users.map(user => ({
-      uid: user.uid,
-      email: user.email,
-      lastSignInTime: user.metadata.lastSignInTime,
-    }));
-
-    return response.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Fetched user summary via Firebase Admin SDK",
-      count: userSummary.length,
-      users: userSummary
+      message: 'Firebase Admin SDK loaded and working',
+      userCount: result.users.length,
     });
-  } catch (error: any) {
-    console.error("Admin SDK Error:", error);
-    return response.status(500).json({
+  } catch (err: any) {
+    return res.status(500).json({
       success: false,
-      error: error.message
+      error: err.message,
+      errorCode: err.code ?? null,
+      errorType: err.constructor?.name ?? null,
+      stack: err.stack?.split('\n').slice(0, 5),
     });
   }
 }
