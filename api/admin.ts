@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { adminAuth, adminDb } from './lib/firebase-admin';
+import { getAdminAuth, getAdminDb } from './lib/firebase-admin';
 
 const ADMIN_EMAIL = 'mohdjamal1110@gmail.com';
 
@@ -26,6 +26,9 @@ export default async function handler(
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return response.status(401).json({ error: 'Unauthorized: No authorization token provided' });
     }
+
+    const adminAuth = getAdminAuth();
+    const adminDb = getAdminDb();
 
     const idToken = authHeader.split('Bearer ')[1];
     let decodedToken;

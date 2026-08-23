@@ -72,7 +72,14 @@ export function AdminDashboard() {
         },
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`API response error (status ${res.status}): ${text.slice(0, 120)}`);
+      }
+
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Failed to load admin dashboard');
       }

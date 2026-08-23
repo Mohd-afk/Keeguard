@@ -1,28 +1,45 @@
 import { initializeApp, cert, getApp, getApps } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth, type Auth } from 'firebase-admin/auth';
+import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 
 /**
- * Initializes the Firebase Admin SDK using environment variables.
- * This is designed to run in a serverless environment (like Vercel).
+ * Initializes the Firebase Admin SDK lazily using environment variables.
+ * Handles escaped newlines and outer quotes gracefully.
  */
-const serviceAccount = {
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-  // The private key must handle newline characters correctly
-  privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-};
-
-function initAdmin() {
-  if (getApps().length === 0) {
-    return initializeApp({
-      credential: cert(serviceAccount),
-    });
+function getAdminApp() {
+  if (getApps().length > 0) {
+    return getApp();
   }
-  return getApp();
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      `Missing Firebase Admin SDK environment variables on Vercel. ` +
+      `Required: FIREBASE_PROJECT_ID (${projectId ? 'OK' : 'MISSING'}), ` +
+      `FIREBASE_CLIENT_EMAIL (${clientEmail ? 'OK' : 'MISSING'}), ` +
+      `FIREBASE_PRIVATE_KEY (${privateKey ? 'OK' : 'MISSING'})`
+    );
+  }
+
+  // Strip wrapping quotes if user pasted them into Vercel dashboard, and replace escaped newlines
+  privateKey = privateKey.trim().replace(/^["']|["']$/g, '').replace(/\\n/g, '\n');
+
+  return initializeApp({
+    credential: cert({
+      projectId,
+      clientEmail,
+      privateKey,
+    }),
+  });
 }
 
-const adminApp = initAdmin();
+export function getAdminAuth(): Auth {
+  return getAuth(getAdminApp());
+}
 
-export const adminAuth = getAuth(adminApp);
-export const adminDb = getFirestore(adminApp);
+export function getAdminDb(): Firestore {
+  return getFirestore(getAdminApp());
+}
