@@ -1,14 +1,18 @@
-import { initializeApp, cert, getApp, getApps } from 'firebase-admin/app';
-import { getAuth, type Auth } from 'firebase-admin/auth';
-import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+// api/lib/firebase-admin.ts
+// CommonJS-compatible Firebase Admin SDK initializer for Vercel serverless functions.
+// Uses lazy getters to avoid top-level crashes from missing env vars.
 
-/**
- * Initializes the Firebase Admin SDK lazily using environment variables.
- * Handles escaped newlines and outer quotes gracefully.
- */
+const admin = require('firebase-admin');
+
+let _app: any = null;
+
 function getAdminApp() {
-  if (getApps().length > 0) {
-    return getApp();
+  if (_app) return _app;
+
+  // Check already-initialized apps (handles hot-reload / multiple invocations)
+  if (admin.apps && admin.apps.length > 0) {
+    _app = admin.apps[0];
+    return _app;
   }
 
   const projectId = process.env.FIREBASE_PROJECT_ID;
@@ -16,30 +20,28 @@ function getAdminApp() {
   let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
   if (!projectId || !clientEmail || !privateKey) {
-    throw new Error(
-      `Missing Firebase Admin SDK environment variables on Vercel. ` +
-      `Required: FIREBASE_PROJECT_ID (${projectId ? 'OK' : 'MISSING'}), ` +
-      `FIREBASE_CLIENT_EMAIL (${clientEmail ? 'OK' : 'MISSING'}), ` +
-      `FIREBASE_PRIVATE_KEY (${privateKey ? 'OK' : 'MISSING'})`
-    );
+    const missing = [
+      !projectId && 'FIREBASE_PROJECT_ID',
+      !clientEmail && 'FIREBASE_CLIENT_EMAIL',
+      !privateKey && 'FIREBASE_PRIVATE_KEY',
+    ].filter(Boolean).join(', ');
+    throw new Error(`Firebase Admin SDK: Missing environment variables: ${missing}`);
   }
 
-  // Strip wrapping quotes if user pasted them into Vercel dashboard, and replace escaped newlines
+  // Normalise key: strip outer quotes, convert \\n → real newlines
   privateKey = privateKey.trim().replace(/^["']|["']$/g, '').replace(/\\n/g, '\n');
 
-  return initializeApp({
-    credential: cert({
-      projectId,
-      clientEmail,
-      privateKey,
-    }),
+  _app = admin.initializeApp({
+    credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
   });
+
+  return _app;
 }
 
-export function getAdminAuth(): Auth {
-  return getAuth(getAdminApp());
+export function getAdminAuth() {
+  return admin.auth(getAdminApp());
 }
 
-export function getAdminDb(): Firestore {
-  return getFirestore(getAdminApp());
+export function getAdminDb() {
+  return admin.firestore(getAdminApp());
 }
