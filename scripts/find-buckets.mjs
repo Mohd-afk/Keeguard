@@ -5,7 +5,7 @@ import { Storage } from '@google-cloud/storage';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const files = readdirSync(ROOT);
-const serviceAccountFile = files.find(f => f.startsWith('vault-app-ba6e2-firebase-adminsdk') && f.endsWith('.json'));
+const serviceAccountFile = files.find(f => f.startsWith('vault-app-ba6e2-') && f.endsWith('.json'));
 
 const serviceAccount = JSON.parse(readFileSync(join(ROOT, serviceAccountFile), 'utf-8'));
 admin.initializeApp({

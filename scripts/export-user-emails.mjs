@@ -10,7 +10,7 @@ import { join, resolve } from 'path';
 const ROOT = resolve(import.meta.dirname, '..');
 const rootFiles = readdirSync(ROOT);
 const serviceAccountFile = rootFiles.find(
-  f => f.startsWith('vault-app-ba6e2-firebase-adminsdk') && f.endsWith('.json')
+  f => f.startsWith('vault-app-ba6e2-') && f.endsWith('.json')
 );
 
 if (!serviceAccountFile) {

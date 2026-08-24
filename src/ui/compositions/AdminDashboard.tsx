@@ -521,14 +521,15 @@ export function AdminDashboard() {
                 const initial = u.email ? u.email.charAt(0).toUpperCase() : 'U';
 
                 return (
-                  <div
+                  <button
                     key={u.uid}
+                    type="button"
                     onClick={() => {
                       setSelectedUser(u);
                       clearModalNotice();
                       setResetLink(null);
                     }}
-                    className={`group bg-[#16213e] border border-white/5 hover:border-cyan-500/40 hover:bg-[#1a294d] rounded-2xl p-4 flex items-center justify-between gap-4 transition-all cursor-pointer shadow-sm hover:shadow-cyan-950/20 ${
+                    className={`group w-full text-left bg-[#16213e] border border-white/5 hover:border-cyan-500/40 hover:bg-[#1a294d] rounded-2xl p-4 flex items-center justify-between gap-4 transition-all cursor-pointer shadow-sm active:scale-[0.98] ${
                       u.disabled ? 'opacity-70 bg-red-950/10 border-red-500/20' : ''
                     }`}
                   >
@@ -569,7 +570,8 @@ export function AdminDashboard() {
                         </div>
 
                         <div className="flex items-center gap-2 mt-1 text-gray-400 text-xs flex-wrap">
-                          <span
+                          <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               copyToClipboard(u.uid, `list-uid-${u.uid}`);
@@ -583,7 +585,7 @@ export function AdminDashboard() {
                             ) : (
                               <Copy className="w-3 h-3 opacity-60" />
                             )}
-                          </span>
+                          </button>
                           <span>•</span>
                           <span>Joined: {new Date(u.creationTime).toLocaleDateString()}</span>
                           {u.lastSignInTime && (
@@ -601,7 +603,7 @@ export function AdminDashboard() {
                       <span className="hidden sm:inline font-medium text-xs">View details</span>
                       <ChevronRight className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" />
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>

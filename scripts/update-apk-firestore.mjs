@@ -8,7 +8,8 @@ const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'));
 const version = pkg.version;
 
 const files = readdirSync(ROOT);
-const serviceAccountFile = files.find(f => f.startsWith('vault-app-ba6e2-firebase-adminsdk') && f.endsWith('.json'));
+// Match any vault-app-ba6e2-*.json (covers both legacy firebase-adminsdk names and shorter hash names)
+const serviceAccountFile = files.find(f => f.startsWith('vault-app-ba6e2-') && f.endsWith('.json'));
 
 if (!serviceAccountFile) {
   console.error('Could not find Firebase Admin service account JSON file matching vault-app-ba6e2-firebase-adminsdk... in root!');

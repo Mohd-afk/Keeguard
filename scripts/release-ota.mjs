@@ -116,14 +116,16 @@ console.log(`📝 Updating Firestore app_config/latest_version...`);
 
 // Find the service account file
 const rootFiles         = readdirSync(ROOT);
+// Match any vault-app-ba6e2-*.json (covers both legacy firebase-adminsdk names and shorter hash names)
 const serviceAccountFile = rootFiles.find(
-  f => f.startsWith('vault-app-ba6e2-firebase-adminsdk') && f.endsWith('.json')
+  f => f.startsWith('vault-app-ba6e2-') && f.endsWith('.json')
 );
 
 if (!serviceAccountFile) {
   console.error(
     '❌ Could not find Firebase Admin service account JSON file matching ' +
-    'vault-app-ba6e2-firebase-adminsdk*.json in the project root!'
+    'vault-app-ba6e2-*.json in the project root!\n' +
+    '   Make sure the service account JSON is in the project root directory.'
   );
   process.exit(1);
 }
