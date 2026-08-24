@@ -54,10 +54,12 @@ src/ui/
 ├── primitives/     # Low-level Radix UI / Atomic controls (button, input, card, dialog, sheet)
 ├── icons/          # Icon map registry (CategoryIconMap, Lucide icons)
 ├── layout/         # Application shell (AppShell, Sidebar, BottomNav, HomeWrapper)
-└── compositions/   # Feature-level screens (PasswordList, AddEditForm, Settings, ItemDetail)
+└── compositions/   # Feature-level screens (PasswordList, AddEditForm, Settings, ItemDetail, AdminDashboard)
 ```
 
 ### Component Rules:
 1. **Never use ad-hoc colors**: Use Tailwind SDS classes (`bg-[#1a1a2e]`, `bg-[#16213e]`, `text-cyan-400`).
 2. **Icons**: Standardize on `lucide-react` icons imported via `@/ui/icons/` or direct Lucide imports.
 3. **Mobile First**: All compositions must use flex/grid with touch targets (min 44px) and safe area padding (`pt-[max(env(safe-area-inset-top),_12px)]`).
+4. **Admin Console & Modal Cards**: Clickable user cards open a dedicated `AdminUser` details modal with identity data, stored cloud vault metadata, session management, password reset links, and inline account suspension controls.
+

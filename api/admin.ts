@@ -68,10 +68,19 @@ export default async function handler(request: VercelRequest, response: VercelRe
         email: u.email ?? 'No email',
         displayName: u.displayName ?? '',
         photoURL: u.photoURL ?? null,
-        disabled: u.disabled,
+        disabled: Boolean(u.disabled),
         creationTime: u.metadata.creationTime,
         lastSignInTime: u.metadata.lastSignInTime,
+        emailVerified: Boolean(u.emailVerified),
+        phoneNumber: u.phoneNumber ?? null,
+        tokensValidAfterTime: u.tokensValidAfterTime ?? null,
         providers: u.providerData.map((p: any) => p.providerId),
+        providerData: u.providerData.map((p: any) => ({
+          providerId: p.providerId,
+          uid: p.uid,
+          email: p.email ?? null,
+          displayName: p.displayName ?? null,
+        })),
       }));
 
       return response.status(200).json({
@@ -91,9 +100,11 @@ export default async function handler(request: VercelRequest, response: VercelRe
       step = 'post_action';
       const { action, targetUid, disabled } = (request.body as any) ?? {};
       if (!targetUid) return response.status(400).json({ error: 'targetUid required' });
-      if (targetUid === decoded.uid && action === 'toggleDisable') {
-        return response.status(400).json({ error: 'Cannot disable your own account.' });
+
+      if (targetUid === decoded.uid && (action === 'toggleDisable' || action === 'deleteUser')) {
+        return response.status(400).json({ error: 'Cannot suspend or delete your own admin account.' });
       }
+
       if (action === 'toggleDisable') {
         step = 'toggle_disable';
         const updated = await adminAuth.updateUser(targetUid, { disabled: Boolean(disabled) });
@@ -103,11 +114,27 @@ export default async function handler(request: VercelRequest, response: VercelRe
           user: { uid: updated.uid, disabled: updated.disabled },
         });
       }
+
       if (action === 'deleteUser') {
         step = 'delete_user';
         await adminAuth.deleteUser(targetUid);
         return response.status(200).json({ success: true, message: `User ${targetUid} deleted.` });
       }
+
+      if (action === 'revokeTokens') {
+        step = 'revoke_tokens';
+        await adminAuth.revokeRefreshTokens(targetUid);
+        return response.status(200).json({ success: true, message: `All active sessions revoked for user ${targetUid}.` });
+      }
+
+      if (action === 'generateResetLink') {
+        step = 'generate_reset_link';
+        const targetUser = await adminAuth.getUser(targetUid);
+        if (!targetUser.email) return response.status(400).json({ error: 'User does not have an email address' });
+        const resetLink = await adminAuth.generatePasswordResetLink(targetUser.email);
+        return response.status(200).json({ success: true, resetLink, message: `Password reset link generated.` });
+      }
+
       return response.status(400).json({ error: 'Unknown action' });
     }
 
