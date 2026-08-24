@@ -30,6 +30,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { getCurrentUser } from '@/app/auth';
+import { Capacitor } from '@capacitor/core';
 
 const ADMIN_EMAIL = 'mohdjamal1110@gmail.com';
 
@@ -71,6 +72,13 @@ export function AdminDashboard() {
 
   const currentUser = getCurrentUser() || outletContext.user;
   const isAuthorized = currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+  // Admin Console is web-only — block access entirely on native (Android/iOS)
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      navigate('/settings', { replace: true });
+    }
+  }, [navigate]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

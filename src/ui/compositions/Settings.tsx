@@ -128,6 +128,7 @@ export function Settings() {
 
     // ── OTA Updates state ─────────────────────────────────────────────
     const [activeOtaVersion, setActiveOtaVersion] = useState<string | null>(null);
+    const [nativeAppVersion, setNativeAppVersion] = useState<string>(packageJson.version);
     const [checkingUpdates, setCheckingUpdates] = useState(false);
 
     // Load the live OTA bundle version from CapacitorUpdater (not localStorage)
@@ -145,6 +146,11 @@ export function Settings() {
                 } else {
                     setActiveOtaVersion(null); // running on native APK builtin bundle
                 }
+
+                // Read the true native APK version (from build.gradle versionName)
+                const { App: CapApp } = await import('@capacitor/app');
+                const info = await CapApp.getInfo();
+                if (info?.version) setNativeAppVersion(info.version);
             } catch (e) {
                 setActiveOtaVersion(null);
             }
@@ -735,7 +741,7 @@ export function Settings() {
                                     <p className="text-gray-400 text-xs truncate">{user.email}</p>
                                 </div>
                             </div>
-                            {user?.email?.toLowerCase() === 'mohdjamal1110@gmail.com' && (
+                            {user?.email?.toLowerCase() === 'mohdjamal1110@gmail.com' && !Capacitor.isNativePlatform() && (
                                 <button
                                     onClick={() => navigate('/admin')}
                                     className="w-full flex items-center justify-between p-3 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-400 hover:bg-amber-400/20 transition-all text-xs font-bold"
@@ -1551,7 +1557,7 @@ export function Settings() {
                             <div className="flex justify-between items-center">
                                 <span className="text-gray-500 text-xs">Version</span>
                                 <span className="text-gray-300 text-xs font-medium">
-                                    {packageJson.version}
+                                    {nativeAppVersion}
                                     {Capacitor.isNativePlatform() ? (
                                         activeOtaVersion && activeOtaVersion !== '0.0.0' ? (
                                             <span className="text-cyan-400 font-semibold ml-1.5 bg-cyan-500/10 px-1.5 py-0.5 rounded text-[10px]">
