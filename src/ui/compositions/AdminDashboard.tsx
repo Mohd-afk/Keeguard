@@ -99,7 +99,7 @@ export function AdminDashboard() {
   const [resetLink, setResetLink] = useState<string | null>(null);
 
   const fetchAdminData = useCallback(async (isRefresh = false) => {
-    if (!currentUser) return;
+    if (!currentUser || Capacitor.isNativePlatform()) return;
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
@@ -142,7 +142,7 @@ export function AdminDashboard() {
   }, [currentUser, selectedUser]);
 
   useEffect(() => {
-    if (isAuthorized) {
+    if (isAuthorized && !Capacitor.isNativePlatform()) {
       fetchAdminData();
     }
   }, [isAuthorized]);
@@ -348,6 +348,27 @@ export function AdminDashboard() {
       return matchesSearch;
     });
   }, [users, searchQuery, statusFilter]);
+
+  // ── Native Platform (Mobile) Block ──────────────────────────────────
+  if (Capacitor.isNativePlatform()) {
+    return (
+      <div className="h-screen max-h-screen bg-[#1a1a2e] flex flex-col items-center justify-center px-6 text-center">
+        <div className="w-16 h-16 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mb-4">
+          <Crown className="w-8 h-8 text-amber-400" />
+        </div>
+        <h1 className="text-white text-2xl font-bold mb-2">Web Application Only</h1>
+        <p className="text-gray-400 text-sm max-w-md mb-6">
+          The Admin Console is restricted to the Web version of Keeguard. Please log in using a desktop browser to manage users.
+        </p>
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 text-black font-semibold hover:bg-cyan-400 transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" /> Return to Safe Vault
+        </button>
+      </div>
+    );
+  }
 
   // ── Access Denied Screen ──────────────────────────────────────────────
   if (!isAuthorized) {
