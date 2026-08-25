@@ -1,3 +1,4 @@
+// PURPOSE: Renders the ItemDetail screen interface component and user actions.
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Eye, EyeOff, Copy, ExternalLink, Pencil, Trash2, Share2, Globe, Smartphone, Phone, DoorOpen, CreditCard, KeyRound, Check, RotateCcw, AlertTriangle, Star, Sparkles, LayoutList, ChevronDown } from 'lucide-react';

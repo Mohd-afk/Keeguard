@@ -1,3 +1,4 @@
+// PURPOSE: Wraps local IndexedDB storage for offline encrypted vault persistence and fast startup caching.
 /**
  * IndexedDB Async Key-Value Persistence Helper
  * Provides a lightweight promise-based wrapper around IndexedDB ('SecureVaultDB') for storing encrypted vault payloads and app settings.

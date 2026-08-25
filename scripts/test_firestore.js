@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for test_firestore.js.
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 

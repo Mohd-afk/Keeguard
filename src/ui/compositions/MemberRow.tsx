@@ -1,3 +1,4 @@
+// PURPOSE: Renders the MemberRow screen interface component and user actions.
 import { useState } from 'react';
 import { User, Trash2, Edit2, Loader2, Check, X, Shield } from 'lucide-react';
 import { type CollectionMember, type CollectionRole } from '@/app/firestore/collections';

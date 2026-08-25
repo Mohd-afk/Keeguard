@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension background service worker handling firebase-init.
 export const firebaseConfig = {
   apiKey: 'AIzaSyDsAH9mhH9IFYLyEjqKfy7uTnNRbU7Mg00',
   authDomain: 'vault-app-ba6e2.firebaseapp.com',

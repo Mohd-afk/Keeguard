@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for variables.gradle.
 ext {
     minSdkVersion = 24
     compileSdkVersion = 36

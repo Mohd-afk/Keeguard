@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for useSmartSearch.ts.
 import { useMemo } from 'react';
 import type { VaultItem, CustomCategory } from '../store';
 

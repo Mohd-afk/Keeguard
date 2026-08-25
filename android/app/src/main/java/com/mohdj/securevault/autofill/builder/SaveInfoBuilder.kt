@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for SaveInfoBuilder.
 package com.mohdj.securevault.autofill.builder
 
 import android.service.autofill.SaveInfo

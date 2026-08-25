@@ -1,3 +1,4 @@
+// PURPOSE: Unit test suite verifying Android native ExampleUnitTest logic.
 package com.getcapacitor.myapp;
 
 import static org.junit.Assert.*;

@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function service handling auditService logic.
 // ─── Audit Logging Service ───────────────────────────────────────────────────
 // Handles logging of non-repudiable audit events for sensitive collection operations.
 // ─────────────────────────────────────────────────────────────────────────────

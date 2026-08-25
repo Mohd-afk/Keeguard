@@ -1,3 +1,4 @@
+// PURPOSE: Renders the ManageCategories screen interface component and user actions.
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import {

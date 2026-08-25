@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for Button.figma.tsx.
 import { Button } from '@/ui/primitives/button';
 
 /**

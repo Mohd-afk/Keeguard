@@ -1,3 +1,4 @@
+// PURPOSE: Service module managing updater.
 /**
  * Self-Hosted OTA Update Engine
  * Checks Firestore ('app_config/latest_version') for web updates, downloads zip bundles via @capgo/capacitor-updater, handles migration guards & rollback verification.

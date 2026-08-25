@@ -1,3 +1,4 @@
+// PURPOSE: Native Android security manager handling VaultUnlockManager.
 package com.mohdj.securevault.security
 
 import android.os.SystemClock

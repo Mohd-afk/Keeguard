@@ -1,3 +1,4 @@
+// PURPOSE: Service module managing categorySync.
 import { registerPlugin, Capacitor } from '@capacitor/core';
 
 export interface CategorySyncPlugin {

@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for collections.ts.
 // ─── Shared Collection Firestore Data Layer ──────────────────────────────────
 // Client-side read operations for shared collections.
 // All writes go through Cloud Functions (Admin SDK) for authorization enforcement.

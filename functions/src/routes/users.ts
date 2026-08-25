@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function HTTP route handler for users endpoint.
 // ─── Users Route / Callable ──────────────────────────────────────────────────
 // Handles privacy-preserving username prefix search with uniform response times.
 // ─────────────────────────────────────────────────────────────────────────────

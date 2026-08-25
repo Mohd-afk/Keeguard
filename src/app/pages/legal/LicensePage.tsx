@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for LicensePage.tsx.
 import { ArrowLeft, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
@@ -74,7 +75,7 @@ export function LicensePage() {
 
                 <Section title="Contact">
                     <p>For licensing inquiries, contact us at{' '}
-                        <a href="mailto:support@Keeguard.app" className="text-cyan-400 hover:underline">support@Keeguard.app</a>.
+                        <a href="mailto:keeguardsupport@gmail.com" className="text-cyan-400 hover:underline">keeguardsupport@gmail.com</a>.
                     </p>
                 </Section>
 

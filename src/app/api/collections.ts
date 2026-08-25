@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for collections.ts.
 // ─── Shared Collections API Client Wrapper ──────────────────────────────────
 // Rewritten to use direct Firestore client-side writes because Cloud Functions
 // cannot be deployed on the free Spark plan.

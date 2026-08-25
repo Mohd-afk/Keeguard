@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for useSort.ts.
 import { useState, useMemo } from 'react';
 import type { VaultItem } from '../store';
 

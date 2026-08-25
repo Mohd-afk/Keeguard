@@ -1,3 +1,4 @@
+// PURPOSE: Renders the main React application layout shell, global providers, and view routes.
 /**
  * Core Application Container Component
  * Initializes Firebase Auth listeners, self-hosted OTA updates, Android Autofill bridge, routing provider, and toast notifications.

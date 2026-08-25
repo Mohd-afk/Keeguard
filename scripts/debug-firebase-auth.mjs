@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for debug-firebase-auth.mjs.
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 import { execSync } from 'child_process';

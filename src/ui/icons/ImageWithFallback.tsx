@@ -1,3 +1,4 @@
+// PURPOSE: Renders SVG icon component for ImageWithFallback.
 import React, { useState } from 'react'
 
 const ERROR_IMG_SRC =

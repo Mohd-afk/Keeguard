@@ -1,3 +1,4 @@
+// PURPOSE: Provides Uint8Array byte buffer zeroing functions to scrub sensitive key material from memory.
 /**
  * Secure Memory Hygiene Helper
  * Provides Uint8Array byte-level password encoding and immediate zero-fill buffer scrubbing (`scrub()`) to minimize plaintext RAM leaks.

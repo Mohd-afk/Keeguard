@@ -1,3 +1,4 @@
+// PURPOSE: Renders the PasswordList screen interface component and user actions.
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import {

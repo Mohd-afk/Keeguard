@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for RELEASES. -->
 # 🚀 Keeguard — Release & Deployment Guide
 
 > **Deployment Guide for Self-Hosted OTA Updates and Native Android APK Releases**
@@ -11,7 +12,8 @@ OTA updates deliver instant web bundle updates to Android devices via `@capgo/ca
 
 ### Automated OTA Command
 ```bash
-npm run release
+npm run release # Build and deploy OTA release bundle
+npm test        # Run CI typecheck and doc verification
 ```
 
 ### What `npm run release` Does Automatically:

@@ -1,3 +1,4 @@
+// PURPOSE: Native SQLCipher Room database component for VaultDao.
 package com.mohdj.securevault.vault
 
 import androidx.room.Dao

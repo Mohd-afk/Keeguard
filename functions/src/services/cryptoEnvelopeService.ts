@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function service handling cryptoEnvelopeService logic.
 // ─── Key Envelope Service ────────────────────────────────────────────────────
 // Manages creation, retrieval, and deletion of wrapped collection keys.
 // ─────────────────────────────────────────────────────────────────────────────

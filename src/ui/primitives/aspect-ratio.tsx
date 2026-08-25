@@ -1,3 +1,4 @@
+// PURPOSE: Reusable Figma SDS atomic UI primitive component for aspect-ratio.
 "use client";
 
 import * as AspectRatioPrimitive from "@radix-ui/react-aspect-ratio";

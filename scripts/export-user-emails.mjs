@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for export-user-emails.mjs.
 // ─── Export All User Emails from Firebase Auth ────────────────────────────────
 // Run: node scripts/export-user-emails.mjs
 // Exports all user email addresses to `user_emails.txt` and `user_emails.csv`

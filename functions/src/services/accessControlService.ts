@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function service handling accessControlService logic.
 // ─── Access Control & Role Enforcement Service ───────────────────────────────
 // Verifies roles and permissions for shared collections.
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+// PURPOSE: Utility functions for logger.
 // ─── Keeguard Structured Logger ───────────────────────────────────
 // Provides namespaced, leveled logging for debugging auth, sync, and crypto flows.
 // Usage: const log = createLogger('AUTH');  log.info('User signed in', { uid });

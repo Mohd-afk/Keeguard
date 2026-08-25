@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for collectionCrypto.ts.
 // ─── Collection Crypto Module ───────────────────────────────────────────────
 // Zero-knowledge collection key domain for Keeguard shared collections.
 //

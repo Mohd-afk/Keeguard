@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for release-notes-v4.0.0. -->
 ## Keeguard v4.0.0 — Major Security & UX Overhaul
 
 ### 🔐 Security Hardening

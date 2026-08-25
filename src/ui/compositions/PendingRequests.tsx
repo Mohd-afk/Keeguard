@@ -1,3 +1,4 @@
+// PURPOSE: Renders the PendingRequests screen interface component and user actions.
 import { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import { ArrowLeft, Smartphone, MoreVertical, ArrowUpRight, FolderHeart, ShieldAlert, Loader2, CheckSquare, UserCheck, XCircle, Bell, Activity } from 'lucide-react';

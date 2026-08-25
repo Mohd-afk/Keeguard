@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function HTTP route handler for internalNotifications endpoint.
 // ─── Internal Notifications / HTTP Endpoint ──────────────────────────────────
 // Allows secure, service-to-service notification delivery via HTTPS.
 // ─────────────────────────────────────────────────────────────────────────────

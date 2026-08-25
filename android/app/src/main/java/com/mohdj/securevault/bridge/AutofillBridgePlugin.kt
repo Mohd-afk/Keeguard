@@ -1,3 +1,4 @@
+// PURPOSE: Capacitor bridge plugin interfacing JS layer with native Android AutofillBridgePlugin.
 package com.mohdj.securevault.bridge
 
 import com.getcapacitor.JSObject

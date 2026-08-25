@@ -1,3 +1,4 @@
+// PURPOSE: Firebase Cloud Functions main entry point exporting all API route triggers.
 // ─── Firebase Cloud Functions Entry Point ─────────────────────────────────────
 // Initializes the Admin SDK and exports all callables & triggers.
 // ─────────────────────────────────────────────────────────────────────────────

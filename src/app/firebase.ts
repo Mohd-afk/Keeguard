@@ -1,3 +1,4 @@
+// PURPOSE: Initializes Firebase Web SDK application singleton and exposes auth and database instances.
 /**
  * Firebase Client SDK Initialization Module
  * Provides lazy, idempotent initialization of Firebase App, Auth (with IndexedDB persistence on native Android), Firestore, and Functions.

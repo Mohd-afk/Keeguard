@@ -1,3 +1,4 @@
+// PURPOSE: Reusable Figma SDS atomic UI primitive component for pagination.
 import * as React from "react";
 import {
   ChevronLeftIcon,

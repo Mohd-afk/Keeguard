@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension background service worker handling vault-crypto.
 let offscreenCreating = null;
 
 async function setupOffscreenDocument(path) {

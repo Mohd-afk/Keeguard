@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for FEATURES. -->
 # Keeguard — Feature & Architecture Documentation
 
 > **Branding alias:** This app was previously called **SecureVault** and is now called **Keeguard**. `Keeguard` = `SecureVault` — they are the **same app**, just old vs. new name. Internal identifiers (package `com.mohdj.securevault`, storage keys `securevault_*`) keep the old name intentionally to protect existing user data.

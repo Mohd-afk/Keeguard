@@ -22,7 +22,7 @@
       "emailPassword": true,
       "googleSignIn": {
         "oAuthBrandDisplayName": "SecureVault",
-        "supportEmail": "mohdjamal1110@gmail.com"
+        "supportEmail": "keeguardsupport@gmail.com"
       }
     }
   },
@@ -35,6 +35,16 @@
         "headers": [
           { "key": "Cache-Control", "value": "no-cache" },
           { "key": "Content-Type", "value": "application/zip" }
+        ]
+      },
+      {
+        "source": "**",
+        "headers": [
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "X-Frame-Options", "value": "DENY" },
+          { "key": "X-XSS-Protection", "value": "1; mode=block" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+          { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" }
         ]
       }
     ]

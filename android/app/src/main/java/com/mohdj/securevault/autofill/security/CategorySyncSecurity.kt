@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for CategorySyncSecurity.
 package com.mohdj.securevault.autofill.security
 
 import android.util.Base64

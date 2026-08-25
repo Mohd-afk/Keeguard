@@ -1,3 +1,4 @@
+// PURPOSE: Renders the ConflictResolverSheet screen interface component and user actions.
 import { useState, useEffect } from 'react';
 import { AlertTriangle, Check, Cloud, Smartphone, HelpCircle } from 'lucide-react';
 import { getActiveConflict, resolveConflict, addConflictListener, type ConflictState } from '@/app/stores/syncStore';

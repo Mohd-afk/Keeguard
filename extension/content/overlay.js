@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension content script managing DOM overlay.
 // content/overlay.js
 
 let activeSuggestionDropdown = null;

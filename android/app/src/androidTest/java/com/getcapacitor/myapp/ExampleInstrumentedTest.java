@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for ExampleInstrumentedTest.java.
 package com.getcapacitor.myapp;
 
 import static org.junit.Assert.*;

@@ -1,3 +1,4 @@
+// PURPOSE: Renders the AddEditForm screen interface component and user actions.
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router';
 import {

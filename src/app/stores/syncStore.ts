@@ -1,3 +1,4 @@
+// PURPOSE: Reactive state store managing syncStore state and operations.
 // ─── Real-Time Sync & Conflict Resolution Store ──────────────────────────────
 // Manages zero-knowledge shared collections items, real-time sync listeners,
 // offline queues, and decryption/encryption layers.

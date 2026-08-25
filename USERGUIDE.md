@@ -254,7 +254,8 @@ Because all client applications (Android APK, Browser Extension, and Web App) co
 
 ## 💬 Questions & Support
 
-For additional assistance, feel free to open a ticket on our GitHub repository:
+For questions, feedback, or support inquiries:
+- 📧 **Email Support:** [keeguardsupport@gmail.com](mailto:keeguardsupport@gmail.com)
 - 🐛 **Issue Tracker:** [Mohd-afk/apk-releases/issues](https://github.com/Mohd-afk/apk-releases/issues)
 
 © 2026 **Mohd-afk** — Distributed under MIT Open Source License.

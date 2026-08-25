@@ -1,3 +1,4 @@
+// PURPOSE: Configures Vite build system, React plugin, dev server, and module alias path mappings.
 /**
  * Vite Configuration File
  * Configures React plugin, Tailwind CSS v4, base relative paths, and '@' import path alias resolution.

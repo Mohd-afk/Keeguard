@@ -1,3 +1,4 @@
+// PURPOSE: Native Android security manager handling BiometricKeyManager.
 package com.mohdj.securevault.security
 
 import android.content.Context

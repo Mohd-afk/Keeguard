@@ -1,3 +1,4 @@
+/* PURPOSE: Global CSS styling rules for theme.css. */
 @custom-variant dark (&:is(.dark *));
 
 :root {

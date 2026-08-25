@@ -1,3 +1,4 @@
+// PURPOSE: Reusable Figma SDS atomic UI primitive component for radio-group.
 "use client";
 
 import * as React from "react";

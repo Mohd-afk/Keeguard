@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for CollectionListPage.tsx.
 import { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import { Plus, ArrowLeft, Shield, Users, ArrowRight, FolderPlus, Loader2, Tag, Key, Share2, Check } from 'lucide-react';

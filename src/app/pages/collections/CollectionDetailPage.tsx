@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for CollectionDetailPage.tsx.
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router';
 import {

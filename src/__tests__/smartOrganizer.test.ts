@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for smartOrganizer.test.ts.
 import { describe, it, expect, beforeEach } from 'vitest';
 
 // Force overwrite globalThis.localStorage to ensure a perfectly working mock

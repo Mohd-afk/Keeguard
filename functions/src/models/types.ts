@@ -1,3 +1,4 @@
+// PURPOSE: TypeScript interface and type definitions for cloud function requests and payloads.
 // ─── Shared Collections backend domain models ─────────────────────────────────
 
 export type CollectionRole = 'owner' | 'manager' | 'editor' | 'viewer';

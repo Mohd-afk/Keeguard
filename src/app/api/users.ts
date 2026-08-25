@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for users.ts.
 // ─── Users API Client Wrapper ────────────────────────────────────────────────
 // Rewritten to use client-side Firestore queries because Cloud Functions
 // cannot be deployed on the free Spark plan.

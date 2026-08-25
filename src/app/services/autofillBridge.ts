@@ -1,3 +1,4 @@
+// PURPOSE: Service module managing autofillBridge.
 import { registerPlugin, PluginListenerHandle } from '@capacitor/core';
 
 export interface AutofillSaveEvent {

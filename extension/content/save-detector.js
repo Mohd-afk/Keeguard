@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension content script managing DOM save-detector.
 // content/save-detector.js
 
 let lastEnteredUsername = '';

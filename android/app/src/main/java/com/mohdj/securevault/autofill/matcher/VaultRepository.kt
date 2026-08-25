@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for VaultRepository.
 package com.mohdj.securevault.autofill.matcher
 
 interface VaultRepository {

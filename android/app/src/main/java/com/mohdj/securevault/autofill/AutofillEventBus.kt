@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for AutofillEventBus.
 package com.mohdj.securevault.autofill
 
 import kotlinx.coroutines.flow.MutableSharedFlow

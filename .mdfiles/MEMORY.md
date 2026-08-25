@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for MEMORY. -->
 # 🧠 Keeguard — AI Memory & Tracking Roadmap
 
 > **Self-Tracking Memory Log for Antigravity AI Agent**  

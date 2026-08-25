@@ -1,3 +1,4 @@
+// PURPOSE: Design system token definitions for colors.
 /**
  * Figma Simple Design System (SDS) - Color Tokens
  */

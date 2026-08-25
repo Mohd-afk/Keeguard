@@ -1,3 +1,4 @@
+// PURPOSE: Renders the SecurityDashboard screen interface component and user actions.
 import { useState, useCallback } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import {

@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension content script managing DOM field-classifier.
 // content/field-classifier.js
 
 const USERNAME_KEYWORDS = ['user', 'username', 'email', 'e-mail', 'login', 'account', 'identifier', 'phone', 'mobile', 'uname', 'userid'];

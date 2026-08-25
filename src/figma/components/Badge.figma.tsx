@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for Badge.figma.tsx.
 import { Badge } from '@/ui/primitives/badge';
 
 /**

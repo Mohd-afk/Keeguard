@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function service handling rateLimitService logic.
 // ─── Rate Limiting Service ───────────────────────────────────────────────────
 // Implements Firestore-backed rolling window rate-limiting for backend callables.
 // ─────────────────────────────────────────────────────────────────────────────

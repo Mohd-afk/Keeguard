@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for routes.ts.
 /**
  * React Router Configuration Module
  * Maps application paths ('/', '/settings', '/security', '/generator', '/trash', etc.) to AppShell and screen compositions.

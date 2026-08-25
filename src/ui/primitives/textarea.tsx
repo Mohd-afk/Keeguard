@@ -1,3 +1,4 @@
+// PURPOSE: Reusable Figma SDS atomic UI primitive component for textarea.
 import * as React from "react";
 
 import { cn } from "./utils";

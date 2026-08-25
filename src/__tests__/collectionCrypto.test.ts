@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for collectionCrypto.test.ts.
 import { describe, it, expect } from 'vitest';
 import {
   generateCollectionKey,

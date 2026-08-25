@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension content script managing DOM form-detector.
 // content/form-detector.js
 
 function scanPageForms() {

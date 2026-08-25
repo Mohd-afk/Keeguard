@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for helpers.ts.
 // ─── Firestore Shared Helpers ─────────────────────────────────────────────────
 // Ponytail-compliant helpers extracted from 7+ repeated patterns across the DB
 // layer. Every helper is a single-responsibility, zero-logic wrapper.

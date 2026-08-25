@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension content script managing DOM content.
 // content/content.js
 
 function initContentScript() {

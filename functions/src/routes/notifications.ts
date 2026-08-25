@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function HTTP route handler for notifications endpoint.
 // ─── Notifications Route / Callables ──────────────────────────────────────────
 // Endpoints for managing notification read status.
 // ─────────────────────────────────────────────────────────────────────────────

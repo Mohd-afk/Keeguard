@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension content script managing DOM fill-engine.
 // content/fill-engine.js
 // v5.0.7 – Fix selector split bug, add debug logging, fix readOnly skip, fix scoreMatch
 

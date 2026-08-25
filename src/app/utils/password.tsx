@@ -1,3 +1,4 @@
+// PURPOSE: Utility functions for passwordx.
 import { Check, X } from 'lucide-react';
 import React from 'react';
 

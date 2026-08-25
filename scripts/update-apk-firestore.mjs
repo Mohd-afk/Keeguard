@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for update-apk-firestore.mjs.
 import { readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { initializeApp, cert } from 'firebase-admin/app';

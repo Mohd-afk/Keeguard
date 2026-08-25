@@ -1,0 +1,112 @@
+# PURPOSE: Automates CI type-checking, Vite production build, Gitleaks secret scanning, Scorecard, and CodeQL SAST.
+name: Continuous Integration & Master Security Suite
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+# Enforce least-privilege default permissions (OWASP & OSSF Scorecard)
+permissions: read-all
+
+jobs:
+  # ─── Job 1: Build & TypeCheck Verification ───
+  build-and-test:
+    name: TypeCheck, Secret Scan & Build Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@39370e3970a6d050c380469178354507e7773802 # v4.1.0
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run TypeCheck, Secret Scan & Doc Check
+        run: npm test
+
+      - name: Verify Production Build
+        run: npm run build
+
+  # ─── Job 2: Gitleaks Secret Scanning ───
+  secret-scan:
+    name: Gitleaks Automated Secret Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@e85e507b9fb6c07571dbb00fefbeceefefcdcd99 # v2.3.8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── Job 3: OSSF Scorecard Evaluation ───
+  scorecard:
+    name: OSSF Scorecard Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Run OSSF Scorecard Analysis
+        uses: ossf/scorecard-action@f49aab0e5af0936a689e482ed4c679cf5511211e # v2.4.1
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload SARIF Results
+        uses: github/codeql-action/upload-sarif@dd746615b8b9d728aab847cf2961e0508a8d76b1 # v3.28.10
+        with:
+          sarif_file: results.sarif
+
+  # ─── Job 4: CodeQL SAST Analysis ───
+  codeql-sast:
+    name: CodeQL Static Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@dd746615b8b9d728aab847cf2961e0508a8d76b1 # v3.28.10
+        with:
+          languages: "javascript-typescript"
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@dd746615b8b9d728aab847cf2961e0508a8d76b1 # v3.28.10

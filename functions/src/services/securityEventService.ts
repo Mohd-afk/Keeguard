@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function service handling securityEventService logic.
 // ─── Security Event Logging Service ──────────────────────────────────────────
 // Handles logging high-risk security alerts, intrusion detection, and anomalies.
 // ─────────────────────────────────────────────────────────────────────────────

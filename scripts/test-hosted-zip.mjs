@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for test-hosted-zip.mjs.
 import crypto from 'crypto';
 
 const url = 'https://vault-app-ba6e2.web.app/bundles/4.0.5.zip';

@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension background service worker handling sync-engine.
 import { firebaseConfig, getValidIdToken } from './firebase-init.js';
 import { decryptVault } from './vault-crypto.js';
 

@@ -1,3 +1,4 @@
+// PURPOSE: Capacitor bridge plugin interfacing JS layer with native Android VaultBridgePlugin.
 package com.mohdj.securevault.bridge
 
 // [MODIFIED v3.2.2] RC1:

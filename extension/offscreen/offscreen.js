@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension offscreen document handling offscreen.js.
 // ─── KeeGuard Offscreen Document ─────────────────────────────────────
 // Runs in a hidden DOM page. Handles Argon2id key derivation via hash-wasm
 // since WASM requires DOM context (not available in service workers).

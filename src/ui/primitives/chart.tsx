@@ -1,3 +1,4 @@
+// PURPOSE: Reusable Figma SDS atomic UI primitive component for chart.
 "use client";
 
 import * as React from "react";

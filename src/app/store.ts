@@ -1,3 +1,4 @@
+// PURPOSE: Manages reactive global application state, master password session, and vault CRUD operations.
 /**
  * Core Application State Store Module
  * Manages zero-knowledge vault items (CRUD, trash, favorites), Argon2id session keys, IndexedDB caching, cloud sync, settings, and native Android bridge integration.

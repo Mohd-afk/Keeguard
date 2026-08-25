@@ -1,3 +1,4 @@
+// PURPOSE: Unit test suite verifying Android native CredentialMatcherTest logic.
 package com.mohdj.securevault.autofill
 
 import com.mohdj.securevault.autofill.matcher.CredentialMatcher

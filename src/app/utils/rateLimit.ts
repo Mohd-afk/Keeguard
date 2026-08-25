@@ -1,3 +1,4 @@
+// PURPOSE: Utility functions for rateLimit.
 import { createLogger } from './logger';
 
 const log = createLogger('RATE_LIMIT');

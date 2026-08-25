@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for SecureLogger.
 package com.mohdj.securevault.autofill
 
 import android.content.Context

@@ -1,3 +1,4 @@
+// PURPOSE: Renders the Settings screen interface component and user actions.
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import { ArrowLeft, Eye, EyeOff, ChevronDown, ChevronUp, ChevronRight, KeyRound, Lock, Upload, Download, LogOut, FileText, AtSign, Loader2, Check, X, Pencil, Share2, ShieldAlert, MonitorOff, Trash2, ExternalLink, Scale, Laptop, Smartphone, Globe, Monitor, Clock, MapPin, MessageSquare, Tag, Plus, ArrowUp, ArrowDown, Palette, RefreshCw, AlignJustify, Crown } from 'lucide-react';
@@ -741,7 +742,7 @@ export function Settings() {
                                     <p className="text-gray-400 text-xs truncate">{user.email}</p>
                                 </div>
                             </div>
-                            {user?.email?.toLowerCase() === 'mohdjamal1110@gmail.com' && !Capacitor.isNativePlatform() && (
+                            {['mohdjamal1110@gmail.com', 'keeguardsupport@gmail.com'].includes(user?.email?.toLowerCase() || '') && !Capacitor.isNativePlatform() && (
                                 <button
                                     onClick={() => navigate('/admin')}
                                     className="w-full flex items-center justify-between p-3 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-400 hover:bg-amber-400/20 transition-all text-xs font-bold"

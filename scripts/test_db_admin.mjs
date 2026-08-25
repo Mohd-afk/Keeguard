@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for test_db_admin.mjs.
 import 'dotenv/config';
 import admin from 'firebase-admin';
 

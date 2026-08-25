@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for PackageExclusionGuard.
 package com.mohdj.securevault.autofill.classifier
 
 import android.app.assist.AssistStructure

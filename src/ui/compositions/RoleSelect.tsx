@@ -1,3 +1,4 @@
+// PURPOSE: Renders the RoleSelect screen interface component and user actions.
 import { Eye, Edit, ShieldAlert, Check } from 'lucide-react';
 import { type CollectionRole } from '@/app/firestore/collections';
 

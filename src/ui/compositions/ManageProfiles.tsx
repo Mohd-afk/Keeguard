@@ -1,3 +1,4 @@
+// PURPOSE: Renders the ManageProfiles screen interface component and user actions.
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import {

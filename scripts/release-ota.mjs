@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// PURPOSE: Automates OTA zip bundle compilation, SHA-256 calculation, and Firestore deployment.
 /**
  * Automated OTA Release Script (`npm run release`)
  * Packages `dist/` using @capgo/cli, deploys bundle zip to Firebase Hosting, calculates SHA-256 checksum, and updates Firestore `app_config/latest_version`.

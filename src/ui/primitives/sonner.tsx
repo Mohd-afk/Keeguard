@@ -1,3 +1,4 @@
+// PURPOSE: Reusable Figma SDS atomic UI primitive component for sonner.
 "use client";
 
 import { useTheme } from "next-themes";

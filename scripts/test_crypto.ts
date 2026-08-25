@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for test_crypto.ts.
 // ─── Standalone Crypto Test Script ──────────────────────────────────────────
 // Runs native Node Web Crypto to verify that the collection key wraps/unwraps
 // and item encryption/decryption operate correctly under standard Web Crypto.

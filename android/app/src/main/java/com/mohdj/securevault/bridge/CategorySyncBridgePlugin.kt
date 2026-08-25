@@ -1,3 +1,4 @@
+// PURPOSE: Capacitor bridge plugin interfacing JS layer with native Android CategorySyncBridgePlugin.
 package com.mohdj.securevault.bridge
 
 import android.content.Context

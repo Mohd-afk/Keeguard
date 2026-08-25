@@ -1,3 +1,4 @@
+// PURPOSE: Application shell layout component for Sidebar.
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import type { CustomCategory } from '@/app/store';
@@ -539,7 +540,7 @@ export function Sidebar({
               active={activeFilter === 'trash'}
               onClick={() => select('trash')}
             />
-            {user?.email?.toLowerCase() === 'mohdjamal1110@gmail.com' && !Capacitor.isNativePlatform() && (
+            {['mohdjamal1110@gmail.com', 'keeguardsupport@gmail.com'].includes(user?.email?.toLowerCase() || '') && !Capacitor.isNativePlatform() && (
               <SidebarRow
                 icon={<Crown className="w-5 h-5 text-amber-400" />}
                 label="Admin Console"

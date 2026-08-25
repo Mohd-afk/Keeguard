@@ -1,3 +1,4 @@
+// PURPOSE: Renders the AdminDashboard screen interface component and user actions.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import {
@@ -32,7 +33,7 @@ import {
 import { getCurrentUser } from '@/app/auth';
 import { Capacitor } from '@capacitor/core';
 
-const ADMIN_EMAIL = 'mohdjamal1110@gmail.com';
+const ADMIN_EMAILS = ['mohdjamal1110@gmail.com', 'keeguardsupport@gmail.com'];
 
 interface ProviderData {
   providerId: string;
@@ -71,7 +72,7 @@ export function AdminDashboard() {
   }>() || {};
 
   const currentUser = getCurrentUser() || outletContext.user;
-  const isAuthorized = currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const isAuthorized = ADMIN_EMAILS.some((e) => e.toLowerCase() === currentUser?.email?.toLowerCase());
 
   // Admin Console is web-only — block access entirely on native (Android/iOS)
   useEffect(() => {

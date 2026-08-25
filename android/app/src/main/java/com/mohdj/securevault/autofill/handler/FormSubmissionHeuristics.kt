@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for FormSubmissionHeuristics.
 package com.mohdj.securevault.autofill.handler
 
 import com.mohdj.securevault.autofill.parser.FormType

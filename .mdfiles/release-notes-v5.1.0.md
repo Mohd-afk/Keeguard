@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for release-notes-v5.1.0. -->
 # 🚀 Keeguard v5.1.0 Release Notes
 
 ## 🎉 What's New

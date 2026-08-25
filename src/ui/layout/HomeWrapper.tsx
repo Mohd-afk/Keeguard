@@ -1,3 +1,4 @@
+// PURPOSE: Application shell layout component for HomeWrapper.
 import { useOutletContext } from 'react-router';
 import { PasswordList } from '@/ui/compositions/PasswordList';
 import type { User } from 'firebase/auth';

@@ -1,3 +1,4 @@
+// PURPOSE: Service module managing ml_worker.
 /**
  * ml_worker.ts - Isolated Web Worker for Background AI Inference
  * Prevents UI freezing by keeping heavy matrix math off the main thread.

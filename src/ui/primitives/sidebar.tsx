@@ -1,3 +1,4 @@
+// PURPOSE: Reusable Figma SDS atomic UI primitive component for sidebar.
 "use client";
 
 import * as React from "react";

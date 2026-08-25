@@ -1,3 +1,4 @@
+// PURPOSE: Renders the CriticalUpdateScreen screen interface component and user actions.
 // ─── Critical Update Screen ──────────────────────────────────────────
 // Full-screen blocker shown when a critical/security update is downloading.
 // Prevents user from interacting with the app until the update is applied.

@@ -1,2 +1,3 @@
+// PURPOSE: Provides implementation and configuration for .gitignore.
 /build/*
 !/build/.npmkeep

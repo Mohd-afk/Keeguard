@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for ParsedForm.
 package com.mohdj.securevault.autofill.parser
 
 enum class FormType {

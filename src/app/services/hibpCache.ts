@@ -1,3 +1,4 @@
+// PURPOSE: Service module managing hibpCache.
 /**
  * HaveIBeenPwned (HIBP) k-Anonymity Breach Checking Service
  * Implements 5-character SHA-1 prefix k-anonymity API queries with 24-hour IndexedDB caching, 350ms rate-limiting, and offline fallback.

@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for PendingIntentRequestCodeGenerator.
 package com.mohdj.securevault.autofill
 
 import java.util.concurrent.atomic.AtomicInteger

@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for ARCHITECTURE. -->
 # 🏗️ Keeguard — Architecture & Directory Guide
 
 > System architecture, module organization, application workflows, and technology stack breakdown.

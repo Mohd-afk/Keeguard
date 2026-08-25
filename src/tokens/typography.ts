@@ -1,3 +1,4 @@
+// PURPOSE: Design system token definitions for typography.
 /**
  * Figma Simple Design System (SDS) - Typography Tokens
  */

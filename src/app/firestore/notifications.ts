@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for notifications.ts.
 // ─── Shared Collections Notifications Firestore Data Layer ────────────────────
 // Handles client-side subscription and updates for user notifications.
 // ─────────────────────────────────────────────────────────────────────────────

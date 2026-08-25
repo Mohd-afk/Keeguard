@@ -1,3 +1,4 @@
+// PURPOSE: Renders the ApkUpdateBanner screen interface component and user actions.
 // ─── APK Update Banner ────────────────────────────────────────────────────
 // Full-screen blocker shown when the installed APK is below min_apk_version.
 // Non-dismissible by design: a required APK update means native code the old

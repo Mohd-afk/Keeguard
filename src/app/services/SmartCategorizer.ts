@@ -1,3 +1,4 @@
+// PURPOSE: Service module managing SmartCategorizer.
 /**
  * SmartCategorizer.ts
  * Premium Multi-Signal AI-assisted organization engine for KeeGuard.

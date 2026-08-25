@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for RULES. -->
 # 📜 Keeguard — System & Workflow Rules
 
 > **Mandatory Guidelines for AI Agents & Developers**  
@@ -32,7 +33,7 @@
 ### Rule 2.1 — OTA Release Workflow
 - **Rule**: **AFTER EVERY OTA RELEASE, YOU MUST IMMEDIATELY PUSH THE CODE TO GITHUB.**
 - **Workflow**:
-  1. Run `npm run build` & verify 0 TypeScript errors (`npx tsc --noEmit`).
+  1. Run `npm test` & verify 0 TypeScript errors (`npx tsc --noEmit`) and clean doc check.
   2. Run `npm run release` (builds OTA zip, uploads to Firebase Hosting, updates Firestore manifest).
   3. **IMMEDIATELY** execute `git add .`, `git commit -m "release: ota update vX.X.X"`, and `git push origin main`.
 

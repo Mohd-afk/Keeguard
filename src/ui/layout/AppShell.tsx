@@ -1,3 +1,4 @@
+// PURPOSE: Application shell layout component for AppShell.
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, useNavigate } from 'react-router';
 import { LockScreen } from '@/ui/compositions/LockScreen';

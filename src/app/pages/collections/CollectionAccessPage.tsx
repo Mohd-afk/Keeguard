@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for CollectionAccessPage.tsx.
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router';
 import { ArrowLeft, Users, ShieldAlert, Loader2, Send, Mail, UserMinus, Plus } from 'lucide-react';

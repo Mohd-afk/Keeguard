@@ -1,3 +1,4 @@
+// PURPOSE: Encrypts and decrypts vault records using Argon2id key derivation and AES-256-GCM.
 /**
  * Cryptography Core Engine
  * Implements Argon2id WASM key derivation (64MB memory, 3 iterations), AES-256-GCM vault encryption/decryption, TOTP subkey isolation, and DEK import/export.

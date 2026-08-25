@@ -1,3 +1,4 @@
+// PURPOSE: Health check API endpoint verifying serverless backend service status.
 // api/hello-admin.ts — test endpoint using firebase-admin v11 default import
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 

@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for AUTOFILL_ARCHITECTURE. -->
 # Keeguard — Android Autofill Architecture
 
 

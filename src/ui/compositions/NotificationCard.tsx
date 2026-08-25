@@ -1,3 +1,4 @@
+// PURPOSE: Renders the NotificationCard screen interface component and user actions.
 import { useState } from 'react';
 import { Shield, Users, Bell, Eye, EyeOff, Calendar, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { type AppNotification } from '@/app/firestore/notifications';

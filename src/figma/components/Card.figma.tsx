@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for Card.figma.tsx.
 import { Card } from '@/ui/primitives/card';
 
 /**

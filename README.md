@@ -269,3 +269,8 @@ Password Manager/
 ## 🛡️ License & Open Source
 
 KeeGuard is open-source software provided under the MIT License. Feel free to inspect, fork, and contribute!
+
+## 🤝 Support & Contact
+For support, feedback, or security vulnerabilities, contact our team at:
+- 📧 **Email:** [keeguardsupport@gmail.com](mailto:keeguardsupport@gmail.com)
+- 📖 **User Guide:** [USERGUIDE.md](USERGUIDE.md)

@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for sync-tokens.mjs.
 /**
  * Figma Simple Design System (SDS) Token Sync Utility Script
  * Syncs Figma Variables & Tokens into local TypeScript tokens.

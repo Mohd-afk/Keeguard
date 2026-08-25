@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for UnlockVaultActivity.
 package com.mohdj.securevault.autofill
 
 import android.app.Activity

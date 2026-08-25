@@ -1,3 +1,4 @@
+// PURPOSE: Application shell layout component for BottomNav.
 import { Shield, ShieldCheck, Wrench } from 'lucide-react';
 
 export type BottomTab = 'safe' | 'security' | 'tools' | 'search';

@@ -1,3 +1,4 @@
+// PURPOSE: Native SQLCipher Room database component for VaultRepository.
 package com.mohdj.securevault.vault
 
 import android.content.Context

@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function service handling notificationService logic.
 // ─── Notification Dispatch Service ───────────────────────────────────────────
 // Creates user notifications inside the subcollection users/{uid}/notifications.
 // ─────────────────────────────────────────────────────────────────────────────

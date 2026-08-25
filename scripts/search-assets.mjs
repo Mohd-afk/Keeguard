@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for search-assets.mjs.
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 

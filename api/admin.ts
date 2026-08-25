@@ -1,10 +1,11 @@
+// PURPOSE: Vercel serverless API handler for administrative dashboard operations and metrics.
 // api/admin.ts
 // Uses firebase-admin v11 (CJS-compatible) via dynamic default import.
 // Dynamic import() keeps crash inside try/catch → returns JSON, never HTML.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const ADMIN_EMAIL = 'mohdjamal1110@gmail.com';
+const ADMIN_EMAILS = ['mohdjamal1110@gmail.com', 'keeguardsupport@gmail.com'];
 
 async function getAdminAuth() {
   const adminModule = await import('firebase-admin');
@@ -55,7 +56,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
     }
 
     step = 'admin_gate';
-    if (decoded.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    if (!ADMIN_EMAILS.some((e) => e.toLowerCase() === decoded.email?.toLowerCase())) {
       return response.status(403).json({ error: `Access denied (${decoded.email})` });
     }
 

@@ -1,3 +1,4 @@
+// PURPOSE: Provides Firestore database document reference builders and real-time snapshot synchronization.
 /**
  * Cloud Firestore Database Operations
  * Manages Cloud Vault document reads/writes, real-time snapshot listeners, settings/category syncing, username claiming, and SHA-256 hashed email registration.

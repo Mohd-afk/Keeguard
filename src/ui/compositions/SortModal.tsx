@@ -1,3 +1,4 @@
+// PURPOSE: Renders the SortModal screen interface component and user actions.
 import type { SortOption } from '@/app/hooks/useSort';
 
 interface SortModalProps {

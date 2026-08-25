@@ -1,3 +1,4 @@
+// PURPOSE: Renders the StepUpAuthModal screen interface component and user actions.
 import React, { useState } from 'react';
 import { ShieldAlert, KeyRound, Eye, EyeOff, Lock } from 'lucide-react';
 import {

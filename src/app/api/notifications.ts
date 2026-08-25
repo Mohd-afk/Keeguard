@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for notifications.ts.
 // ─── Notifications API Client Wrapper ────────────────────────────────────────
 // Frontend wrapper to invoke notifications Cloud Function.
 // ─────────────────────────────────────────────────────────────────────────────

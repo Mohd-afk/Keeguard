@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for items.ts.
 // ─── Items API Client Wrapper ────────────────────────────────────────────────
 // Frontend wrapper to invoke item commit Cloud Function.
 // ─────────────────────────────────────────────────────────────────────────────

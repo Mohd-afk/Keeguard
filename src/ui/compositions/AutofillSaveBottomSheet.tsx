@@ -1,3 +1,4 @@
+// PURPOSE: Renders the AutofillSaveBottomSheet screen interface component and user actions.
 import React, { useEffect, useState } from 'react';
 import { 
   isVaultUnlocked, 

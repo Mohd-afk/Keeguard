@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for offscreen.js.
 // Listen to messages from the service worker
 window.addEventListener('message', async (event) => {
   // We can also use chrome.runtime.onMessage directly

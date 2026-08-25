@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for find-buckets.mjs.
 import admin from 'firebase-admin';
 import { readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';

@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for VaultCredential.
 package com.mohdj.securevault.autofill.matcher
 
 data class VaultCredential(

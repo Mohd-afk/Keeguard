@@ -1,3 +1,4 @@
+# PURPOSE: Automated maintenance and release script for send-email-gmail.py.
 import smtplib
 import ssl
 import os

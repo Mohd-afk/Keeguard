@@ -1,3 +1,4 @@
+// PURPOSE: Design system token definitions for spacing.
 /**
  * Figma Simple Design System (SDS) - Spacing Tokens
  */

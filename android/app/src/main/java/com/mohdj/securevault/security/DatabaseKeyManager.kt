@@ -1,3 +1,4 @@
+// PURPOSE: Native Android security manager handling DatabaseKeyManager.
 package com.mohdj.securevault.security
 
 import android.content.Context

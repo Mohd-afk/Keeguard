@@ -1,3 +1,4 @@
+// PURPOSE: Handles Firebase Authentication login flows, user profile state, and session tokens.
 /**
  * Firebase & Native Capacitor Authentication Engine
  * Wraps Firebase Auth for passwordless magic links, derived master-password auth keys, and native Android @capacitor-firebase Google Sign-In.

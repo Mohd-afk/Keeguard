@@ -1,3 +1,4 @@
+// PURPOSE: Native Android security manager handling BiometricVaultUnlocker.
 package com.mohdj.securevault.security
 
 import android.content.Context

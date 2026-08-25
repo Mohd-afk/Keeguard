@@ -1,3 +1,4 @@
+// PURPOSE: Renders the NotificationDrawer screen interface component and user actions.
 import { useState, useEffect } from 'react';
 import { X, CheckSquare, BellOff, Loader2 } from 'lucide-react';
 import { addNotificationsListener, markAllAsRead, getNotifications } from '@/app/stores/notificationsStore';

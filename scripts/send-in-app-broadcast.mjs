@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for send-in-app-broadcast.mjs.
 // ─── Send In-App Broadcast Notification to All Users ──────────────────────────
 // Usage Option A (Command Line):
 //   node scripts/send-in-app-broadcast.mjs "Your Title Here" "Your Message Body Here"

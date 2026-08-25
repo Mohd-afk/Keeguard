@@ -1,4 +1,5 @@
 #!/bin/sh
+# PURPOSE: Provides implementation and configuration for gradlew.
 
 #
 # Copyright © 2015-2021 the original authors.

@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function HTTP route handler for members endpoint.
 // ─── Members Route / Callables ────────────────────────────────────────────────
 // Endpoints for updating roles and removing members.
 // ─────────────────────────────────────────────────────────────────────────────

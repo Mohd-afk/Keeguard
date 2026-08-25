@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for SecureVaultAutofillService.
 package com.mohdj.securevault.autofill
 
 import android.app.assist.AssistStructure

@@ -1,3 +1,4 @@
+// PURPOSE: Unit test suite verifying Android native DomainMatcherTest logic.
 package com.mohdj.securevault.autofill
 
 import org.junit.Assert.assertEquals

@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for LoginSessionCache.
 package com.mohdj.securevault.autofill
 
 import android.util.Log

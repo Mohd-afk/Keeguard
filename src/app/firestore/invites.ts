@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for invites.ts.
 // ─── Collection Invites Firestore Data Layer ──────────────────────────────────
 // Client-side read operations for pending invites using collection-group queries.
 // ─────────────────────────────────────────────────────────────────────────────

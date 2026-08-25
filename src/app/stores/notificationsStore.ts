@@ -1,3 +1,4 @@
+// PURPOSE: Reactive state store managing notificationsStore state and operations.
 // ─── Notifications Store ──────────────────────────────────────────────────────
 // Reactive in-memory state store for user notifications.
 // Subscribes to Firestore notifications subcollection and tracks unread badges.

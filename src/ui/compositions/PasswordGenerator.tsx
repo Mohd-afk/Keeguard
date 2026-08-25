@@ -1,3 +1,4 @@
+// PURPOSE: Renders the PasswordGenerator screen interface component and user actions.
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import { Copy, Check, RefreshCw, ShieldCheck, Timer, Wrench, AlignJustify } from 'lucide-react';

@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function HTTP route handler for triggers endpoint.
 // ─── Firestore Background Triggers ───────────────────────────────────────────
 // Automates security events, key version increments, and envelope invalidations.
 // ─────────────────────────────────────────────────────────────────────────────

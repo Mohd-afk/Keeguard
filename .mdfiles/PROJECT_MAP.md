@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for PROJECT_MAP. -->
 # 🗺️ Keeguard — Project Map & Subsystem Index
 
 > **Low-Token Navigation Map for AI Coding Agents**  

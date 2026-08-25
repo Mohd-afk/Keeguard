@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for test_db.mjs.
 import 'dotenv/config';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';

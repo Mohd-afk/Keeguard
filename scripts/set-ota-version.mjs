@@ -1,3 +1,4 @@
+// PURPOSE: Automated maintenance and release script for set-ota-version.mjs.
 // Writes app_config/latest_version document to Firestore
 // using firebase-tools' cached credentials (correct path).
 import { createRequire } from 'module';

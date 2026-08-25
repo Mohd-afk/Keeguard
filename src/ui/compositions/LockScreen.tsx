@@ -1,3 +1,4 @@
+// PURPOSE: Renders the LockScreen screen interface component and user actions.
 import { useState } from 'react';
 import { createLogger } from '@/app/utils/logger';
 

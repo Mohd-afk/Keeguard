@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for PRD. -->
 # 📄 Keeguard — Product Requirement Document (PRD)
 
 > **Keeguard** (Internal package: `com.mohdj.securevault`)  

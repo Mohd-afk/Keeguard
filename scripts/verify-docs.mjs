@@ -1,3 +1,4 @@
+// PURPOSE: Verifies documentation freshness against uncommitted code changes to prevent doc drift.
 /**
  * Documentation Drift Verification Engine (`npm run doc:check`)
  * Parses uncommitted git diffs against `.mdfiles/MANIFEST.json` subsystem rules to detect code modifications without matching documentation updates.

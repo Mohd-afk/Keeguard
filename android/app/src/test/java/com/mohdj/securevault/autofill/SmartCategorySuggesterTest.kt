@@ -1,3 +1,4 @@
+// PURPOSE: Unit test suite verifying Android native SmartCategorySuggesterTest logic.
 package com.mohdj.securevault.autofill
 
 import android.content.Context

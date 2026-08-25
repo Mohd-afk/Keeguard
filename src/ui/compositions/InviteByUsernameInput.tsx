@@ -1,3 +1,4 @@
+// PURPOSE: Renders the InviteByUsernameInput screen interface component and user actions.
 import { useState, useEffect, useRef } from 'react';
 import { Search, Loader2, User, Check } from 'lucide-react';
 import { searchProfiles } from '@/app/stores/accessStore';

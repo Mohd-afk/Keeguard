@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function HTTP route handler for invites endpoint.
 // ─── Invites Route / Callables ────────────────────────────────────────────────
 // Endpoints for sending, accepting, declining, and revoking invites.
 // ─────────────────────────────────────────────────────────────────────────────

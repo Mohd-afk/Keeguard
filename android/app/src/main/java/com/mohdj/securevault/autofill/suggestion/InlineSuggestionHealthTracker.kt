@@ -1,3 +1,4 @@
+// PURPOSE: Native Android Autofill service component for InlineSuggestionHealthTracker.
 package com.mohdj.securevault.autofill.suggestion
 
 import android.content.Context

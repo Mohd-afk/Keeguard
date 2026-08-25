@@ -1,3 +1,4 @@
+/* PURPOSE: Global CSS styling rules for tailwind.css. */
 @import 'tailwindcss' source(none);
 @source '../**/*.{js,ts,jsx,tsx}';
 

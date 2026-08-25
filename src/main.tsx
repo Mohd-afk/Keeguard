@@ -1,3 +1,4 @@
+// PURPOSE: Entry point for React DOM initialization and application root mounting.
 
 /**
  * React Application Entry Point

@@ -1,3 +1,4 @@
+// PURPOSE: Renders the AuthScreen screen interface component and user actions.
 import { useState, useEffect, useRef, useCallback } from 'react';
 import jsPDF from 'jspdf';
 import { createLogger } from '@/app/utils/logger';

@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension popup interface file for popup.js.
 // popup.js - KeeGuard Browser Extension Popup
 
 document.addEventListener('DOMContentLoaded', async () => {

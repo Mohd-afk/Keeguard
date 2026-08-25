@@ -1,3 +1,4 @@
+// PURPOSE: Reusable Figma SDS atomic UI primitive component for collapsible.
 "use client";
 
 import * as CollapsiblePrimitive from "@radix-ui/react-collapsible";

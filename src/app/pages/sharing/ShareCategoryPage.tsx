@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for ShareCategoryPage.tsx.
 // ─── Share Category / Collection Page ────────────────────────────────────────
 // Dedicated sharing flow page. Reached via /share?collectionId={id}&name={name}
 // Reuses existing InviteByUsernameInput (debounced), RoleSelect, and sendInvite.

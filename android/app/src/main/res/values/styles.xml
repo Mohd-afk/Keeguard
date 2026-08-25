@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+
+<!-- PURPOSE: Provides implementation and configuration for styles.xml. -->
 <resources>
 
     <!-- Base application theme. -->

@@ -1,3 +1,4 @@
+// PURPOSE: Service module managing apk-update-checker.
 // ─── APK Update Checker ───────────────────────────────────────────────────
 // Checks whether the installed native APK version meets the minimum required
 // version stored in Firestore. If not, returns an update prompt with a URL.

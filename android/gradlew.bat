@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for gradlew.bat.
 @rem
 @rem Copyright 2015 the original author or authors.
 @rem

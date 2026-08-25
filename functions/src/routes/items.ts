@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function HTTP route handler for items endpoint.
 // ─── Items Route / Callable ───────────────────────────────────────────────────
 // Server-authoritative revision and commit handling for collection items.
 // ─────────────────────────────────────────────────────────────────────────────

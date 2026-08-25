@@ -1,3 +1,4 @@
+<!-- PURPOSE: Documentation reference file for DESIGN. -->
 # 🎨 Keeguard — Design System Reference (Figma SDS)
 
 > **Design Guide & Token Reference for Figma Simple Design System (SDS)**  

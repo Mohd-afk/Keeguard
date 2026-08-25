@@ -1,3 +1,4 @@
+// PURPOSE: Renders the InviteDetailSheet screen interface component and user actions.
 import { useState } from 'react';
 import { X, Shield, Eye, ShieldAlert, Edit, UserCheck, Loader2 } from 'lucide-react';
 import { type AppNotification } from '@/app/firestore/notifications';

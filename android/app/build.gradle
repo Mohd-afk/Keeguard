@@ -1,3 +1,4 @@
+// PURPOSE: Provides implementation and configuration for build.gradle.
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-kapt'

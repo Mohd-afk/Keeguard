@@ -1,3 +1,4 @@
+// PURPOSE: Native SQLCipher Room database component for VaultItemEntity.
 package com.mohdj.securevault.vault
 
 // [MODIFIED v3.2.2] RC1: Renamed Kotlin field 'encryptedPassword' → 'password'.

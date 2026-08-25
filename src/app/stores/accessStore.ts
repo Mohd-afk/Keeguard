@@ -1,3 +1,4 @@
+// PURPOSE: Reactive state store managing accessStore state and operations.
 // ─── Collection Access Store ──────────────────────────────────────────────────
 // Reactive in-memory state store for managing a collection's members and invites.
 // Handles active subscriptions to members and invites subcollections.

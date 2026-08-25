@@ -1,3 +1,4 @@
+// PURPOSE: Initializes Firebase Admin SDK instance for serverless backend API handlers.
 // api/lib/firebase-admin.ts
 // Initializes Firebase Admin SDK using ESM subpath imports (firebase-admin v12+).
 // Uses lazy singleton pattern safe for Vercel cold starts and warm re-use.

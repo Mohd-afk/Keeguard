@@ -1,3 +1,4 @@
+// PURPOSE: Utility functions for roleCapabilities.
 import { type CollectionRole } from '../firestore/collections';
 
 export type Capability =

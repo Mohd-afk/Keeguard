@@ -1,3 +1,4 @@
+<!-- PURPOSE: Defines AI assistant navigation rules, subsystem map, and optimization guidelines. -->
 # 🤖 AGENTS.md — AI Agent Guidance & Context Navigation
 
 > **Unified Entry Point for AI Coding Assistants (Claude, Gemini, Antigravity, Cursor, Codex)**

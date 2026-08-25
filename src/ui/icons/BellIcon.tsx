@@ -1,3 +1,4 @@
+// PURPOSE: Renders SVG icon component for BellIcon.
 import { useState, useEffect } from 'react';
 import { Bell } from 'lucide-react';
 import { addNotificationsListener } from '@/app/stores/notificationsStore';

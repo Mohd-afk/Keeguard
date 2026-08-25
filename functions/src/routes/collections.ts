@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function HTTP route handler for collections endpoint.
 // ─── Collections Route / Callable ─────────────────────────────────────────────
 // Endpoint for creating new shared collections and uploading key envelopes.
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+<!-- PURPOSE: Provides implementation and configuration for app-spec.md. -->
 # App Specification: Minimal Open‑Source Password Manager
 
 ## Working Name

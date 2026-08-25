@@ -9,6 +9,9 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "test": "tsc --noEmit && node scripts/pre-commit-secret-scan.mjs && node scripts/verify-docs.mjs",
+    "typecheck": "tsc --noEmit",
+    "secret-scan": "node scripts/pre-commit-secret-scan.mjs",
     "release": "vite build && node scripts/release-ota.mjs",
     "doc:check": "node scripts/verify-docs.mjs"
   },

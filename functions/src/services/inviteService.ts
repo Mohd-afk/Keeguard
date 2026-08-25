@@ -1,3 +1,4 @@
+// PURPOSE: Backend Cloud Function service handling inviteService logic.
 // ─── Invite Management Service ────────────────────────────────────────────────
 // Orchestrates invite creation, acceptance, declination, and revocation.
 // ─────────────────────────────────────────────────────────────────────────────

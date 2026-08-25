@@ -1,3 +1,4 @@
+// PURPOSE: Browser extension background service worker handling service-worker.
 import { db, auth, firebaseConfig } from './firebase-init.js';
 import { decryptVault, encryptVault, deriveKeys } from './vault-crypto.js';
 import { syncVault, getLocalVault, getLocalProfiles, getSessionKey, setSessionKey, saveProfileToCloud, deleteProfileFromCloud } from './sync-engine.js';

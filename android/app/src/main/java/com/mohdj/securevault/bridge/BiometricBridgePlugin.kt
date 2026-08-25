@@ -1,3 +1,4 @@
+// PURPOSE: Capacitor bridge plugin interfacing JS layer with native Android BiometricBridgePlugin.
 package com.mohdj.securevault.bridge
 
 import android.os.Build
