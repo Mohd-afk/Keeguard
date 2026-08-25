@@ -540,7 +540,7 @@ export function Sidebar({
               active={activeFilter === 'trash'}
               onClick={() => select('trash')}
             />
-            {['mohdjamal1110@gmail.com', 'keeguardsupport@gmail.com'].includes(user?.email?.toLowerCase() || '') && !Capacitor.isNativePlatform() && (
+            {user?.email?.toLowerCase() === 'mohdjamal1110@gmail.com' && !Capacitor.isNativePlatform() && (
               <SidebarRow
                 icon={<Crown className="w-5 h-5 text-amber-400" />}
                 label="Admin Console"

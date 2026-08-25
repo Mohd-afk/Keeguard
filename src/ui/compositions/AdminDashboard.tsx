@@ -33,7 +33,7 @@ import {
 import { getCurrentUser } from '@/app/auth';
 import { Capacitor } from '@capacitor/core';
 
-const ADMIN_EMAILS = ['mohdjamal1110@gmail.com', 'keeguardsupport@gmail.com'];
+const ADMIN_EMAIL = 'mohdjamal1110@gmail.com';
 
 interface ProviderData {
   providerId: string;
@@ -72,7 +72,7 @@ export function AdminDashboard() {
   }>() || {};
 
   const currentUser = getCurrentUser() || outletContext.user;
-  const isAuthorized = ADMIN_EMAILS.some((e) => e.toLowerCase() === currentUser?.email?.toLowerCase());
+  const isAuthorized = currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
   // Admin Console is web-only — block access entirely on native (Android/iOS)
   useEffect(() => {
@@ -88,7 +88,7 @@ export function AdminDashboard() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled'>('all');
-  
+
   // Selected user for modal / details drawer
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
 
@@ -205,10 +205,10 @@ export function AdminDashboard() {
       setStats((prev) =>
         prev
           ? {
-              ...prev,
-              activeUsers: nextStatus ? prev.activeUsers - 1 : prev.activeUsers + 1,
-              disabledUsers: nextStatus ? prev.disabledUsers + 1 : prev.disabledUsers - 1,
-            }
+            ...prev,
+            activeUsers: nextStatus ? prev.activeUsers - 1 : prev.activeUsers + 1,
+            disabledUsers: nextStatus ? prev.disabledUsers + 1 : prev.disabledUsers - 1,
+          }
           : null
       );
       setActionSuccessMsg(data.message || `User is now ${nextStatus ? 'Suspended' : 'Active'}`);
@@ -319,11 +319,11 @@ export function AdminDashboard() {
       setStats((prev) =>
         prev
           ? {
-              ...prev,
-              totalUsers: prev.totalUsers - 1,
-              activeUsers: user.disabled ? prev.activeUsers : prev.activeUsers - 1,
-              disabledUsers: user.disabled ? prev.disabledUsers - 1 : prev.disabledUsers,
-            }
+            ...prev,
+            totalUsers: prev.totalUsers - 1,
+            activeUsers: user.disabled ? prev.activeUsers : prev.activeUsers - 1,
+            disabledUsers: user.disabled ? prev.disabledUsers - 1 : prev.disabledUsers,
+          }
           : null
       );
       setSelectedUser(null);
@@ -507,25 +507,22 @@ export function AdminDashboard() {
             <div className="flex bg-[#16213e] border border-white/10 rounded-xl p-1 shrink-0">
               <button
                 onClick={() => setStatusFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  statusFilter === 'all' ? 'bg-cyan-500 text-black' : 'text-gray-400 hover:text-white'
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${statusFilter === 'all' ? 'bg-cyan-500 text-black' : 'text-gray-400 hover:text-white'
+                  }`}
               >
                 All ({users.length})
               </button>
               <button
                 onClick={() => setStatusFilter('active')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  statusFilter === 'active' ? 'bg-green-500 text-black' : 'text-gray-400 hover:text-white'
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${statusFilter === 'active' ? 'bg-green-500 text-black' : 'text-gray-400 hover:text-white'
+                  }`}
               >
                 Active
               </button>
               <button
                 onClick={() => setStatusFilter('disabled')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  statusFilter === 'disabled' ? 'bg-red-500 text-white' : 'text-gray-400 hover:text-white'
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${statusFilter === 'disabled' ? 'bg-red-500 text-white' : 'text-gray-400 hover:text-white'
+                  }`}
               >
                 Suspended
               </button>
@@ -559,20 +556,18 @@ export function AdminDashboard() {
                       clearModalNotice();
                       setResetLink(null);
                     }}
-                    className={`group w-full text-left bg-[#16213e] border border-white/5 hover:border-cyan-500/40 hover:bg-[#1a294d] rounded-2xl p-4 flex items-center justify-between gap-4 transition-all cursor-pointer shadow-sm active:scale-[0.98] ${
-                      u.disabled ? 'opacity-70 bg-red-950/10 border-red-500/20' : ''
-                    }`}
+                    className={`group w-full text-left bg-[#16213e] border border-white/5 hover:border-cyan-500/40 hover:bg-[#1a294d] rounded-2xl p-4 flex items-center justify-between gap-4 transition-all cursor-pointer shadow-sm active:scale-[0.98] ${u.disabled ? 'opacity-70 bg-red-950/10 border-red-500/20' : ''
+                      }`}
                   >
                     {/* User Profile Summary */}
                     <div className="flex items-center gap-3.5 min-w-0 flex-1">
                       <div
-                        className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 text-white font-bold text-base shadow-md transition-transform group-hover:scale-105 ${
-                          isAdmin
+                        className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 text-white font-bold text-base shadow-md transition-transform group-hover:scale-105 ${isAdmin
                             ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-black'
                             : u.disabled
-                            ? 'bg-red-900/40 text-red-400 border border-red-500/30'
-                            : 'bg-gradient-to-br from-cyan-500 to-blue-600'
-                        }`}
+                              ? 'bg-red-900/40 text-red-400 border border-red-500/30'
+                              : 'bg-gradient-to-br from-cyan-500 to-blue-600'
+                          }`}
                       >
                         {isAdmin ? <Crown className="w-5 h-5" /> : initial}
                       </div>
@@ -659,13 +654,12 @@ export function AdminDashboard() {
             <div className="flex items-start justify-between border-b border-white/10 pb-4 gap-4">
               <div className="flex items-center gap-4 min-w-0">
                 <div
-                  className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 text-white font-bold text-xl shadow-lg ${
-                    selectedUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 text-white font-bold text-xl shadow-lg ${selectedUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
                       ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-black'
                       : selectedUser.disabled
-                      ? 'bg-red-900/40 text-red-400 border border-red-500/30'
-                      : 'bg-gradient-to-br from-cyan-500 to-blue-600'
-                  }`}
+                        ? 'bg-red-900/40 text-red-400 border border-red-500/30'
+                        : 'bg-gradient-to-br from-cyan-500 to-blue-600'
+                    }`}
                 >
                   {selectedUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? (
                     <Crown className="w-7 h-7" />
@@ -685,20 +679,18 @@ export function AdminDashboard() {
                   </div>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                        selectedUser.disabled
+                      className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${selectedUser.disabled
                           ? 'bg-red-500/10 text-red-400 border border-red-500/30'
                           : 'bg-green-500/10 text-green-400 border border-green-500/30'
-                      }`}
+                        }`}
                     >
                       {selectedUser.disabled ? 'Account Suspended' : 'Account Active'}
                     </span>
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                        selectedUser.emailVerified
+                      className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${selectedUser.emailVerified
                           ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
                           : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30'
-                      }`}
+                        }`}
                     >
                       {selectedUser.emailVerified ? 'Email Verified' : 'Email Not Verified'}
                     </span>
@@ -939,13 +931,12 @@ export function AdminDashboard() {
                     actionInProgress === 'toggleDisable' ||
                     selectedUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
                   }
-                  className={`p-3.5 rounded-2xl text-xs font-semibold flex items-center justify-between gap-3 transition-all border ${
-                    selectedUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+                  className={`p-3.5 rounded-2xl text-xs font-semibold flex items-center justify-between gap-3 transition-all border ${selectedUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
                       ? 'bg-gray-800/40 text-gray-500 border-white/5 cursor-not-allowed'
                       : selectedUser.disabled
-                      ? 'bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20'
-                      : 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
-                  }`}
+                        ? 'bg-green-500/10 text-green-400 border-green-500/30 hover:bg-green-500/20'
+                        : 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
+                    }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     {actionInProgress === 'toggleDisable' ? (
@@ -1011,11 +1002,10 @@ export function AdminDashboard() {
                     actionInProgress === 'deleteUser' ||
                     selectedUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
                   }
-                  className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 transition-all ${
-                    selectedUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+                  className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 transition-all ${selectedUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
                       ? 'bg-gray-800/40 text-gray-500 border-white/5 cursor-not-allowed'
                       : 'bg-red-950/20 hover:bg-red-950/40 border-red-500/40 text-red-400'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     {actionInProgress === 'deleteUser' ? (

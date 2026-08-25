@@ -742,7 +742,7 @@ export function Settings() {
                                     <p className="text-gray-400 text-xs truncate">{user.email}</p>
                                 </div>
                             </div>
-                            {['mohdjamal1110@gmail.com', 'keeguardsupport@gmail.com'].includes(user?.email?.toLowerCase() || '') && !Capacitor.isNativePlatform() && (
+                            {user?.email?.toLowerCase() === 'mohdjamal1110@gmail.com' && !Capacitor.isNativePlatform() && (
                                 <button
                                     onClick={() => navigate('/admin')}
                                     className="w-full flex items-center justify-between p-3 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-400 hover:bg-amber-400/20 transition-all text-xs font-bold"

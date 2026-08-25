@@ -5,7 +5,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const ADMIN_EMAILS = ['mohdjamal1110@gmail.com', 'keeguardsupport@gmail.com'];
+const ADMIN_EMAIL = 'mohdjamal1110@gmail.com';
 
 async function getAdminAuth() {
   const adminModule = await import('firebase-admin');
@@ -56,7 +56,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
     }
 
     step = 'admin_gate';
-    if (!ADMIN_EMAILS.some((e) => e.toLowerCase() === decoded.email?.toLowerCase())) {
+    if (decoded.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
       return response.status(403).json({ error: `Access denied (${decoded.email})` });
     }
 
