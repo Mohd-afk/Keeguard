@@ -1,3 +1,4 @@
+<!-- PURPOSE: Overview documentation detailing project features, zero-knowledge architecture, and dev commands. -->
 
 # 🔐 KeeGuard (SecureVault) — Zero-Knowledge Password Manager
 
@@ -94,17 +95,33 @@ KeeGuard uses a multi-layered storage architecture to ensure maximum performance
 
 ---
 
+## 📘 Complete User Guide & Step-by-Step Installation
+
+For a complete step-by-step guide on how to download, install, and configure KeeGuard across Android mobile devices, browser extensions, and web apps, refer to our official **[USERGUIDE.md](USERGUIDE.md)**:
+
+👉 **[Open Complete User Guide (USERGUIDE.md)](USERGUIDE.md)**  
+👉 **[View Online on GitHub Releases](https://github.com/Mohd-afk/apk-releases/blob/main/USERGUIDE.md)**
+
+### Guide Highlights:
+- 📱 **[Android APK Sideloading Guide](USERGUIDE.md#1-installing-the-android-apk-on-mobile)** — Enabling unknown sources, Play Protect bypass, and Android System Autofill setup.
+- 🧩 **[Browser Extension Setup Guide](USERGUIDE.md#2-installing-the-browser-extension)** — Enabling Developer Mode and loading unpacked extensions in Chrome/Edge/Brave.
+- 🌐 **[Web Application & Vault Guide](USERGUIDE.md#3-using-the-web-applications)** — Master password creation, zero-knowledge encryption, and cross-device sync.
+- 🛠️ **[Troubleshooting & FAQ](USERGUIDE.md#4-troubleshooting--faq)** — Solutions for parse errors, Play Protect warnings, and update procedures.
+
+---
+
 ## 📱 Android APK Installation Note
 
 > [!IMPORTANT]  
 > **Play Store Notice**: KeeGuard is currently **not published on the Google Play Store**. The Android application is distributed directly as an APK file through GitHub Releases and self-hosted direct downloads.
 
-### How to Install the APK on Your Android Device:
-1. Download the latest `.apk` installer file from the official releases page.
+### Quick APK Installation Overview:
+1. Download the latest `.apk` installer file from [GitHub Releases](https://github.com/Mohd-afk/apk-releases/releases).
 2. Open the downloaded file on your Android phone.
-3. If prompted by Android, grant permission to **"Install from Unknown Sources"** or **"Allow installation from this source"** for your browser/file manager.
-4. Tap **Install** to complete setup.
-5. Open KeeGuard, log in to your account, and enable **Autofill Service** in your Android system settings when prompted.
+3. If prompted by Android, grant permission to **"Install from Unknown Sources"** or **"Allow installation from this source"**.
+4. Tap **Install** (and select **"Install anyway"** if Play Protect prompts).
+5. Open KeeGuard, log in, and enable **Autofill Service** in Android settings.
+6. For detailed screenshots and visual flowcharts, see the **[Mobile Installation Guide in USERGUIDE.md](USERGUIDE.md#1-installing-the-android-apk-on-mobile)**.
 
 ---
 
