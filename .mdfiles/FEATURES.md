@@ -37,7 +37,7 @@ This document is the **single source of truth** for every feature, technical dec
 - **Password Strength Indicator**: Real-time validation during setup and password modification.
 
 ### 1.2 Extra Features
-- **CSV Import & Export**: Import from Chrome/Bitwarden/LastPass with auto-column mapping and duplicate resolution; export active items to CSV.
+- **CSV Import & Export**: Import from Chrome/Bitwarden/LastPass/Google PM with auto-column mapping and duplicate resolution; export active items to Google Password Manager-compatible CSV (`name,url,username,password` format). Android `android://` scheme URLs are automatically converted to `https://` on export.
 - **Favorites (★) System**: Star vault items for quick one-tap header filtering.
 - **Category Chips Filter**: Horizontal scrollable header tags (`All`, `Codes`, `Passkeys`, `Cards`, `Notes`).
 - **Sidebar Navigation Drawer**: Animated slide-out navigation with live category count badges.
@@ -80,8 +80,11 @@ This document is the **single source of truth** for every feature, technical dec
 - **Key Files:** `TrashBin.tsx`, `store.ts` (`deleteVaultItem`, `restoreVaultItem`, `permanentlyDeleteVaultItem`)
 
 ### 2.5 CSV Import & Export
-**Description:** Full importer with column auto-mapping and duplicate resolution; export active vault entries to encrypted or standard CSV.
+**Description:** Full importer with column auto-mapping and duplicate resolution; export active vault entries to Google Password Manager-compatible CSV.
+- **Export Format:** `name,url,username,password` (required by Google PM). `android://` scheme URLs are automatically converted to `https://com.package.name` on export so all entries pass Google PM's URL validation.
+- **Import Format:** Supports Google PM (`name,url,username,password`), Chrome (`name,url,username,password`), Bitwarden, LastPass, and KeeGuard's own format.
 - **Key Files:** `Settings.tsx`, `store.ts` (`bulkAddVaultItems`, `exportVaultItemsAsCsv`)
+- **Known Limitation (fixed 2026-09-10):** Previous export used `Title,Username,Password,URL,Type,Note` headers and raw `android://` URLs, causing 321/332 entries to fail Google PM import. Now resolved.
 
 ### 2.6 Active Device Management
 **Description:** View logged-in sessions, IP-based geolocation, and revoke individual or all remote device tokens.

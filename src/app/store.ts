@@ -956,19 +956,49 @@ export function exportVaultItemsAsCsv(): string {
   log.info('Exporting vault items as CSV', { count: items.length });
 
   const escape = (val: string) => {
-    if (val.includes(',') || val.includes('"') || val.includes('\n')) {
-      return `"${val.replace(/"/g, '""')}"`;
+    const s = (val ?? '').toString();
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return `"${s.replace(/"/g, '""')}"`;
     }
-    return val;
+    return s;
   };
 
-  const header = 'Title,Username,Password,URL,Type,Note';
-  const rows = items.map((i) =>
-    [i.title, i.username, i.password, i.url, i.type, i.note].map(escape).join(','),
-  );
+  /**
+   * Convert any URL to a form Google Password Manager accepts (https://...).
+   * android://hash==@com.package/ -> https://com.package
+   * Blank / non-URL strings       -> '' (empty; row still imports without URL)
+   */
+  const normalizeUrl = (rawUrl: string): string => {
+    if (!rawUrl) return '';
+    const u = rawUrl.trim();
+
+    // Already a valid https/http URL -> keep as-is
+    if (/^https?:\/\/.+/i.test(u)) return u;
+
+    // android://hash==@com.package.name/ -> https://com.package.name
+    const androidMatch = u.match(/^android:\/\/[^@]*@([^/]+)\/?/i);
+    if (androidMatch) {
+      return `https://${androidMatch[1]}`;
+    }
+
+    // Bare domain like "google.com" -> prepend https://
+    if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(u)) {
+      return `https://${u}`;
+    }
+
+    return '';
+  };
+
+  // Google Password Manager requires exactly: name,url,username,password
+  const header = 'name,url,username,password';
+  const rows = items.map((i) => {
+    const url = normalizeUrl(i.url ?? '');
+    return [i.title, url, i.username, i.password].map(escape).join(',');
+  });
 
   return [header, ...rows].join('\n');
 }
+
 
 
 // ── Settings ─────────────────────────────────────────────────────────
