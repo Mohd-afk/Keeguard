@@ -571,6 +571,28 @@ export function Settings() {
         // Parse header
         const header = lines[0].toLowerCase().split(',').map((h) => h.trim().replace(/"/g, ''));
 
+        /**
+         * Unwrap URLs that may be stored as JSON arrays (old KeeGuard export format):
+         *   '["https://example.com"]' -> 'https://example.com'
+         *   '[]'                      -> ''
+         *   'https://keeguard.app'    -> '' (placeholder we inject for URL-less items)
+         */
+        const unwrapUrl = (raw: string): string => {
+            if (!raw) return '';
+            const u = raw.trim();
+            if (u.startsWith('[')) {
+                try {
+                    const p = JSON.parse(u);
+                    if (Array.isArray(p) && p.length > 0 && typeof p[0] === 'string') return p[0].trim();
+                    return '';
+                } catch {
+                    return u.replace(/^\["?|"?\]$/g, '').trim();
+                }
+            }
+            if (u === 'https://keeguard.app') return '';
+            return u;
+        };
+
         // Find column indices — support multiple CSV formats
         const nameIdx = header.findIndex((h) => ['name', 'title', 'site', 'site name'].includes(h));
         const urlIdx = header.findIndex((h) => ['url', 'website', 'login_uri', 'login uri'].includes(h));
@@ -589,7 +611,8 @@ export function Settings() {
             const pw = values[passwordIdx]?.trim();
             if (!pw) continue;
 
-            const url = urlIdx !== -1 ? values[urlIdx]?.trim() ?? '' : '';
+            const rawUrl = urlIdx !== -1 ? values[urlIdx]?.trim() ?? '' : '';
+            const url = unwrapUrl(rawUrl);
             let title = nameIdx !== -1 ? values[nameIdx]?.trim() ?? '' : '';
 
             // If no title, derive from URL

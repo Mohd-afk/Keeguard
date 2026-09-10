@@ -964,40 +964,71 @@ export function exportVaultItemsAsCsv(): string {
   };
 
   /**
-   * Convert any URL to a form Google Password Manager accepts (https://...).
-   * android://hash==@com.package/ -> https://com.package
-   * Blank / non-URL strings       -> '' (empty; row still imports without URL)
+   * Unwrap and normalize any URL value to a plain https:// string.
+   *
+   * Vault URLs can be stored in several formats:
+   *   - Plain string:            "https://example.com"
+   *   - JSON array string:       '["https://example.com"]'
+   *   - Android scheme (plain):  "android://hash@com.discord/"
+   *   - Android scheme (JSON):   '["android://hash@com.discord/"]'
+   *   - Empty array:             "[]"
+   *   - Empty / null / undefined
+   *
+   * Google PM, Chrome, Firefox, Brave, etc. all require https:// or http://.
+   * Items with no URL get a placeholder so the row is accepted.
    */
-  const normalizeUrl = (rawUrl: string): string => {
-    if (!rawUrl) return '';
-    const u = rawUrl.trim();
+  const normalizeUrl = (rawUrl: string | undefined | null): string => {
+    if (!rawUrl) return 'https://keeguard.app';
 
-    // Already a valid https/http URL -> keep as-is
+    let u = rawUrl.trim();
+
+    // Unwrap JSON array:  ["https://example.com"]  →  https://example.com
+    if (u.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(u);
+        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+          u = parsed[0].trim();
+        } else {
+          // Empty array [] or array with non-string → no URL
+          return 'https://keeguard.app';
+        }
+      } catch {
+        // Not valid JSON — try stripping brackets manually
+        u = u.replace(/^\["|"\]$/g, '').trim();
+      }
+    }
+
+    if (!u) return 'https://keeguard.app';
+
+    // Already a valid https / http URL → keep as-is
     if (/^https?:\/\/.+/i.test(u)) return u;
 
-    // android://hash==@com.package.name/ -> https://com.package.name
+    // android://hash@com.package.name/ → https://com.package.name
     const androidMatch = u.match(/^android:\/\/[^@]*@([^/]+)\/?/i);
     if (androidMatch) {
       return `https://${androidMatch[1]}`;
     }
 
-    // Bare domain like "google.com" -> prepend https://
+    // Bare domain like "google.com" → prepend https://
     if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(u)) {
       return `https://${u}`;
     }
 
-    return '';
+    // Unknown format → use placeholder so row is still accepted
+    return 'https://keeguard.app';
   };
 
-  // Google Password Manager requires exactly: name,url,username,password
+  // Cross-browser compatible format: name,url,username,password
+  // Supported by: Google PM, Chrome, Firefox, Brave, Vivaldi, Arc, Zen, Edge, Safari
   const header = 'name,url,username,password';
   const rows = items.map((i) => {
-    const url = normalizeUrl(i.url ?? '');
+    const url = normalizeUrl(i.url);
     return [i.title, url, i.username, i.password].map(escape).join(',');
   });
 
   return [header, ...rows].join('\n');
 }
+
 
 
 
