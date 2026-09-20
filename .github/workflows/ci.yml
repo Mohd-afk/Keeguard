@@ -27,7 +27,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node.js Environment
-        uses: actions/setup-node@39370e3970a6d050c380469178354507e7773802 # v4.1.0
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
         with:
           node-version: "20"
           cache: "npm"
@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Gitleaks Secret Scanner
-        uses: gitleaks/gitleaks-action@e85e507b9fb6c07571dbb00fefbeceefefcdcd99 # v2.3.8
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -78,14 +78,14 @@ jobs:
           persist-credentials: false
 
       - name: Run OSSF Scorecard Analysis
-        uses: ossf/scorecard-action@f49aab0e5af0936a689e482ed4c679cf5511211e # v2.4.1
+        uses: ossf/scorecard-action@f49aabe0b5af0936a0987cfb85d86b75731b0186 # v2.4.1
         with:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
 
       - name: Upload SARIF Results
-        uses: github/codeql-action/upload-sarif@dd746615b8b9d728aab847cf2961e0508a8d76b1 # v3.28.10
+        uses: github/codeql-action/upload-sarif@b56ba49b26e50535fa1e7f7db0f4f7b4bf65d80d # v3.28.10
         with:
           sarif_file: results.sarif
 
@@ -103,10 +103,10 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@dd746615b8b9d728aab847cf2961e0508a8d76b1 # v3.28.10
+        uses: github/codeql-action/init@b56ba49b26e50535fa1e7f7db0f4f7b4bf65d80d # v3.28.10
         with:
           languages: "javascript-typescript"
           queries: security-extended
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@dd746615b8b9d728aab847cf2961e0508a8d76b1 # v3.28.10
+        uses: github/codeql-action/analyze@b56ba49b26e50535fa1e7f7db0f4f7b4bf65d80d # v3.28.10
