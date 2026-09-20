@@ -1,0 +1,3 @@
+[submodule "apk-releases"]
+	path = apk-releases
+	url = https://github.com/Mohd-afk/apk-releases.git
